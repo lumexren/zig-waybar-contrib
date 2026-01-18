@@ -1,0 +1,44 @@
+name: Build Master CI
+
+on:
+  push:
+    paths:
+      - ".forgejo/workflows/ci.yml"
+      - "src/**"
+      - "build.zig"
+      - "build.zig.zon"
+  pull_request:
+    paths:
+      - ".forgejo/workflows/ci.yml"
+      - "src/**"
+      - "build.zig"
+      - "build.zig.zon"
+
+jobs:
+  build-standard:
+    runs-on: [server]
+    strategy:
+      fail-fast: false
+      matrix:
+        optimize: [Debug, ReleaseSmall]
+        target:
+          - x86_64-linux-gnu
+          - x86_64-linux-musl
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: https://codeberg.org/mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Build
+        run: zig build -Doptimize=${{ matrix.optimize }} -Dtarget=${{ matrix.target }}
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: zig-waybar-contrib-${{ matrix.optimize }}-${{ matrix.target }}
+          path: zig-out/bin/*
