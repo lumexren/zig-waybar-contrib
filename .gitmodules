@@ -1,6 +1,0 @@
-[submodule ".aur/zig-waybar-contrib"]
-	path = .aur/zig-waybar-contrib
-	url = https://aur.archlinux.org/zig-waybar-contrib.git
-[submodule ".aur/zig-waybar-contrib-beta-bin"]
-	path = .aur/zig-waybar-contrib-beta-bin
-	url = https://aur.archlinux.org/zig-waybar-contrib-beta-bin.git
