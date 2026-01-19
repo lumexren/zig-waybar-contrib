@@ -119,7 +119,8 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 
 **Made with ❤️ by Me**
 
-*Star ⭐ this repo if you find it useful!*
+*Star ⭐ this repo if you find it useful!*<br>
+*Join our [Discord](https://discord.gg/tb8MvnnSfZ) for support and updates!*
 
 This project is licensed under the **GNU General Public License v3.0**. See [LICENSE](./LICENSE) for details.
 
