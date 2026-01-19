@@ -12,7 +12,7 @@ const ModuleConfig = struct {
 
 const modules = [_]ModuleConfig{
     .{ .name = "cpu", .path = "src/cpu.zig" },
-    // .{ .name = "updates", .path = "src/updates.zig" },
+    .{ .name = "updates", .path = "src/updates.zig" },
     .{ .name = "memory", .path = "src/memory.zig" },
     // .{ .name = "network", .path = "src/network.zig" },
     // .{ .name = "ping", .path = "src/ping.zig" },
