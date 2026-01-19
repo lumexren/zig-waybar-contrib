@@ -79,7 +79,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 14 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = 15 });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();

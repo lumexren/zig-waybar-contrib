@@ -17,6 +17,7 @@ const modules = [_]ModuleConfig{
     // .{ .name = "network", .path = "src/network.zig" },
     .{ .name = "ping", .path = "src/ping.zig" },
     .{ .name = "fan", .path = "src/fan.zig" },
+    .{ .name = "gpu", .path = "src/gpu.zig", .link_libc = true },
 };
 
 pub fn build(b: *Build) void {

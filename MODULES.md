@@ -90,11 +90,52 @@ The `text` and `tooltip` options support the following placeholders:
 
 ---
 
+### **GPU**
+
+> [!NOTE]
+> This module requires `amdsmi` for AMD GPUs or `cuda` for NVIDIA GPUs.
+> Intel GPUs are not supported.
+
+Monitors GPU usage, temperature, and VRAM statistics.
+
+- **Signal:** `12`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/gpu.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 1,
+    // Module icon
+    .icon = "",
+    // Custom text format (default shown)
+    .text = "{icon} {usage_percentage}% {dot} {temperature}°C",
+    // Custom tooltip format (default shown)
+    .tooltip = "PWM {dot} {pwm_percentage}%{nl}VRAM Total {dot} {vram_total:.0}{nl}VRAM Free {dot} {vram_free:.2}{nl}VRAM Usage {dot} {vram_usage:.2}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder          | Description           |
+| :------------------- | :-------------------- |
+| `{icon}`             | Module icon           |
+| `{usage_percentage}` | GPU usage percentage  |
+| `{temperature}`      | GPU temperature (°C)  |
+| `{pwm_percentage}`   | Fan speed PWM (%)     |
+| `{vram_total}`       | Total VRAM size       |
+| `{vram_usage}`       | Used VRAM size        |
+| `{vram_free}`        | Free VRAM size        |
+
+---
+
 ### **Memory**
 
 Reports RAM usage and memory statistics.
 
-- **Signal:** `12`
+- **Signal:** `13`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/memory.zon`):**
@@ -183,7 +224,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Measures network latency to a configurable host using ICMP.
 
-- **Signal:** `13`
+- **Signal:** `14`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/ping.zon`):**
@@ -224,7 +265,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Tracks available system package updates.
 
-- **Signal:** `14`
+- **Signal:** `15`
 - **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux
 - **Managers:** pacman, apt, dnf, zypper, xbps
 
