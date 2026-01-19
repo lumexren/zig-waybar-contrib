@@ -15,7 +15,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "updates", .path = "src/updates.zig" },
     .{ .name = "memory", .path = "src/memory.zig" },
     // .{ .name = "network", .path = "src/network.zig" },
-    // .{ .name = "ping", .path = "src/ping.zig" },
+    .{ .name = "ping", .path = "src/ping.zig" },
     .{ .name = "fan", .path = "src/fan.zig" },
 };
 
