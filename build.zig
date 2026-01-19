@@ -16,7 +16,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "memory", .path = "src/memory.zig" },
     // .{ .name = "network", .path = "src/network.zig" },
     // .{ .name = "ping", .path = "src/ping.zig" },
-    // .{ .name = "fan", .path = "src/fan.zig" },
+    .{ .name = "fan", .path = "src/fan.zig" },
 };
 
 pub fn build(b: *Build) void {
