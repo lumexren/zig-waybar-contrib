@@ -32,8 +32,8 @@ Displays per-core CPU usage and frequency information.
 
 Monitors fan speeds.
 
-- **Signal:** `10`
-- **Platforms:** Any Linux with hwmon
+- **Signal:** `11`
+- **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/fan.zon`):**
 ```zig
@@ -51,7 +51,7 @@ Monitors fan speeds.
 
 Reports RAM usage and memory statistics.
 
-- **Signal:** `10`
+- **Signal:** `12`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/memory.zon`):**
@@ -70,8 +70,8 @@ Reports RAM usage and memory statistics.
 
 Measures network latency to a configurable host using ICMP.
 
-- **Signal:** `12`
-- **Platforms:** Any Linux (requires capabilities or root for ICMP)
+- **Signal:** `13`
+- **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/ping.zon`):**
 ```zig
@@ -95,7 +95,7 @@ Measures network latency to a configurable host using ICMP.
 
 Tracks available system package updates.
 
-- **Signal:** `11`
+- **Signal:** `14`
 - **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux
 - **Managers:** pacman, apt, dnf, zypper, xbps
 

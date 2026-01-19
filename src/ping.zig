@@ -70,6 +70,8 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
+    var waybar: Waybar = try .init(io, .{ .signal_number = 13 });
+
     var resolved = try sysinfolib.resolveIP(allocator, io, config.target_domain);
     var last_update_ts: i64 = 0;
 
@@ -105,6 +107,8 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
+
+        try waybar.update();
     }
 }
 
