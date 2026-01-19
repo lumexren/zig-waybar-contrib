@@ -77,7 +77,7 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("icon", config.icon);
 
         try replacer.addKeyAny("usage_percentage", data.avg);
-        try replacer.addKeyAny("frequency", if (frequency.value.fraction) frequency.value.raw else frequency.value.rounded);
+        try replacer.addKeyAny("frequency", if (frequency.value.fraction) frequency.value.raw else @as(f64, @floatFromInt(frequency.value.rounded)));
         try replacer.addKeyAny("frequency_unit", frequency.unit);
         try replacer.addKeyAny("core_count", data.cores.len);
 
@@ -90,7 +90,7 @@ pub fn main(init: process.Init) !void {
 
             try replacer.addKeyAny("core_index", i);
             try replacer.addKeyAny("core_usage_percentage", usage_i);
-            try replacer.addKeyAny("core_frequency", if (core_frequency.value.fraction) core_frequency.value.raw else core_frequency.value.rounded);
+            try replacer.addKeyAny("core_frequency", if (core_frequency.value.fraction) core_frequency.value.raw else @as(f64, @floatFromInt(core_frequency.value.rounded)));
             try replacer.addKeyAny("core_frequency_unit", core_frequency.unit);
 
             const line = try replacer.render(config.tooltip);

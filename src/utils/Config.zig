@@ -41,22 +41,23 @@ pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
 }
 
 /// Load configuration
-/// 
+///
 /// If config file doesn't exist or fails to parse, returns a default instance.
 pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
-    var data: T = T{};
+    const config_dir = this.environ_map.get("XDG_CONFIG_HOME") orelse
+        if (this.environ_map.get("HOME")) |home| blk: {
+            break :blk try path.join(this.allocator, &.{ home, ".config" });
+        } else return T{};
+
+    defer if (this.environ_map.get("XDG_CONFIG_HOME") == null) this.allocator.free(config_dir);
 
     const config_file = try fmt.allocPrint(this.allocator, "{s}.zon", .{module_name});
-    var config_path: []u8 = undefined;
+    defer this.allocator.free(config_file);
+
+    const config_path = try path.join(this.allocator, &.{ config_dir, "zig-waybar-contrib", config_file });
     defer this.allocator.free(config_path);
 
-    if (this.environ_map.get("XDG_CONFIG_HOME")) |xdg_config_home_dir| {
-        config_path = try path.join(this.allocator, &.{ xdg_config_home_dir, "zig-waybar-contrib", config_file });
-    } else if (this.environ_map.get("HOME")) |home_dir| {
-        config_path = try path.join(this.allocator, &.{ home_dir, ".config", "zig-waybar-contrib", config_file });
-    }
-
-    var file = Dir.openFileAbsolute(this.io, config_path, .{ .mode = .read_only }) catch return data;
+    var file = Dir.openFileAbsolute(this.io, config_path, .{ .mode = .read_only }) catch return T{};
     defer file.close(this.io);
 
     const size = try file.length(this.io);
@@ -66,7 +67,5 @@ pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
     var reader = file.reader(this.io, &.{});
     try reader.interface.readSliceAll(buffer);
 
-    data = zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true }) catch return data;
-
-    return data;
+    return zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true }) catch T{};
 }

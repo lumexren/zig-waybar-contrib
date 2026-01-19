@@ -171,7 +171,7 @@ pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
     }
 
     // Strings (Slice or Array Ptr)
-    const is_string = T == []const u8 or T == []u8 or (@typeInfo(T) == .Pointer and @typeInfo(T).Pointer.size != .Slice);
+    const is_string = T == []const u8 or T == []u8 or (@typeInfo(T) == .pointer and @typeInfo(T).pointer.size != .slice);
     if (is_string) {
         // Assume string-like
         const slice: []const u8 = value;
@@ -254,6 +254,31 @@ pub fn render(this: *Replacer, template: []const u8) ![]u8 {
     return result.toOwnedSlice(this.allocator);
 }
 
+fn formatBytes(w: anytype, bytes: i64, precision: usize) !void {
+    const units = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB" };
+    var size: f64 = @floatFromInt(if (bytes < 0) -bytes else bytes);
+    var unit_idx: usize = 0;
+
+    while (size >= 1024.0 and unit_idx < units.len - 1) {
+        size /= 1024.0;
+        unit_idx += 1;
+    }
+
+    if (bytes < 0) size = -size;
+
+    // Check if result is whole number after rounding
+    const multiplier = std.math.pow(f64, 10.0, @floatFromInt(precision));
+    const rounded = @round(size * multiplier) / multiplier;
+    const is_whole = @trunc(rounded) == rounded;
+
+    if (is_whole) {
+        try w.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
+    } else {
+        try w.print("{d:.[1]}", .{ size, precision });
+        try w.writeAll(units[unit_idx]);
+    }
+}
+
 fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: ?[]const u8) !void {
     var aw = std.Io.Writer.Allocating.fromArrayList(allocator, out);
     defer out.* = aw.toArrayList();
@@ -263,7 +288,11 @@ fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: 
         .string => |s| try w.writeAll(s),
         .integer => |d| {
             if (fmt_spec) |spec| {
-                if (fmt.parseInt(usize, spec, 10)) |width| {
+                // Check for byte formatting: .N means format as bytes with N precision
+                if (spec.len > 0 and spec[0] == '.') {
+                    const precision = fmt.parseInt(usize, spec[1..], 10) catch 2;
+                    try formatBytes(w, d, precision);
+                } else if (fmt.parseInt(usize, spec, 10)) |width| {
                     // Always zero-pad if a simple integer width is provided
                     if (d >= 0) {
                         const ud = @as(u64, @intCast(d));
@@ -281,7 +310,14 @@ fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: 
         .float => |f| {
             if (fmt_spec) |spec| {
                 if (fmt.parseInt(usize, spec, 10)) |precision| {
-                    try w.print("{d:.[1]}", .{ f, precision });
+                    const multiplier = std.math.pow(f64, 10.0, @floatFromInt(precision));
+                    const rounded = @round(f * multiplier) / multiplier;
+                    const is_whole = @trunc(rounded) == rounded;
+                    if (is_whole) {
+                        try w.print("{d}", .{@as(i64, @intFromFloat(rounded))});
+                    } else {
+                        try w.print("{d:.[1]}", .{ f, precision });
+                    }
                 } else |_| {
                     try w.print("{d}", .{f});
                 }

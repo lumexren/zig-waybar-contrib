@@ -68,10 +68,13 @@ pub fn renderTooltip(json_builder: *json, replacer: *Replacer, template: ?[]cons
 /// Adds common placeholders that are available across all modules.
 ///
 /// This includes:
-/// - `{newline}` → literal newline character
+/// - `{newline}` `{nl}` → literal newline character
 /// - `{tab}` → literal tab character
+/// - `{dot}` → literal dot character
+/// - `{pipe}` → literal pipe character
 pub fn addCommonPlaceholders(replacer: *Replacer) !void {
     try replacer.add("{newline}", "\n");
+    try replacer.add("{nl}", "\n");
     try replacer.add("{tab}", "\t");
     try replacer.add("{dot}", "·");
     try replacer.add("{pipe}", "|");
