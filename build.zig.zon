@@ -1,0 +1,13 @@
+.{
+    .name = .zig_waybar_contrib,
+    .version = "2.0.0",
+    .fingerprint = 0xf0b38d05ea485bfd, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0-dev.2223+4f16e80ce",
+    .dependencies = .{
+        .zig_sysinfo = .{
+            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/0.16.x.zip",
+            .hash = "zig_sysinfo-1.0.0-XZkGF8e2AQBs9RUTrztwmiX8OJ_enLsGIiEwej-ALPKP",
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
+}
