@@ -14,7 +14,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "cpu", .path = "src/cpu.zig" },
     .{ .name = "updates", .path = "src/updates.zig" },
     .{ .name = "memory", .path = "src/memory.zig" },
-    // .{ .name = "network", .path = "src/network.zig" },
+    .{ .name = "network", .path = "src/network.zig" },
     .{ .name = "ping", .path = "src/ping.zig" },
     .{ .name = "fan", .path = "src/fan.zig" },
     .{ .name = "gpu", .path = "src/gpu.zig", .link_libc = true },

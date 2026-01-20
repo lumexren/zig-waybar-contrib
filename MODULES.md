@@ -222,11 +222,48 @@ The `text` and `tooltip` options support the following placeholders:
 
 ---
 
+### **Network**
+
+Monitors network traffic and speed.
+
+- **Signal:** `14`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/network.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 1,
+    // Module icon
+    .icon = "󰛳",
+    // Custom text format (default shown)
+    .text = "{icon} {total_speed:^1}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Interface {dot} {interface}{nl}Gateway {dot} {gateway}{nl}Local IP {dot} {local_ip}{nl}{nl}Download {dot} {download_speed:^1}{nl}Upload {dot} {upload_speed:^1}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder        | Description                          |
+| :----------------- | :----------------------------------- |
+| `{icon}`           | Module icon                          |
+| `{interface}`      | Network interface name               |
+| `{gateway}`        | Gateway IP address                   |
+| `{local_ip}`       | Local IP address                     |
+| `{download_speed}` | Download speed (supports `^N` fmt)   |
+| `{upload_speed}`   | Upload speed (supports `^N` fmt)     |
+| `{total_speed}`    | Total speed (supports `^N` fmt)      |
+
+---
+
 ### **Ping**
 
 Measures network latency to a configurable host using ICMP.
 
-- **Signal:** `14`
+- **Signal:** `15`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/ping.zon`):**
@@ -270,7 +307,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Tracks available system package updates.
 
-- **Signal:** `15`
+- **Signal:** `16`
 - **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux
 - **Managers:** pacman, apt, dnf, zypper, xbps
 
@@ -321,6 +358,19 @@ These placeholders are available in all modules:
 | `{tab}`               | Tab character        |
 | `{dot}`               | Middle dot (·)       |
 | `{pipe}`              | Pipe character (\|)  |
+
+---
+
+### **Replacer Formatters**
+
+The configuration system supports format specifiers for numeric values to control their display.
+
+| Specifier | Applies To | Description                                                             | Example                           |
+| :-------- | :--------- | :---------------------------------------------------------------------- | :-------------------------------- |
+| `:N`      | Integers   | Zero-pads integers to width N                                           | `{usage:2}` → `05`                |
+| `:N`      | Floats     | Decimal precision N                                                     | `{usage:2}` → `12.34`             |
+| `:.N`     | Integers   | Formats bytes to human-readable string with N decimal precision         | `{vram_usage:.2}` → `1.50 GiB`    |
+| `:^N`     | Floats     | Formats network speed to human-readable string with N decimal precision | `{total_speed:^1}` → `2.5 MB/s`   |
 
 ---
 

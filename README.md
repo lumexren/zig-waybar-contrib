@@ -23,7 +23,9 @@ Whether you need to monitor precision fan speeds, track compilation latency with
 |:------------|:---------------------------------------|
 | **CPU**     | Displays per-core CPU usage            |
 | **Fan**     | Monitors fan speeds                    |
+| **GPU**     | Monitors GPU usage and temperature     |
 | **Memory**  | Reports RAM usage and statistics       |
+| **Network** | Monitors network traffic and speed     |
 | **Ping**    | Measures network latency               |
 | **Updates** | Tracks system package updates          |
 
