@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Configuration
 REPO_URL="https://codeberg.org/erffy/zig-waybar-contrib"
+BRANCH="0.16.x-staging"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local}/share/zig-waybar-contrib"
 BIN_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
 
@@ -47,17 +48,24 @@ fi
 log_info "Setting up repository..."
 if [ -d "$INSTALL_DIR" ]; then
     if [ -d "$INSTALL_DIR/.git" ]; then
-        log_info "Updating existing repository at $INSTALL_DIR..."
-        git -C "$INSTALL_DIR" fetch origin "$BRANCH"
-        git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
+        CURRENT_BRANCH=$(git -C "$INSTALL_DIR" rev-parse --abbrev-ref HEAD)
+        if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
+             log_warn "Repository branch '$CURRENT_BRANCH' does not match expected '$BRANCH'. Recreating..."
+             rm -rf "$INSTALL_DIR"
+             git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+        else
+            log_info "Updating existing repository at $INSTALL_DIR..."
+            git -C "$INSTALL_DIR" fetch origin
+            git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
+        fi
     else
         log_warn "Directory $INSTALL_DIR exists but is not a git repository. Recreating..."
         rm -rf "$INSTALL_DIR"
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+        git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
     fi
 else
     log_info "Cloning repository to $INSTALL_DIR..."
-    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    git clone --depth 1 -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
 fi
 
 # 3. Build
@@ -65,7 +73,7 @@ log_info "Building project..."
 cd "$INSTALL_DIR"
 # Check if zig version is sufficient happens implicitly by build failing, 
 # but we can try to be nice. For simplicity we just build.
-if ! zig build -Doptimize=ReleaseFast; then
+if ! zig build -Drelease; then
     log_error "Build failed."
     exit 1
 fi
