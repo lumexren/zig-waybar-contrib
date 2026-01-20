@@ -20,7 +20,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        optimize: [Debug, ReleaseSmall]
         target:
           - x86_64-linux-gnu
           - x86_64-linux-musl
@@ -35,10 +34,10 @@ jobs:
           version: master
 
       - name: Build
-        run: zig build -Doptimize=${{ matrix.optimize }} -Dtarget=${{ matrix.target }}
+        run: zig build -Dtarget=${{ matrix.target }} -Drelease
 
       - name: Upload binaries
         uses: actions/upload-artifact@v3
         with:
-          name: zig-waybar-contrib-${{ matrix.optimize }}-${{ matrix.target }}
+          name: zig-waybar-contrib-${{ matrix.target }}
           path: zig-out/bin/*

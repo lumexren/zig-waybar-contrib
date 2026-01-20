@@ -3,7 +3,6 @@ set -euo pipefail
 
 # Configuration
 REPO_URL="https://codeberg.org/erffy/zig-waybar-contrib"
-BRANCH="0.16-dev"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local}/share/zig-waybar-contrib"
 BIN_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
 
@@ -54,11 +53,11 @@ if [ -d "$INSTALL_DIR" ]; then
     else
         log_warn "Directory $INSTALL_DIR exists but is not a git repository. Recreating..."
         rm -rf "$INSTALL_DIR"
-        git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
     fi
 else
     log_info "Cloning repository to $INSTALL_DIR..."
-    git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
 # 3. Build
