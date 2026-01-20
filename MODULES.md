@@ -93,8 +93,10 @@ The `text` and `tooltip` options support the following placeholders:
 ### **GPU**
 
 > [!NOTE]
-> This module requires `amdsmi` for AMD GPUs or `cuda` for NVIDIA GPUs.
+> This module requires `amdsmi` for AMD GPUs or `cuda` for NVIDIA GPUs.<br>
 > Intel GPUs are not supported.
+>
+> If no GPU library is found, the module will not work.
 
 Monitors GPU usage, temperature, and VRAM statistics.
 
