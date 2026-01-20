@@ -91,6 +91,7 @@ pub fn main(init: process.Init) !void {
 
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
+        try replacer.addKey("err_icon", config.err_icon);
         try replacer.addKeyAny("total_updates", total_updates);
         try replacer.addKey("manager", manager.name());
 

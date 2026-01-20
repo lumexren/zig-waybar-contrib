@@ -294,6 +294,7 @@ The `text` and `tooltip` options support the following placeholders:
 | Placeholder       | Description                            |
 | :---------------- | :------------------------------------- |
 | `{icon}`          | Module icon                            |
+| `{err_icon}`      | Error icon                             |
 | `{total_updates}` | Total number of available updates      |
 | `{manager}`       | Name of the package manager being used |
 
