@@ -17,6 +17,11 @@
 
 Whether you need to monitor precision fan speeds, track compilation latency with pings, or watch your memory usage without eating it up, `zig-waybar-contrib` has you covered.
 
+### Community
+
+Join our Discord server for updates, support and discussion:<br>
+[![Discord](https://img.shields.io/badge/discord-gray?style=for-the-badge&logo=discord)](https://discord.gg/tb8MvnnSfZ)
+
 ### Modules
 
 | Module      | Description                            |
