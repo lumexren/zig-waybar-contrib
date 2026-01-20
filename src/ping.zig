@@ -24,9 +24,11 @@ const sysinfolib = sysinfo.lib;
 
 const std = @import("std");
 const utils = @import("utils");
+const math = std.math;
 const process = std.process;
 const Io = std.Io;
 const net = Io.net;
+const Socket = net.Socket;
 const IpAddress = net.IpAddress;
 const HostName = net.HostName;
 const File = Io.File;
@@ -45,7 +47,7 @@ pub const ModuleConfig = struct {
     target_domain_ip_update_interval: i64 = 200,
     icon: []const u8 = "󰛳",
     text: []const u8 = "{icon} {latency}ms",
-    tooltip: []const u8 = "Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
+    tooltip: []const u8 = "Min: {min_latency}ms {dot} Avg: {avg_latency}ms {dot} Max: {max_latency}ms{nl}Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
 };
 
 pub const PingError = error{
@@ -75,6 +77,18 @@ pub fn main(init: process.Init) !void {
     var resolved = try sysinfolib.resolveIP(allocator, io, config.target_domain);
     var last_update_ts: i64 = 0;
 
+    const local_addr: IpAddress = try .parseIp4("0.0.0.0", 0);
+    const socket = try local_addr.bind(io, .{ .mode = .dgram, .protocol = .icmp });
+    defer socket.close(io);
+
+    var target_addr: IpAddress = try .parseIp4(resolved.?, 80);
+
+    // Latency statistics
+    var min_latency: i64 = math.maxInt(i64);
+    var max_latency: i64 = 0;
+    var total_latency: i64 = 0;
+    var ping_count: i64 = 0;
+
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
@@ -85,12 +99,21 @@ pub fn main(init: process.Init) !void {
         if (resolved == null or (now_s - last_update_ts) >= config.target_domain_ip_update_interval) {
             resolved = try sysinfolib.resolveIP(allocator, io, config.target_domain);
             last_update_ts = now_s;
+
+            target_addr = try .parseIp4(resolved.?, 80);
         }
 
         const seconds_until_ip_update = config.target_domain_ip_update_interval - (now_s - last_update_ts);
 
         var ping_buffer: [64]u8 = undefined;
-        const latency = try ping(io, &ping_buffer, resolved.?);
+        const latency = ping(io, socket, &target_addr, &ping_buffer) catch continue;
+
+        // Update statistics
+        ping_count += 1;
+        total_latency += latency;
+        min_latency = @min(min_latency, latency);
+        max_latency = @max(max_latency, latency);
+        const avg_latency = @divTrunc(total_latency, ping_count);
 
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
@@ -98,6 +121,9 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("ip", resolved.?);
         try replacer.addKeyAny("next_ip_update", seconds_until_ip_update);
         try replacer.addKeyAny("latency", latency);
+        try replacer.addKeyAny("min_latency", min_latency);
+        try replacer.addKeyAny("avg_latency", avg_latency);
+        try replacer.addKeyAny("max_latency", max_latency);
 
         const text_line = try replacer.render(config.text);
         try json.set("text", text_line);
@@ -112,19 +138,12 @@ pub fn main(init: process.Init) !void {
     }
 }
 
-pub fn ping(io: Io, buffer: []u8, ip: []const u8) !i64 {
+pub fn ping(io: Io, socket: Socket, target_addr: *IpAddress, buffer: []u8) !i64 {
     sysinfolib.createIcmpPacket(buffer);
-
-    const target_addr: IpAddress = try .parseIp4(ip, 80);
-    const local_addr: IpAddress = try .parseIp4("0.0.0.0", 0);
-
-    const socket = try local_addr.bind(io, .{ .mode = .dgram, .protocol = .icmp });
-
-    defer socket.close(io);
 
     const raw_start = try Clock.now(.boot, io);
 
-    _ = try socket.send(io, &target_addr, buffer);
+    _ = try socket.send(io, target_addr, buffer);
     _ = try socket.receive(io, buffer);
 
     const raw_end = try Clock.now(.boot, io);

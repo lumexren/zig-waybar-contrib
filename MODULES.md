@@ -245,7 +245,7 @@ Measures network latency to a configurable host using ICMP.
     // Custom text format (default shown)
     .text = "{icon} {latency}ms",
     // Custom tooltip format (default shown)
-    .tooltip = "Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
+    .tooltip = "Min: {min_latency}ms {dot} Avg: {avg_latency}ms {dot} Max: {max_latency}ms{nl}Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
 }
 ```
 
@@ -260,6 +260,9 @@ The `text` and `tooltip` options support the following placeholders:
 | `{ip}`             | Resolved IP address of the target    |
 | `{next_ip_update}` | Seconds until next IP resolution     |
 | `{latency}`        | Latency in milliseconds (or "N/A")   |
+| `{min_latency}`    | Minimum latency in milliseconds      |
+| `{avg_latency}`    | Average latency in milliseconds      |
+| `{max_latency}`    | Maximum latency in milliseconds      |
 
 ---
 
