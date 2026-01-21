@@ -29,6 +29,7 @@ const File = Io.File;
 const process = std.process;
 const fmt = std.fmt;
 const os = std.os;
+const math = std.math;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -71,8 +72,8 @@ pub fn main(init: process.Init) !void {
 
         // Find min/max current frequency across all cores
         var max_frequency: sysinfo.Frequency = .{};
-        var min_frequency: sysinfo.Frequency = .{ .value = .{ .raw = std.math.floatMax(f64) } };
-        var global_freq_min: sysinfo.Frequency = .{ .value = .{ .raw = std.math.floatMax(f64) } };
+        var min_frequency: sysinfo.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
+        var global_freq_min: sysinfo.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
         var global_freq_max: sysinfo.Frequency = .{};
 
         for (data.cores) |core| {
