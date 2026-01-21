@@ -91,6 +91,6 @@ pub fn main(init: process.Init) !void {
         try json.write(stdout);
         try stdout.flush();
 
-        try waybar.update();
+        try waybar.updateOrRefresh();
     }
 }

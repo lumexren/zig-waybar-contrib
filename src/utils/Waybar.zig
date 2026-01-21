@@ -27,7 +27,7 @@
 /// var waybar: Waybar = try .init(io, .{ .signal_number = 10 });
 ///
 /// // In your update loop:
-/// try waybar.update(); // Sends SIGRTMIN+10 to waybar
+/// try waybar.updateOrRefresh(); // Sends SIGRTMIN+10 to waybar
 /// ```
 ///
 /// Signal Configuration:
