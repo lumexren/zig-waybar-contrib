@@ -39,7 +39,7 @@ See [MODULES](MODULES.md) for detailed documentation on each module.
 ### Installation
 
 ![Repology](https://repology.org/badge/vertical-allrepos/zig-waybar-contrib.svg)
-![Repology](https://repology.org/badge/vertical-allrepos/zig-waybar-contrib-beta-bin.svg)
+![Repology](https://repology.org/badge/vertical-allrepos/zig-waybar-contrib-beta.svg)
 
 > [!NOTE]
 > To try the Nightly versions, follow `Script Installation` section.<br>
