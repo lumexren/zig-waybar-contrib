@@ -37,6 +37,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 200,
+    signal_number: u8 = 16,
     icon: []const u8 = "",
     err_icon: []const u8 = "",
     manager: ?[]const u8 = null,
@@ -50,8 +51,7 @@ fn getManager(name: []const u8) sysinfo.Managers {
     if (mem.eql(u8, name, "dnf")) return .dnf;
     if (mem.eql(u8, name, "zypper")) return .zypper;
     if (mem.eql(u8, name, "xbps")) return .xbps;
-    
-    
+
     std.debug.panic("updates: {s} manager is not supported.", .{name});
 }
 
@@ -79,7 +79,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 16 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();

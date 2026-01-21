@@ -36,6 +36,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    signal_number: u8 = 12,
     icon: []const u8 = "",
     text: []const u8 = "{icon} {usage_percentage}% {dot} {temperature}°C",
     tooltip: []const u8 = "PWM {dot} {pwm_percentage}%{nl}VRAM Total {dot} {vram_total:.0}{nl}VRAM Free {dot} {vram_free:.2}{nl}VRAM Usage {dot} {vram_usage:.2}",
@@ -60,7 +61,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 11 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     var module: sysinfo = .init(allocator);
     try module.initialize();

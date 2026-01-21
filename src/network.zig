@@ -34,6 +34,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    signal_number: u8 = 14,
     icon: []const u8 = "󰛳",
     text: []const u8 = "{icon} {total_speed:^1}",
     tooltip: []const u8 = "Interface {dot} {interface}{nl}Gateway {dot} {gateway}{nl}Local IP {dot} {local_ip}{nl}{nl}Download {dot} {download_speed:^1}{nl}Upload {dot} {upload_speed:^1}",
@@ -56,7 +57,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 14 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     // Get initial route info
     const route = try sysinfo.getDefaultRoute(io, allocator);

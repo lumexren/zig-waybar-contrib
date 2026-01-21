@@ -28,6 +28,7 @@ const Io = std.Io;
 const File = Io.File;
 const process = std.process;
 const fmt = std.fmt;
+const os = std.os;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -37,6 +38,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    signal_number: u8 = 10,
     icon: []const u8 = "",
     text: []const u8 = "{icon} {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
     tooltip: []const u8 = "Core {core_index}: {core_usage_percentage}% {dot} {core_frequency:2}{core_frequency_unit}",
@@ -59,7 +61,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 10 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();

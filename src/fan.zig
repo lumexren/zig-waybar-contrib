@@ -36,6 +36,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
+    signal_number: u8 = 11,
     icon: []const u8 = "",
     text: []const u8 = "{icon} {total_fans}",
     tooltip: []const u8 = "{name}: {speed} RPM",
@@ -58,7 +59,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 11 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();

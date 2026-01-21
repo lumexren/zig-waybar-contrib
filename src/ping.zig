@@ -43,6 +43,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    signal_number: u8 = 15,
     target_domain: []const u8 = "google.com",
     target_domain_ip_update_interval: i64 = 200,
     icon: []const u8 = "󰛳",
@@ -72,7 +73,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = 15 });
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     var resolved = try sysinfolib.resolveIP(allocator, io, config.target_domain);
     var last_update_ts: i64 = 0;
