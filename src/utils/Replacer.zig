@@ -31,7 +31,10 @@ const Replacer = @This();
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
+const Io = std.Io;
+const Writer = Io.Writer;
 const fmt = std.fmt;
+const math = std.math;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
@@ -42,6 +45,10 @@ values: StringHashMap(Value),
 /// Note: These are less powerful than the value map.
 replacements: ArrayList(Replacement),
 strict: bool = false,
+
+pub const ReplacerError = error{
+    PlaceholderNotFound,
+};
 
 /// Represents a value that can be formatted in a template.
 pub const Value = union(enum) {
@@ -230,7 +237,7 @@ pub fn render(this: *Replacer, template: []const u8) ![]u8 {
                 }
 
                 // Not found within values? Check strict mode
-                if (this.strict) return error.PlaceholderNotFound;
+                if (this.strict) return ReplacerError.PlaceholderNotFound;
             }
         }
 
@@ -305,7 +312,7 @@ fn formatSpeed(w: anytype, bytes_per_sec: f64, precision: usize) !void {
 }
 
 fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: ?[]const u8) !void {
-    var aw = std.Io.Writer.Allocating.fromArrayList(allocator, out);
+    var aw = Writer.Allocating.fromArrayList(allocator, out);
     defer out.* = aw.toArrayList();
 
     const w = &aw.writer;
@@ -339,7 +346,7 @@ fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: 
                     const precision = fmt.parseInt(usize, spec[1..], 10) catch 1;
                     try formatSpeed(w, f, precision);
                 } else if (fmt.parseInt(usize, spec, 10)) |precision| {
-                    const multiplier = std.math.pow(f64, 10.0, @floatFromInt(precision));
+                    const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
                     const rounded = @round(f * multiplier) / multiplier;
                     const is_whole = @trunc(rounded) == rounded;
                     if (is_whole) {

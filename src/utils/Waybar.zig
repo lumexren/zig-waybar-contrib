@@ -38,7 +38,7 @@
 ///     "signal": 10
 /// }
 /// ```
-pub const Waybar = @This();
+const Waybar = @This();
 
 const std = @import("std");
 const Process = @import("Process.zig");
@@ -52,7 +52,7 @@ process_handle: ?Process.Process,
 config: Config,
 check_counter: u32,
 
-pub const Error = error{
+pub const WaybarError = error{
     /// The configured signal number is outside the valid RT signal range
     InvalidSignalNumber,
     /// Waybar process is not running or cannot be found
@@ -70,8 +70,8 @@ pub const Config = struct {
     check_interval: u32 = 10,
 
     /// Validate config values are within acceptable ranges
-    pub fn validate(this: @This()) Error!void {
-        if (!isValidSignal(this.signal_number)) return Error.InvalidSignalNumber;
+    pub fn validate(this: @This()) WaybarError!void {
+        if (!isValidSignal(this.signal_number)) return WaybarError.InvalidSignalNumber;
     }
 };
 
@@ -85,7 +85,7 @@ pub fn isValidSignal(signal_number: u8) bool {
 ///
 /// Returns an error if the signal number is invalid.
 /// Does NOT error if waybar is not running - use `isAvailable()` to check.
-pub fn init(io: Io, config: Config) Error!Waybar {
+pub fn init(io: Io, config: Config) WaybarError!Waybar {
     try config.validate();
 
     const handle = Process.findByName(io, "waybar") catch null;
@@ -101,7 +101,7 @@ pub fn init(io: Io, config: Config) Error!Waybar {
 ///
 /// Useful when you want to defer the process search, or when waybar
 /// may not be running at initialization time.
-pub fn initLazy(io: Io, config: Config) Error!Waybar {
+pub fn initLazy(io: Io, config: Config) WaybarError!Waybar {
     try config.validate();
 
     return .{
@@ -205,10 +205,9 @@ pub fn getActualSignal(this: *const Waybar) i32 {
 /// Update signal number at runtime.
 ///
 /// The new signal number must be valid (1-31 and within RT signal range).
-pub fn setSignalNumber(this: *Waybar, signal: u8) Error!void {
-    if (!isValidSignal(signal)) {
-        return Error.InvalidSignalNumber;
-    }
+pub fn setSignalNumber(this: *Waybar, signal: u8) WaybarError!void {
+    if (!isValidSignal(signal)) return WaybarError.InvalidSignalNumber;
+
     this.config.signal_number = signal;
 }
 

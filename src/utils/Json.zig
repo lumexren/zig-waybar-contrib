@@ -26,6 +26,7 @@ const JsonBuilder = @This();
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Io = std.Io;
+const debug = std.debug;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const fmt = std.fmt;
@@ -134,7 +135,7 @@ pub fn set(this: *JsonBuilder, key: []const u8, value: anytype) !void {
 pub fn setFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8, args: anytype) !void {
     const str = try fmt.allocPrint(this.allocator, value, args);
     errdefer this.allocator.free(str);
-    
+
     try this.fields.append(this.allocator, .{
         .key = key,
         .value = .{ .string = str },
@@ -178,7 +179,7 @@ pub fn appendFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8
                     f.value = .{ .string = combined };
                     return;
                 },
-                else => @panic("appendFmt: key exists but value is not string"),
+                else => debug.panic("appendFmt: key '{any}' exists but value '{any}' is not string", .{ f.key, @TypeOf(f.value) }),
             }
         }
     }
