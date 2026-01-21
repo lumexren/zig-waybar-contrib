@@ -43,7 +43,7 @@ allocator: Allocator,
 values: StringHashMap(Value),
 /// Legacy string replacements (applied if no template match found, or as a fallback).
 /// Note: These are less powerful than the value map.
-replacements: ArrayList(Replacement),
+replacements: ArrayList(Replacement) = .empty,
 strict: bool = false,
 
 pub const ReplacerError = error{
@@ -70,7 +70,6 @@ pub fn init(allocator: Allocator) Replacer {
     return .{
         .allocator = allocator,
         .values = StringHashMap(Value).init(allocator),
-        .replacements = .empty,
     };
 }
 
