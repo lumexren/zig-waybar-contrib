@@ -46,7 +46,7 @@ pub const ModuleConfig = struct {
     signal_number: u8 = 15,
     target_domain: []const u8 = "google.com",
     target_domain_ip_update_interval: i64 = 200,
-    icon: []const u8 = "󰛳",
+    icon: []const u8 = "",
     text: []const u8 = "{icon} {latency}ms",
     tooltip: []const u8 = "Min: {min_latency}ms {dot} Avg: {avg_latency}ms {dot} Max: {max_latency}ms{nl}Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
 };
