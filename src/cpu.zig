@@ -23,6 +23,7 @@ const sysinfo = @import("sysinfo").cpu;
 
 const std = @import("std");
 const utils = @import("utils");
+const ArrayList = std.ArrayList;
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
@@ -66,32 +67,51 @@ pub fn main(init: process.Init) !void {
 
         const data = try sysinfo.cpuUsageAllOnce(io, allocator);
 
+        // Find min/max current frequency across all cores
         var max_frequency: sysinfo.Frequency = .{};
-        for (data.freqs) |f| {
-            if (f.value.raw > max_frequency.value.raw) max_frequency = f;
-        }
+        var min_frequency: sysinfo.Frequency = .{ .value = .{ .raw = std.math.floatMax(f64) } };
+        var global_freq_min: sysinfo.Frequency = .{ .value = .{ .raw = std.math.floatMax(f64) } };
+        var global_freq_max: sysinfo.Frequency = .{};
 
-        const frequency: sysinfo.Frequency = max_frequency;
+        for (data.cores) |core| {
+            if (core.frequency.current.value.raw > max_frequency.value.raw) max_frequency = core.frequency.current;
+            if (core.frequency.current.value.raw < min_frequency.value.raw) min_frequency = core.frequency.current;
+            if (core.frequency.min.value.raw < global_freq_min.value.raw) global_freq_min = core.frequency.min;
+            if (core.frequency.max.value.raw > global_freq_max.value.raw) global_freq_max = core.frequency.max;
+        }
 
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
 
-        try replacer.addKeyAny("usage_percentage", data.avg);
-        try replacer.addKeyAny("frequency", if (frequency.value.fraction) frequency.value.raw else @as(f64, @floatFromInt(frequency.value.rounded)));
-        try replacer.addKeyAny("frequency_unit", frequency.unit);
+        try replacer.addKeyAny("usage_percentage", @as(i64, @intFromFloat(@round(data.avg))));
+        try replacer.addKeyAny("frequency", if (max_frequency.value.fraction) max_frequency.value.raw else @as(f64, @floatFromInt(max_frequency.value.rounded)));
+        try replacer.addKeyAny("frequency_unit", max_frequency.unit);
+        try replacer.addKeyAny("frequency_min", if (global_freq_min.value.fraction) global_freq_min.value.raw else @as(f64, @floatFromInt(global_freq_min.value.rounded)));
+        try replacer.addKeyAny("frequency_min_unit", global_freq_min.unit);
+        try replacer.addKeyAny("frequency_max", if (global_freq_max.value.fraction) global_freq_max.value.raw else @as(f64, @floatFromInt(global_freq_max.value.rounded)));
+        try replacer.addKeyAny("frequency_max_unit", global_freq_max.unit);
         try replacer.addKeyAny("core_count", data.cores.len);
 
-        var tooltip_text: std.ArrayList(u8) = .empty;
+        var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(allocator);
 
-        for (data.cores, 0..) |c, i| {
-            const usage_i: i64 = @intFromFloat(@round(c));
-            const core_frequency = data.freqs[i];
+        const text_line = try replacer.render(config.text);
+        try json.set("text", text_line);
+
+        for (data.cores, 0..) |core, i| {
+            const usage_i: i64 = @intFromFloat(@round(core.usage));
+            const freq_current = core.frequency.current;
+            const freq_min = core.frequency.min;
+            const freq_max = core.frequency.max;
 
             try replacer.addKeyAny("core_index", i);
             try replacer.addKeyAny("core_usage_percentage", usage_i);
-            try replacer.addKeyAny("core_frequency", if (core_frequency.value.fraction) core_frequency.value.raw else @as(f64, @floatFromInt(core_frequency.value.rounded)));
-            try replacer.addKeyAny("core_frequency_unit", core_frequency.unit);
+            try replacer.addKeyAny("core_frequency", if (freq_current.value.fraction) freq_current.value.raw else @as(f64, @floatFromInt(freq_current.value.rounded)));
+            try replacer.addKeyAny("core_frequency_unit", freq_current.unit);
+            try replacer.addKeyAny("core_frequency_min", if (freq_min.value.fraction) freq_min.value.raw else @as(f64, @floatFromInt(freq_min.value.rounded)));
+            try replacer.addKeyAny("core_frequency_min_unit", freq_min.unit);
+            try replacer.addKeyAny("core_frequency_max", if (freq_max.value.fraction) freq_max.value.raw else @as(f64, @floatFromInt(freq_max.value.rounded)));
+            try replacer.addKeyAny("core_frequency_max_unit", freq_max.unit);
 
             const line = try replacer.render(config.tooltip);
             if (tooltip_text.items.len > 0) try tooltip_text.append(allocator, '\n');
@@ -99,9 +119,6 @@ pub fn main(init: process.Init) !void {
         }
 
         try json.set("tooltip", tooltip_text.items);
-
-        const text_line = try replacer.render(config.text);
-        try json.set("text", text_line);
 
         try json.write(stdout);
         try stdout.flush();

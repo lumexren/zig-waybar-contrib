@@ -34,21 +34,29 @@ Displays per-core CPU usage and frequency information.
 
 The `text` and `tooltip` options support the following placeholders:
 
-| Placeholder          | Description                  |
-| :------------------- | :--------------------------- |
-| `{icon}`             | Module icon                  |
-| `{usage_percentage}` | Average CPU usage percentage |
-| `{frequency}`        | Maximum CPU frequency        |
-| `{frequency_unit}`   | Frequency unit (e.g., GHz)   |
-| `{core_count}`       | Total number of CPU cores    |
+| Placeholder            | Description                            |
+| :--------------------- | :------------------------------------- |
+| `{icon}`               | Module icon                            |
+| `{usage_percentage}`   | Average CPU usage percentage           |
+| `{frequency}`          | Maximum current frequency across cores |
+| `{frequency_unit}`     | Frequency unit (e.g., GHz)             |
+| `{frequency_min}`      | Global minimum frequency (cpufreq)     |
+| `{frequency_min_unit}` | Unit for min frequency                 |
+| `{frequency_max}`      | Global maximum frequency (cpufreq)     |
+| `{frequency_max_unit}` | Unit for max frequency                 |
+| `{core_count}`         | Total number of CPU cores              |
 
 **Tooltip:**
-| Placeholder               | Description                          |
-| :------------------------ | :----------------------------------- |
-| `{core_index}`            | Index of the current core            |
-| `{core_usage_percentage}` | Usage percentage of the current core |
-| `{core_frequency}`        | Frequency of the current core        |
-| `{core_frequency_unit}`   | Frequency unit for the current core  |
+| Placeholder                 | Description                          |
+| :-------------------------- | :----------------------------------- |
+| `{core_index}`              | Index of the current core            |
+| `{core_usage_percentage}`   | Usage percentage of the current core |
+| `{core_frequency}`          | Current frequency of the core        |
+| `{core_frequency_unit}`     | Frequency unit for the current core  |
+| `{core_frequency_min}`      | Minimum frequency of the core        |
+| `{core_frequency_min_unit}` | Unit for core min frequency          |
+| `{core_frequency_max}`      | Maximum frequency of the core        |
+| `{core_frequency_max_unit}` | Unit for core max frequency          |
 
 ---
 
