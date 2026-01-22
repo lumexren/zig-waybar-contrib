@@ -1,7 +1,7 @@
 ![zig-waybar-contrib](https://img.shields.io/badge/zig--waybar--contrib-gray?style=for-the-badge&logo=zig&logoColor=orange) 
 ![License](https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge) 
 ![Stars](https://img.shields.io/gitea/stars/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=DAA520)
-![Issues](https://img.shields.io/github/issues/erffy/zig-waybar-contrib?style=for-the-badge)
+![Issues](https://img.shields.io/gitea/issues/open/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge)
 ![Last Commit](https://img.shields.io/gitea/last-commit/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=F7A41D)
 <br>
 **High-performance Waybar modules written in Zig for efficient system monitoring**
@@ -13,9 +13,7 @@
 - **Blazingly Fast**: Minimal startup time and runtime overhead.
 - **Memory Safe**: Leveraging Zig's safety features to prevent common crashes and leaks.
 - **Zero Dependencies**: Statically linked binaries that run anywhere without runtime interpreters.
-- **Deeply Configurable**: Simple, type-safe configuration using ZON (Zig Object Notation).
-
-Whether you need to monitor precision fan speeds, track compilation latency with pings, or watch your memory usage without eating it up, `zig-waybar-contrib` has you covered.
+- **Deeply Configurable**: Simple, type-safe configuration using Zig Object Notation.
 
 ### Community
 
@@ -37,6 +35,8 @@ Join our Discord server for updates, support and discussion:<br>
 See [MODULES](MODULES.md) for detailed documentation on each module.
 
 ### Installation
+![Latest Release](https://img.shields.io/gitea/v/release/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&display_name=tag&style=for-the-badge&label=release)
+![Latest Pre-release](https://img.shields.io/gitea/v/release/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&include_prereleases&display_name=tag&style=for-the-badge&label=pre-release)
 
 ![Repology](https://repology.org/badge/vertical-allrepos/zig-waybar-contrib.svg)
 ![Repology](https://repology.org/badge/vertical-allrepos/zig-waybar-contrib-beta.svg)
