@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const mem = std.mem;
 const Build = std.Build;
 const SemanticVersion = std.SemanticVersion;
@@ -36,7 +35,7 @@ pub fn build(b: *Build) void {
     });
 
     for (modules) |config| {
-        if (builtin.target.abi.isMusl() and (mem.eql(u8, config.name, "disk") or mem.eql(u8, config.name, "gpu"))) continue;
+        if (target.result.abi == .musl and (mem.eql(u8, config.name, "disk") or mem.eql(u8, config.name, "gpu"))) continue;
 
         const mod = b.createModule(.{
             .target = target,
