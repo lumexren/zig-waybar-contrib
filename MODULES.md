@@ -356,6 +356,60 @@ The `text` and `tooltip` options support the following placeholders:
 
 ---
 
+### **Disk**
+
+Monitors disk usage and space statistics.
+
+- **Signal:** `17`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/disk.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 30,
+    // Path to monitor (default: root filesystem)
+    .path = "/",
+    // Show all mounted filesystems in tooltip
+    .show_all_mounts = false,
+    // Module icon
+    .icon = "",
+    // Custom text format (default shown)
+    .text = "{icon} {percentage_used}% {dot} {used:.2}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Total {dot} {total:.2}{nl}Free {dot} {free:.2}{nl}Used {dot} {used:.2}",
+    // Tooltip format for each mount (when show_all_mounts = true)
+    .mount_tooltip = "{mount_point}: {percentage_used}% ({free:.2} free)",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder              | Description                 |
+| :----------------------- | :-------------------------- |
+| `{icon}`                 | Module icon                 |
+| `{path}`                 | Monitored path              |
+| `{total}`                | Total disk space            |
+| `{used}`                 | Used disk space             |
+| `{free}`                 | Free disk space             |
+| `{percentage_used}`      | Usage percentage            |
+| `{percentage_free}`      | Free percentage             |
+| `{inodes_total}`         | Total inodes                |
+| `{inodes_used}`          | Used inodes                 |
+| `{inodes_free}`          | Free inodes                 |
+| `{inodes_percentage_used}` | Inode usage percentage    |
+
+**Mount Tooltip (when `show_all_mounts = true`):**
+| Placeholder        | Description                    |
+| :----------------- | :----------------------------- |
+| `{device}`         | Device path (e.g., `/dev/sda1`)|
+| `{mount_point}`    | Mount point path               |
+| `{fs_type}`        | Filesystem type                |
+
+---
+
 ### **Common Placeholders**
 
 These placeholders are available in all modules:

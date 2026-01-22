@@ -36,7 +36,7 @@ pub const ModuleConfig = struct {
     update_interval: i64 = 5,
     signal_number: u8 = 11,
     icon: []const u8 = "",
-    text: []const u8 = "{icon} {total_fans}",
+    text: []const u8 = "{icon}  {total_fans}",
     tooltip: []const u8 = "{name}: {speed} RPM",
 };
 

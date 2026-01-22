@@ -36,7 +36,7 @@ pub const ModuleConfig = struct {
     update_interval: i64 = 1,
     signal_number: u8 = 14,
     icon: []const u8 = "",
-    text: []const u8 = "{icon} {total_speed:^1}",
+    text: []const u8 = "{icon}  {total_speed:^1}",
     tooltip: []const u8 = "Interface {dot} {interface}{nl}Gateway {dot} {gateway}{nl}Local IP {dot} {local_ip}{nl}{nl}Download {dot} {download_speed:^1}{nl}Upload {dot} {upload_speed:^1}",
 };
 

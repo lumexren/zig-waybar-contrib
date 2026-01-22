@@ -6,7 +6,7 @@
     .dependencies = .{
         .zig_sysinfo = .{
             .url = "https://codeberg.org/erffy/zig-sysinfo/archive/1.1.0.zip",
-            .hash = "zig_sysinfo-1.1.0-XZkGF7RPAgBIWCf-6bKdmflTY8uNS52Oi8EoYE6ERUWn",
+            .hash = "zig_sysinfo-1.1.0-XZkGFwhRAgDiarq5krMYDAb1SIRglFNzKz62J3YkYYiy",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },

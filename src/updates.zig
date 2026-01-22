@@ -39,7 +39,7 @@ pub const ModuleConfig = struct {
     icon: []const u8 = "",
     err_icon: []const u8 = "",
     manager: ?[]const u8 = null,
-    text: []const u8 = "{icon} {total_updates}",
+    text: []const u8 = "{icon}  {total_updates}",
     tooltip: []const u8 = "{package_name}: {new_version}",
 };
 
