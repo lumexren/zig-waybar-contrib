@@ -1,5 +1,4 @@
 const std = @import("std");
-const mem = std.mem;
 const Build = std.Build;
 const SemanticVersion = std.SemanticVersion;
 
@@ -35,7 +34,7 @@ pub fn build(b: *Build) void {
     });
 
     for (modules) |config| {
-        if (target.result.abi == .musl and (mem.eql(u8, config.name, "disk") or mem.eql(u8, config.name, "gpu"))) continue;
+        if (target.result.abi == .musl and config.link_libc) continue;
 
         const mod = b.createModule(.{
             .target = target,
