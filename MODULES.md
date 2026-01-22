@@ -1,14 +1,5 @@
 # Modules
 
-Each module outputs single-line JSON compatible with Waybar’s `custom` module interface.
-
-## Configuration
-
-Modules that support configuration look for a `.zon` file in `~/.config/zig-waybar-contrib/`.
-The filename must match the module name (e.g., `ping.zon` for the ping module).
-
----
-
 ### **CPU**
 
 Displays per-core CPU usage and frequency information.
@@ -433,14 +424,3 @@ The configuration system supports format specifiers for numeric values to contro
 | `:N`      | Floats     | Decimal precision N                                                     | `{usage:2}` → `12.34`             |
 | `:.N`     | Integers   | Formats bytes to human-readable string with N decimal precision         | `{vram_usage:.2}` → `1.50 GiB`    |
 | `:^N`     | Floats     | Formats network speed to human-readable string with N decimal precision | `{total_speed:^1}` → `2.5 MB/s`   |
-
----
-
-### 📸 Screenshots
-
-| Module      | Preview                               |
-| :---------- | :------------------------------------ |
-| **Updates** | ![Updates Module](assets/updates.png) |
-| **Memory**  | ![Memory Module](assets/memory.png)   |
-| **Ping**    | ![Ping Module](assets/ping.png)       |
-| **CPU**     | ![CPU Module](assets/cpu.png)         |
