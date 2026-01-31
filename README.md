@@ -17,7 +17,7 @@
 
 ### Support
 
-If you find these projects useful and want to support my work, you can do so on [Patreon](https://patreon.com/15497958/join).<br>
+If you find these projects useful and want to support my work, you can do so on [GitHub Sponsors](https://github.com/sponsors/erffy).<br>
 Every bit of support helps me continue improving and maintaining these projects — thank you! ❤️
 
 ### Community
@@ -132,7 +132,7 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 **Made with ❤️ by Me**
 
 *Star ⭐ this repo if you find it useful!*<br>
-*Support the project on [Patreon](https://patreon.com/15497958/join)* 💖<br>
+*Support the project on [GitHub Sponsors](https://github.com/sponsors/erffy)* 💖<br>
 *Join our [Discord](https://discord.gg/tb8MvnnSfZ) for support and updates!*
 
 This project is licensed under the **GNU General Public License v3.0**. See [LICENSE](./LICENSE) for details.
