@@ -15,6 +15,11 @@
 - **Zero Dependencies**: Statically linked binaries that run anywhere without runtime interpreters.
 - **Deeply Configurable**: Simple, type-safe configuration using Zig Object Notation.
 
+### Support
+
+If you find these projects useful and want to support my work, you can do so on [Patreon](https://patreon.com/15497958/join).<br>
+Every bit of support helps me continue improving and maintaining these projects — thank you! ❤️
+
 ### Community
 
 Join our Discord server for updates, support and discussion:<br>
@@ -127,6 +132,7 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 **Made with ❤️ by Me**
 
 *Star ⭐ this repo if you find it useful!*<br>
+*Support the project on [Patreon](https://patreon.com/15497958/join)* 💖<br>
 *Join our [Discord](https://discord.gg/tb8MvnnSfZ) for support and updates!*
 
 This project is licensed under the **GNU General Public License v3.0**. See [LICENSE](./LICENSE) for details.
