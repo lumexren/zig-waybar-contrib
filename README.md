@@ -30,9 +30,11 @@ Join our Discord server for updates, support and discussion:<br>
 | Module      | Description                            |
 |:------------|:---------------------------------------|
 | **CPU**     | Displays per-core CPU usage            |
+| **Disk**    | Monitors disk usage and space statistics |
 | **Fan**     | Monitors fan speeds                    |
 | **GPU**     | Monitors GPU usage and temperature     |
 | **Memory**  | Reports RAM usage and statistics       |
+| **MPRIS**   | Displays media player information      |
 | **Network** | Monitors network traffic and speed     |
 | **Ping**    | Measures network latency               |
 | **Updates** | Tracks system package updates          |

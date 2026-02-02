@@ -19,6 +19,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "fan", .path = "src/fan.zig" },
     .{ .name = "gpu", .path = "src/gpu.zig", .link_libc = true },
     .{ .name = "disk", .path = "src/disk.zig", .link_libc = true },
+    .{ .name = "mpris", .path = "src/mpris.zig", .link_libc = true },
 };
 
 pub fn build(b: *Build) void {

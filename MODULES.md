@@ -221,6 +221,63 @@ The `text` and `tooltip` options support the following placeholders:
 
 ---
 
+### **MPRIS**
+
+Displays media player information using the MPRIS2 standard.
+
+- **Signal:** `18`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/mpris.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 1,
+    // Module icon
+    .icon = "",
+    // Status icons
+    .icon_playing = "",
+    .icon_paused = "",
+    .icon_stopped = "",
+    // Custom text format (default shown)
+    .text = "{icon}  {title} {dot} {artist}",
+    // Custom tooltip format (default shown)
+    .tooltip = "{player_name}: {status}{nl}{title} - {artist}{nl}Album: {album}{nl}{position} / {length}",
+    // Text to show when no player is found
+    .no_player_text = "No player",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder         | Description                            |
+| :------------------ | :------------------------------------- |
+| `{icon}`            | Status icon or generic icon            |
+| `{player_name}`     | Name of the active player              |
+| `{identity}`        | Unique identity of the player          |
+| `{status}`          | Player status (Playing, Paused, etc.)  |
+| `{loop_status}`     | Loop status                            |
+| `{shuffle}`         | Shuffle status (true/false)            |
+| `{volume}`          | Volume percentage (0-100)              |
+| `{title}`           | Track title                            |
+| `{artist}`          | Track artist                           |
+| `{album}`           | Track album                            |
+| `{art_url}`         | Album art URL                          |
+| `{position}`        | Formatted track position (MM:SS)       |
+| `{position_us}`     | Track position in microseconds         |
+| `{length}`          | Formatted track length (MM:SS)         |
+| `{length_us}`       | Track length in microseconds           |
+| `{can_control}`     | Player control capability              |
+| `{can_go_next}`     | Can skip to next track                 |
+| `{can_go_previous}` | Can skip to previous track             |
+| `{can_play}`        | Can play                               |
+| `{can_pause}`       | Can pause                              |
+| `{can_seek}`        | Can seek                               |
+
+---
+
 ### **Network**
 
 Monitors network traffic and speed.
