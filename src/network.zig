@@ -64,14 +64,14 @@ pub fn main(init: process.Init) !void {
     const local_ip = try sysinfo.getLocalIP(allocator, route.interface);
 
     // Get initial network stats
-    const initial_time = try Clock.now(.boot, io);
+    const initial_time = Clock.now(.boot, io);
     var prev_stats = try sysinfo.getNetworkStats(io, route.interface, initial_time.toSeconds());
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const current_time = try Clock.now(.boot, io);
+        const current_time = Clock.now(.boot, io);
         const timestamp = current_time.toSeconds();
 
         // Get current network stats

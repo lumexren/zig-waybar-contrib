@@ -2,11 +2,11 @@
     .name = .zig_waybar_contrib,
     .version = "2.0.0",
     .fingerprint = 0xf0b38d05ea485bfd, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0-dev.2223+4f16e80ce",
+    .minimum_zig_version = "0.16.0-dev.2522+d84a638e8",
     .dependencies = .{
         .zig_sysinfo = .{
             .url = "https://codeberg.org/erffy/zig-sysinfo/archive/0.16.x.zip",
-            .hash = "zig_sysinfo-1.2.0-XZkGF1N1AwByi4cZFV8zZi23Wv4LL-HQY8lhpe1Qjz1_",
+            .hash = "zig_sysinfo-1.2.0-XZkGF1l1AwDQ1JlB5uTKoCEfIzONJ2aVpC-mbO7AJTza",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },

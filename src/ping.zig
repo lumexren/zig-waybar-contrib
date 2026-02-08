@@ -92,7 +92,7 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        const current = try Clock.now(.boot, io);
+        const current = Clock.now(.boot, io);
         const now_s = current.toSeconds();
 
         if (resolved == null or (now_s - last_update_ts) >= config.target_domain_ip_update_interval) {
@@ -140,12 +140,12 @@ pub fn main(init: process.Init) !void {
 pub fn ping(io: Io, socket: Socket, target_addr: *IpAddress, buffer: []u8) !i64 {
     sysinfolib.createIcmpPacket(buffer);
 
-    const raw_start = try Clock.now(.boot, io);
+    const raw_start = Clock.now(.boot, io);
 
     _ = try socket.send(io, target_addr, buffer);
     _ = try socket.receive(io, buffer);
 
-    const raw_end = try Clock.now(.boot, io);
+    const raw_end = Clock.now(.boot, io);
 
     const start = Duration.fromNanoseconds(raw_start.nanoseconds).toMilliseconds();
     const end = Duration.fromNanoseconds(raw_end.nanoseconds).toMilliseconds();
