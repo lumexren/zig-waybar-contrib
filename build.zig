@@ -8,6 +8,8 @@ const ModuleConfig = struct {
     name: []const u8,
     path: []const u8,
     link_libc: bool = false,
+    link_dbus: bool = false,
+    link_wireplumber: bool = false,
 };
 
 const modules = [_]ModuleConfig{
@@ -19,7 +21,10 @@ const modules = [_]ModuleConfig{
     .{ .name = "fan", .path = "src/fan.zig" },
     .{ .name = "gpu", .path = "src/gpu.zig", .link_libc = true },
     .{ .name = "disk", .path = "src/disk.zig", .link_libc = true },
-    .{ .name = "mpris", .path = "src/mpris.zig", .link_libc = true },
+    .{ .name = "mpris", .path = "src/mpris.zig", .link_libc = true, .link_dbus = true },
+    .{ .name = "battery", .path = "src/battery.zig", .link_libc = true, .link_dbus = true },
+    .{ .name = "backlight", .path = "src/backlight.zig" },
+    .{ .name = "bluetooth", .path = "src/bluetooth.zig", .link_libc = true, .link_dbus = true },
 };
 
 pub fn build(b: *Build) void {
@@ -53,6 +58,18 @@ pub fn build(b: *Build) void {
                 },
             },
         });
+
+        // Link D-Bus for modules that need it (mpris, battery, bluetooth)
+        if (config.link_dbus) {
+            mod.linkSystemLibrary("dbus-1", .{});
+        }
+
+        // Link WirePlumber/GLib for audio module
+        if (config.link_wireplumber) {
+            mod.linkSystemLibrary("wireplumber-0.5", .{});
+            mod.linkSystemLibrary("glib-2.0", .{});
+            mod.linkSystemLibrary("gobject-2.0", .{});
+        }
 
         const exe = b.addExecutable(.{
             .name = config.name,

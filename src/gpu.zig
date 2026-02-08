@@ -41,8 +41,6 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    if (sysinfo.DUMMY) @panic("gpu: dummy detected. This module cannot be used.");
-
     const allocator = init.arena.allocator();
     const io = init.io;
 
