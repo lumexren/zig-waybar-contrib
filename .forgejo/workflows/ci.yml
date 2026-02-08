@@ -22,14 +22,16 @@ jobs:
       matrix:
         target:
           - x86_64-linux-gnu
-          - x86_64-linux-musl
+          - x86_64-linux-musl 
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install system dependencies
-        run: apt update && apt install -y libdbus-1-dev pkg-config
+        run: |
+          apt update
+          apt install -y libdbus-1-dev pkg-config build-essential
 
       - name: Install Zig
         uses: https://codeberg.org/mlugg/setup-zig@v2
@@ -37,7 +39,9 @@ jobs:
           version: master
 
       - name: Build
-        run: zig build -Dtarget=${{ matrix.target }} -Drelease
+        run: |
+          export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LIBRARY_PATH
+          zig build -Dtarget=${{ matrix.target }} -Drelease
 
       - name: Upload binaries
         uses: actions/upload-artifact@v3
