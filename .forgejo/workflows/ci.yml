@@ -39,9 +39,7 @@ jobs:
           version: master
 
       - name: Build
-        run: |
-          export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LIBRARY_PATH
-          zig build -Dtarget=${{ matrix.target }} -Drelease
+        run: zig build -Dtarget=${{ matrix.target }} -Drelease
 
       - name: Upload binaries
         uses: actions/upload-artifact@v3
