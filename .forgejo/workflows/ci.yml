@@ -17,13 +17,6 @@ on:
 jobs:
   build-standard:
     runs-on: [server]
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - x86_64-linux-gnu
-          - x86_64-linux-musl 
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +32,7 @@ jobs:
           version: master
 
       - name: Build
-        run: zig build -Dtarget=${{ matrix.target }} -Drelease
+        run: zig build -Drelease
 
       - name: Upload binaries
         uses: actions/upload-artifact@v3
