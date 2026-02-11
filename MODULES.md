@@ -241,6 +241,8 @@ Displays media player information using the MPRIS2 standard.
     .icon_stopped = "",
     // Custom text format (default shown)
     .text = "{icon}  {title} {dot} {artist}",
+    // Max length of text
+    .text_max_length = 256,
     // Custom tooltip format (default shown)
     .tooltip = "{player_name}: {status}{nl}{title} - {artist}{nl}Album: {album}{nl}{position} / {length}",
     // Text to show when no player is found

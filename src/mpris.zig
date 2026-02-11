@@ -41,6 +41,7 @@ pub const ModuleConfig = struct {
     icon_paused: []const u8 = "",
     icon_stopped: []const u8 = "",
     text: []const u8 = "{icon}  {title} {dot} {artist}",
+    text_max_length: u16 = 256,
     tooltip: []const u8 = "{player_name}: {status}{nl}{title} - {artist}{nl}Album: {album}{nl}{position} / {length}",
     no_player_text: []const u8 = "No player",
 };
@@ -147,7 +148,9 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("can_pause", player_info.can_pause);
         try replacer.addKeyAny("can_seek", player_info.can_seek);
 
-        const text_line = try replacer.render(config.text);
+        var text_line = try replacer.render(config.text);
+        if (config.text_max_length != 0 and text_line.len > config.text_max_length)
+            text_line = text_line[0..config.text_max_length];
         try json.set("text", text_line);
 
         const tooltip_line = try replacer.render(config.tooltip);
