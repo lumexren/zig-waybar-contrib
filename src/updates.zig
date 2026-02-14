@@ -35,7 +35,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 200,
-    signal_number: u8 = 16,
+    signal_number: u8 = 21,
     icon: []const u8 = "",
     err_icon: []const u8 = "",
     manager: ?[]const u8 = null,

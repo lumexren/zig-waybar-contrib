@@ -41,7 +41,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 15,
+    signal_number: u8 = 20,
     target_domain: []const u8 = "google.com",
     target_domain_ip_update_interval: i64 = 200,
     icon: []const u8 = "",

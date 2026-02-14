@@ -34,7 +34,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 30,
-    signal_number: u8 = 17,
+    signal_number: u8 = 14,
     path: []const u8 = "/",
     show_all_mounts: bool = false,
     icon: []const u8 = "",

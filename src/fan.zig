@@ -34,7 +34,7 @@ const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
-    signal_number: u8 = 11,
+    signal_number: u8 = 15,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {total_fans}",
     tooltip: []const u8 = "{name}: {speed} RPM",
