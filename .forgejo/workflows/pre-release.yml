@@ -71,13 +71,13 @@ jobs:
           zip -r zig-waybar-contrib-release-${{ env.VERSION }}.zip zig-out-release/
 
       - name: Create Release
-        uses: https://gitea.com/actions/release-action@v1
+        uses: https://gitea.com/actions/gitea-release-action@v1
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           body_path: release_notes.md
           prerelease: true
-          api_key: '${{ secrets.ACCESS_TOKEN }}'
+          md5sum: true
           files: |
             zig-waybar-contrib-debug-${{ env.VERSION }}.zip
             zig-waybar-contrib-release-${{ env.VERSION }}.zip
