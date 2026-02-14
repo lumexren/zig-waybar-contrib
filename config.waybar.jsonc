@@ -1,44 +1,74 @@
 {
+  "custom/backlight": {
+    "exec": "{{EXECUTABLE_PATH}}/waybar-module-backlight",
+    "restart-interval": 60,
+    "return-type": "json",
+    "signal": 15
+  },
+  "custom/battery": {
+    "exec": "{{EXECUTABLE_PATH}}/waybar-module-battery",
+    "restart-interval": 60,
+    "return-type": "json",
+    "signal": 14
+  },
+  "custom/bluetooth": {
+    "exec": "{{EXECUTABLE_PATH}}/waybar-module-bluetooth",
+    "restart-interval": 60,
+    "return-type": "json",
+    "signal": 16
+  },
   "custom/cpu": {
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-cpu",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 10
   },
+  "custom/disk": {
+    "exec": "{{EXECUTABLE_PATH}}/waybar-module-disk",
+    "restart-interval": 60,
+    "return-type": "json",
+    "signal": 17
+  },
   "custom/fan": {
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-fan",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 11
   },
   "custom/gpu": {
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-gpu",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 12
   },
   "custom/memory": {
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-memory",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 13
   },
+  "custom/mpris": {
+    "exec": "{{EXECUTABLE_PATH}}/waybar-module-mpris",
+    "restart-interval": 60,
+    "return-type": "json",
+    "signal": 18
+  },
   "custom/network": {
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-network",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 14
   },
   "custom/ping": {
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-ping",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 15
   },
   "custom/updates": {
     "escape": true,
     "exec": "{{EXECUTABLE_PATH}}/waybar-module-updates",
-    "interval": 0,
+    "restart-interval": 60,
     "return-type": "json",
     "signal": 16
   }
