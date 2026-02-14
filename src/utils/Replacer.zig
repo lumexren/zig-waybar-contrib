@@ -216,7 +216,7 @@ pub fn render(this: *Replacer, template: []const u8) ![]u8 {
 
             // Find closing '}'
             const remaining = template[i + 1 ..];
-            if (mem.indexOfScalar(u8, remaining, '}')) |end_offset| {
+            if (mem.findScalar(u8, remaining, '}')) |end_offset| {
                 const full_len = end_offset + 2; // +1 for '{', +1 for '}'
                 const content = remaining[0..end_offset];
 
@@ -224,7 +224,7 @@ pub fn render(this: *Replacer, template: []const u8) ![]u8 {
                 var key_part = content;
                 var fmt_part: ?[]const u8 = null;
 
-                if (mem.indexOfScalar(u8, content, ':')) |colon_idx| {
+                if (mem.findScalar(u8, content, ':')) |colon_idx| {
                     key_part = content[0..colon_idx];
                     fmt_part = content[colon_idx + 1 ..];
                 }
