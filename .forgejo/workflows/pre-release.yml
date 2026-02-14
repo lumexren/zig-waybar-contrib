@@ -1,0 +1,83 @@
+name: Master Pre-Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Zig
+        uses: https://codeberg.org/mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Build Project
+        run: |
+          zig build
+          mv zig-out zig-out-debug
+
+          zig build -Drelease
+          mv zig-out zig-out-release
+
+      - name: Set Version
+        id: set_version
+        run: |
+          # Generate version string (YY.MM.DD)
+          VERSION=$(date +'%y.%m.%d')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Target version is: $VERSION"
+
+      - name: Create and Push Git Tag
+        run: |
+          git config user.name "forgejo-actions"
+          git config user.email "actions@codeberg.org"
+          
+          git remote set-url origin https://x-access-token:${{ secrets.ACCESS_TOKEN }}@codeberg.org/${{ github.repository }}.git
+          
+          # Check if tag exists to avoid errors
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists. Skipping tag creation."
+          else
+            echo "Creating tag $VERSION..."
+            git tag $VERSION
+            git push origin $VERSION
+          fi
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Find the previous tag (exclude current if it was just pushed)
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "Initial release." > release_notes.md
+          else
+            echo "### Changes since $PREVIOUS_TAG" > release_notes.md
+            git log ${PREVIOUS_TAG}..HEAD --oneline --format="- %s (%h)" >> release_notes.md
+          fi
+
+      - name: Package Builds
+        run: |
+          zip -r zig-waybar-contrib-debug-${{ env.VERSION }}.zip zig-out-debug/
+          zip -r zig-waybar-contrib-release-${{ env.VERSION }}.zip zig-out-release/
+
+      - name: Create Release
+        uses: https://gitea.com/actions/release-action@v1
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          body_path: release_notes.md
+          prerelease: true
+          api_key: '${{ secrets.ACCESS_TOKEN }}'
+          files: |
+            zig-waybar-contrib-debug-${{ env.VERSION }}.zip
+            zig-waybar-contrib-release-${{ env.VERSION }}.zip
