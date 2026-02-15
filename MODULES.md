@@ -1,10 +1,138 @@
 # Modules
 
+### **Backlight**
+
+Controls backlight brightness.
+
+- **Signal:** `10`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/backlight.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 1,
+    // Module icon
+    .icon = "",
+    // Custom text format (default shown)
+    .text = "{icon}  {percentage}%",
+    // Custom tooltip format (default shown)
+    .tooltip = "Brightness: {percentage}%{nl}Device: {name}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder        | Description                          |
+| :----------------- | :----------------------------------- |
+| `{icon}`           | Module icon                          |
+| `{percentage}`     | Current brightness percentage        |
+| `{brightness}`     | Current brightness value             |
+| `{max_brightness}` | Maximum brightness value             |
+| `{name}`           | Device name                          |
+
+---
+
+### **Battery**
+
+Monitors battery status and percentage.
+
+- **Signal:** `11`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/battery.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 5,
+    // Module icon
+    .icon = "",
+    .icon_charging = "",
+    .icon_full = "",
+    // Custom text format (default shown)
+    .text = "{icon}  {percentage}%",
+    // Custom tooltip format (default shown)
+    .tooltip = "Battery: {state}{nl}Time remaining: {time_remaining}{nl}Model: {model}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder       | Description                          |
+| :---------------- | :----------------------------------- |
+| `{icon}`          | Battery icon (charging/full/normal)  |
+| `{percentage}`    | Battery percentage                   |
+| `{state}`         | Battery state (e.g., Charging)       |
+| `{time_remaining}`| Estimated time remaining             |
+| `{time_to_empty}` | Seconds until empty                  |
+| `{time_to_full}`  | Seconds until fully charged          |
+| `{model}`         | Battery model name                   |
+| `{vendor}`        | Battery vendor name                  |
+| `{voltage}`       | Current voltage                      |
+| `{energy}`        | Current energy                       |
+| `{energy_rate}`   | Current energy rate                  |
+
+---
+
+### **Bluetooth**
+
+Monitors bluetooth adapter state and connected devices.
+
+- **Signal:** `12`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/bluetooth.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 5,
+    // Icons
+    .icon_on = "",
+    .icon_off = "",
+    // Custom text format (default shown)
+    .text = "{icon}  {device_count}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Adapter: {adapter_name}{nl}Power: {adapter_powered}{nl}Connected: {device_count} devices{nl}{devices}",
+    // Format for each device in the list
+    .device_format = "{device_alias}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder            | Description                          |
+| :--------------------- | :----------------------------------- |
+| `{icon}`               | Bluetooth status icon                |
+| `{adapter_name}`       | Name of the adapter                  |
+| `{adapter_powered}`    | Power state (true/false)             |
+| `{adapter_discoverable}`| Discoverable state (true/false)     |
+| `{device_count}`       | Number of connected devices          |
+| `{devices}`            | List of connected devices            |
+
+**Device List Format (`device_format`):**
+
+The `device_format` string is used to format each entry in the `{devices}` list. It supports:
+
+| Placeholder         | Description                          |
+| :------------------ | :----------------------------------- |
+| `{device_name}`     | Device name                          |
+| `{device_alias}`    | Device alias                         |
+| `{device_connected}`| Connection state (true/false)        |
+| `{device_battery}`  | Device battery percentage (if avail) |
+
+---
+
 ### **CPU**
 
 Displays per-core CPU usage and frequency information.
 
-- **Signal:** `10`
+- **Signal:** `13`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/cpu.zon`):**
@@ -15,7 +143,7 @@ Displays per-core CPU usage and frequency information.
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
+    .text = "{icon}  {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
     // Custom tooltip format (default shown)
     .tooltip = "Core {core_index}: {core_usage_percentage}% {dot} {core_frequency:2}{core_frequency_unit}",
 }
@@ -51,11 +179,65 @@ The `text` and `tooltip` options support the following placeholders:
 
 ---
 
+### **Disk**
+
+Monitors disk usage and space statistics.
+
+- **Signal:** `14`
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/disk.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 30,
+    // Path to monitor (default: root filesystem)
+    .path = "/",
+    // Show all mounted filesystems in tooltip
+    .show_all_mounts = false,
+    // Module icon
+    .icon = "",
+    // Custom text format (default shown)
+    .text = "{icon}  {percentage_used}% {dot} {used:.2}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Total {dot} {total:.2}{nl}Free {dot} {free:.2}{nl}Used {dot} {used:.2}",
+    // Tooltip format for each mount (when show_all_mounts = true)
+    .mount_tooltip = "{mount_point}: {percentage_used}% ({free:.2} free)",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder              | Description                 |
+| :----------------------- | :-------------------------- |
+| `{icon}`                 | Module icon                 |
+| `{path}`                 | Monitored path              |
+| `{total}`                | Total disk space            |
+| `{used}`                 | Used disk space             |
+| `{free}`                 | Free disk space             |
+| `{percentage_used}`      | Usage percentage            |
+| `{percentage_free}`      | Free percentage             |
+| `{inodes_total}`         | Total inodes                |
+| `{inodes_used}`          | Used inodes                 |
+| `{inodes_free}`          | Free inodes                 |
+| `{inodes_percentage_used}` | Inode usage percentage    |
+
+**Mount Tooltip (when `show_all_mounts = true`):**
+| Placeholder        | Description                    |
+| :----------------- | :----------------------------- |
+| `{device}`         | Device path (e.g., `/dev/sda1`)|
+| `{mount_point}`    | Mount point path               |
+| `{fs_type}`        | Filesystem type                |
+
+---
+
 ### **Fan**
 
 Monitors fan speeds.
 
-- **Signal:** `11`
+- **Signal:** `15`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/fan.zon`):**
@@ -66,7 +248,7 @@ Monitors fan speeds.
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {total_fans}",
+    .text = "{icon}  {total_fans}",
     // Custom tooltip format (default shown)
     .tooltip = "{name}: {speed} RPM",
 }
@@ -99,7 +281,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors GPU usage, temperature, and VRAM statistics.
 
-- **Signal:** `12`
+- **Signal:** `16`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/gpu.zon`):**
@@ -110,7 +292,7 @@ Monitors GPU usage, temperature, and VRAM statistics.
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {usage_percentage}% {dot} {temperature}°C",
+    .text = "{icon}  {usage_percentage}% {dot} {temperature}°C",
     // Custom tooltip format (default shown)
     .tooltip = "PWM {dot} {pwm_percentage}%{nl}VRAM Total {dot} {vram_total:.0}{nl}VRAM Free {dot} {vram_free:.2}{nl}VRAM Usage {dot} {vram_usage:.2}",
 }
@@ -136,7 +318,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Reports RAM usage and memory statistics.
 
-- **Signal:** `13`
+- **Signal:** `17`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/memory.zon`):**
@@ -145,9 +327,9 @@ Reports RAM usage and memory statistics.
     // Check interval in seconds
     .update_interval = 1,
     // Module icon
-    .icon = "",
+    .icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {percentage}% {dot} {total_usage:.2}",
+    .text = "{icon}  {percentage}% {dot} {total_usage:.2}",
     // Custom tooltip format (default shown)
     .tooltip = "Physical Memory{nl}Total {dot} {physical_total:.2}{nl}Used {dot} {physical_used:.2}{nl}Free {dot} {physical_free:.2}{nl}Available {dot} {physical_available:.2}{nl}Shared {dot} {physical_shared:.2}{nl}Buffers {dot} {physical_buffers:.2}{nl}Cached {dot} {physical_cached:.2}{nl}{nl}Swap Memory{nl}Total {dot} {swap_total:.2}{nl}Used {dot} {swap_used:.2}{nl}Free {dot} {swap_free:.2}{nl}Cached {dot} {swap_cached:.2}",
 }
@@ -284,7 +466,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors network traffic and speed.
 
-- **Signal:** `14`
+- **Signal:** `19`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/network.zon`):**
@@ -293,9 +475,9 @@ Monitors network traffic and speed.
     // Check interval in seconds
     .update_interval = 1,
     // Module icon
-    .icon = "󰛳",
+    .icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {total_speed:^1}",
+    .text = "{icon}  {total_speed:^1}",
     // Custom tooltip format (default shown)
     .tooltip = "Interface {dot} {interface}{nl}Gateway {dot} {gateway}{nl}Local IP {dot} {local_ip}{nl}{nl}Download {dot} {download_speed:^1}{nl}Upload {dot} {upload_speed:^1}",
 }
@@ -321,7 +503,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Measures network latency to a configurable host using ICMP.
 
-- **Signal:** `15`
+- **Signal:** `20`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/ping.zon`):**
@@ -333,12 +515,10 @@ Measures network latency to a configurable host using ICMP.
     .target_domain = "google.com",
     // Interval to refresh the resolved IP address (seconds)
     .target_domain_ip_update_interval = 200,
-    // Ping timeout in milliseconds
-    .ping_timeout_ms = 5000,
     // Module icon
-    .icon = "󰛳",
+    .icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {latency}ms",
+    .text = "{icon}  {latency}ms",
     // Custom tooltip format (default shown)
     .tooltip = "Min: {min_latency}ms {dot} Avg: {avg_latency}ms {dot} Max: {max_latency}ms{nl}Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
 }
@@ -365,7 +545,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 Tracks available system package updates.
 
-- **Signal:** `16`
+- **Signal:** `21`
 - **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux
 - **Managers:** pacman, apt, dnf, zypper, xbps
 
@@ -377,11 +557,11 @@ Tracks available system package updates.
     // Package manager override (optional)
     // .manager = "pacman", 
     // Module icon
-    .icon = "",
+    .icon = "",
     // Error icon
-    .err_icon = "",
+    .err_icon = "",
     // Custom text format (default shown)
-    .text = "{icon} {total_updates}",
+    .text = "{icon}  {total_updates}",
     // Custom tooltip format (default shown)
     .tooltip = "{package_name}: {new_version}",
 }
@@ -403,60 +583,6 @@ The `text` and `tooltip` options support the following placeholders:
 | :--------------- | :---------------------------- |
 | `{package_name}` | Name of the package to update |
 | `{new_version}`  | New version number            |
-
----
-
-### **Disk**
-
-Monitors disk usage and space statistics.
-
-- **Signal:** `17`
-- **Platforms:** Any Linux
-
-**Configuration (`~/.config/zig-waybar-contrib/disk.zon`):**
-```zig
-.{
-    // Check interval in seconds
-    .update_interval = 30,
-    // Path to monitor (default: root filesystem)
-    .path = "/",
-    // Show all mounted filesystems in tooltip
-    .show_all_mounts = false,
-    // Module icon
-    .icon = "",
-    // Custom text format (default shown)
-    .text = "{icon} {percentage_used}% {dot} {used:.2}",
-    // Custom tooltip format (default shown)
-    .tooltip = "Total {dot} {total:.2}{nl}Free {dot} {free:.2}{nl}Used {dot} {used:.2}",
-    // Tooltip format for each mount (when show_all_mounts = true)
-    .mount_tooltip = "{mount_point}: {percentage_used}% ({free:.2} free)",
-}
-```
-
-**Customization:**
-
-The `text` and `tooltip` options support the following placeholders:
-
-| Placeholder              | Description                 |
-| :----------------------- | :-------------------------- |
-| `{icon}`                 | Module icon                 |
-| `{path}`                 | Monitored path              |
-| `{total}`                | Total disk space            |
-| `{used}`                 | Used disk space             |
-| `{free}`                 | Free disk space             |
-| `{percentage_used}`      | Usage percentage            |
-| `{percentage_free}`      | Free percentage             |
-| `{inodes_total}`         | Total inodes                |
-| `{inodes_used}`          | Used inodes                 |
-| `{inodes_free}`          | Free inodes                 |
-| `{inodes_percentage_used}` | Inode usage percentage    |
-
-**Mount Tooltip (when `show_all_mounts = true`):**
-| Placeholder        | Description                    |
-| :----------------- | :----------------------------- |
-| `{device}`         | Device path (e.g., `/dev/sda1`)|
-| `{mount_point}`    | Mount point path               |
-| `{fs_type}`        | Filesystem type                |
 
 ---
 
