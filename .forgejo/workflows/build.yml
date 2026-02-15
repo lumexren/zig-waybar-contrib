@@ -1,0 +1,68 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".forgejo/workflows/ci.yml"
+      - "src/**"
+      - "build.zig"
+      - "build.zig.zon"
+  pull_request:
+    paths:
+      - ".forgejo/workflows/ci.yml"
+      - "src/**"
+      - "build.zig"
+      - "build.zig.zon"
+
+jobs:
+  build:
+    runs-on: [codeberg-medium]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          apt update
+          apt install -y libdbus-1-dev pkg-config build-essential
+
+      - name: Install Zig
+        uses: https://codeberg.org/mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Build Project
+        run: |
+          zig build
+          mv zig-out zig-out-debug
+
+          zig build -Drelease
+          mv zig-out zig-out-release
+
+      - name: Set Version
+        id: set_version
+        run: |
+          # Generate version string (YY.MM.DD)
+          VERSION=$(date +'%y.%m.%d')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Target version is: $VERSION"
+
+      - name: Package Builds
+        run: |
+          zip -r zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}.zip zig-out-debug/
+          zip -r zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}.zip zig-out-release/
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}
+          path: zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}.zip
+          retention-days: 7
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}
+          path: zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}.zip
+          retention-days: 7
