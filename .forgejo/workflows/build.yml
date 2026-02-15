@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - ".forgejo/workflows/ci.yml"
+      - ".forgejo/workflows/build.yml"
       - "src/**"
       - "build.zig"
       - "build.zig.zon"
   pull_request:
     paths:
-      - ".forgejo/workflows/ci.yml"
+      - ".forgejo/workflows/build.yml"
       - "src/**"
       - "build.zig"
       - "build.zig.zon"
