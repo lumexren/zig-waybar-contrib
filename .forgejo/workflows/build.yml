@@ -48,21 +48,16 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Target version is: $VERSION"
 
-      - name: Package Builds
-        run: |
-          zip -r zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}.zip zig-out-debug/
-          zip -r zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}.zip zig-out-release/
-
       - name: Upload binaries
         uses: actions/upload-artifact@v3
         with:
           name: zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}
-          path: zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}.zip
+          path: zig-out-debug/*
           retention-days: 7
 
       - name: Upload binaries
         uses: actions/upload-artifact@v3
         with:
           name: zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}
-          path: zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}.zip
+          path: zig-out-release/*
           retention-days: 7
