@@ -46,7 +46,7 @@ jobs:
           git config user.name "forgejo-actions"
           git config user.email "actions@codeberg.org"
           
-          git remote set-url origin https://x-access-token:${{ secrets.ACCESS_TOKEN }}@codeberg.org/${{ github.repository }}.git
+          git remote set-url origin https://x-access-token:${{ github.token }}@codeberg.org/${{ github.repository }}.git
           
           # Check if tag exists to avoid errors
           if git rev-parse "$VERSION" >/dev/null 2>&1; then
