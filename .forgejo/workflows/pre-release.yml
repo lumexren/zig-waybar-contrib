@@ -29,7 +29,7 @@ jobs:
         run: |
           zig build
           mv zig-out zig-out-debug
-          zig build -Doptimize=ReleaseSafe
+          zig build -Drelease
           mv zig-out zig-out-release
 
       - name: Set Version
@@ -42,7 +42,7 @@ jobs:
         run: |
           git config user.name "forgejo-actions"
           git config user.email "actions@codeberg.org"
-          git remote set-url origin https://x-access-token:${{ secrets.ACCESS_TOKEN }}@codeberg.org/${{ github.repository }}.git
+          git remote set-url origin https://x-access-token:${{ github.token }}@codeberg.org/${{ github.repository }}.git
           
           if git rev-parse "$VERSION" >/dev/null 2>&1; then
             echo "Tag $VERSION already exists."
