@@ -125,7 +125,8 @@ jobs:
             curl -L -o config.waybar.jsonc "${CONFIG_URL}"
             curl -L -o LICENSE "${LICENSE_URL}"
       
-            updpkgsums
+            chown -R nobody .
+            su nobody -s /bin/bash -c "updpkgsums"
       
             chown -R nobody .
             su nobody -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
