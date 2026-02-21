@@ -137,7 +137,7 @@ jobs:
             if git diff-index --quiet HEAD; then
               echo "No changes."
             else
-              git commit -m "release: update to `${VERSION}`"
+              git commit -m "release: update to `${{ env.VERSION }}`"
               git push origin master
               echo "AUR updated successfully!"
             fi
