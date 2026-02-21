@@ -125,11 +125,11 @@ jobs:
             curl -L -o config.waybar.jsonc "${CONFIG_URL}"
             curl -L -o LICENSE "${LICENSE_URL}"
       
-            chown -R nobody .
-            su nobody -s /bin/bash -c "updpkgsums"
-      
-            chown -R nobody .
-            su nobody -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
+            useradd -m builduser
+            chown -R builduser .
+
+            su builduser -s /bin/bash -c "updpkgsums"
+            su builduser -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
       
             rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
       
