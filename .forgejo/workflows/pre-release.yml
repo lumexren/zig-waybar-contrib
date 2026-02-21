@@ -82,15 +82,16 @@ jobs:
             ${{ env.RELEASE_FILENAME }}
 
       - name: Update AUR Package
-        uses: docker://archlinux:base-devel
+        uses: docker://archlinux:latest
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           VERSION: ${{ env.VERSION }}
           RELEASE_FILENAME: ${{ env.RELEASE_FILENAME }}
           REPO_URL: "https://codeberg.org/${{ github.repository }}"
         with:
-          entrypoint: /bin/bash
+          entrypoint: /usr/bin/bash
           args: |
+            pacman-key --init
             pacman -Sy --noconfirm openssh git pacman-contrib
 
             mkdir -p /root/.ssh
