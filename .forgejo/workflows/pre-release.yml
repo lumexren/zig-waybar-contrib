@@ -110,7 +110,8 @@ jobs:
       
             git clone ssh://aur@aur.archlinux.org/zig-waybar-contrib-beta-bin.git aur-repo
             cd aur-repo
-      
+            cp "$GITHUB_WORKSPACE/aur/zig-waybar-contrib-beta-bin/PKGBUILD" PKGBUILD
+            
             BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
             CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
             LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
