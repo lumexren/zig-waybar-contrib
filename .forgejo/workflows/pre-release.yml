@@ -89,7 +89,7 @@ jobs:
           RELEASE_FILENAME: ${{ env.RELEASE_FILENAME }}
           REPO_URL: "https://codeberg.org/${{ github.repository }}"
         with:
-          entrypoint: /usr/bin/bash
+          entrypoint: bash
           args: |
             pacman-key --init
             pacman-key --populate archlinux
@@ -118,7 +118,7 @@ jobs:
             sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|g" PKGBUILD
             sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|g" PKGBUILD
 
-            curl -L -o "${RELEASE_FILENAME}" "${BINARY_URL}"
+            cp "../../${RELEASE_FILENAME}" ./zig-waybar-contrib.zip
             curl -L -o config.waybar.jsonc "${CONFIG_URL}"
             curl -L -o LICENSE "${LICENSE_URL}"
             
@@ -127,7 +127,7 @@ jobs:
             chown -R nobody .
             su nobody -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
 
-            rm "${RELEASE_FILENAME}" config.waybar.jsonc LICENSE
+            rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
 
             git add PKGBUILD .SRCINFO
             
