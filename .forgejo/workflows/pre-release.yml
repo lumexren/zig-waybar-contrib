@@ -28,9 +28,9 @@ jobs:
       - name: Build Project
         run: |
           zig build
-          mv zig-out zig-out-debug
+          mv zig-out/bin zig-out-debug
           zig build -Drelease
-          mv zig-out zig-out-release
+          mv zig-out/bin zig-out-release
 
       - name: Set Version
         id: set_version
@@ -64,11 +64,20 @@ jobs:
 
       - name: Package Builds
         run: |
+          DEBUG_FILENAME="zig-waybar-contrib-debug-${{ env.VERSION }}.zip"
           RELEASE_FILENAME="zig-waybar-contrib-release-${{ env.VERSION }}.zip"
-          zip -r zig-waybar-contrib-debug-${{ env.VERSION }}.zip zig-out-debug/
-          zip -r $RELEASE_FILENAME zig-out-release/
+      
+          cd zig-out-debug
+          zip -r ../$DEBUG_FILENAME .
+          cd -
+      
+          cd zig-out-release
+          zip -r ../$RELEASE_FILENAME .
+          cd -
+      
+          echo "DEBUG_FILENAME=$DEBUG_FILENAME" >> $GITHUB_ENV
           echo "RELEASE_FILENAME=$RELEASE_FILENAME" >> $GITHUB_ENV
-
+      
       - name: Create Release
         uses: https://gitea.com/actions/gitea-release-action@v1
         with:
@@ -78,7 +87,7 @@ jobs:
           prerelease: true
           md5sum: true
           files: |
-            zig-waybar-contrib-debug-${{ env.VERSION }}.zip
+            ${{ env.DEBUG_FILENAME }}
             ${{ env.RELEASE_FILENAME }}
 
       - name: Update AUR Package
