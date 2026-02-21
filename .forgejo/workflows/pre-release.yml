@@ -90,51 +90,55 @@ jobs:
           REPO_URL: "https://codeberg.org/${{ github.repository }}"
         with:
           entrypoint: bash
-          args: |
+          args: -c "
+            set -e
+      
             pacman-key --init
             pacman-key --populate archlinux
-            pacman -Sy --noconfirm openssh git pacman-contrib curl
-            
+            pacman -Sy --noconfirm archlinux-keyring
+            pacman -Sy --noconfirm openssh git pacman-contrib curl base-devel
+      
             mkdir -p /root/.ssh
-            echo "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
+            echo \"$AUR_SSH_KEY\" > /root/.ssh/id_ed25519
             chmod 600 /root/.ssh/id_ed25519
             ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
-            
-            git config --global user.name "erffy"
-            git config --global user.email "${{ secrets.EMAIL }}"
+      
+            git config --global user.name 'erffy'
+            git config --global user.email '${{ secrets.EMAIL }}'
             git config --global --add safe.directory '*'
-
+      
             git clone ssh://aur@aur.archlinux.org/zig-waybar-contrib-beta-bin.git aur-repo
             cd aur-repo
-
-            BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
-            CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
-            LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
-
-            sed -i "s|^pkgver=.*|pkgver=${{ env.VERSION }}|" PKGBUILD
-            sed -i "s|^pkgrel=.*|pkgrel=1|" PKGBUILD
-            
-            sed -i "s|DOWNLOAD_URL|${BINARY_URL}|g" PKGBUILD
-            sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|g" PKGBUILD
-            sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|g" PKGBUILD
-
-            cp "../../${RELEASE_FILENAME}" ./zig-waybar-contrib.zip
-            curl -L -o config.waybar.jsonc "${CONFIG_URL}"
-            curl -L -o LICENSE "${LICENSE_URL}"
-            
+      
+            BINARY_URL=\"${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}\"
+            CONFIG_URL=\"${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc\"
+            LICENSE_URL=\"${REPO_URL}/raw/tag/${VERSION}/LICENSE\"
+      
+            echo '=== Update PKGBUILD ==='
+            sed -i \"s|^pkgver=.*|pkgver=${{ env.VERSION }}|\" PKGBUILD
+            sed -i \"s|^pkgrel=.*|pkgrel=1|\" PKGBUILD
+            sed -i \"s|DOWNLOAD_URL|${BINARY_URL}|g\" PKGBUILD
+            sed -i \"s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|g\" PKGBUILD
+            sed -i \"s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|g\" PKGBUILD
+      
+            curl -L -o zig-waybar-contrib.zip \"${BINARY_URL}\"
+            curl -L -o config.waybar.jsonc \"${CONFIG_URL}\"
+            curl -L -o LICENSE \"${LICENSE_URL}\"
+      
             updpkgsums
-
+      
             chown -R nobody .
-            su nobody -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
-
+            su nobody -s /bin/bash -c 'makepkg --printsrcinfo' > .SRCINFO
+      
             rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
-
+      
             git add PKGBUILD .SRCINFO
-            
+      
             if git diff-index --quiet HEAD; then
-              echo "No changes detected. Skipping push."
+              echo 'No changes detected. Skipping push.'
             else
-              git commit -m "release: update to ${{ env.VERSION }}"
+              git commit -m \"release: update to ${{ env.VERSION }}\"
               git push origin master
-              echo "AUR updated successfully!"
+              echo 'AUR updated successfully!'
             fi
+          "
