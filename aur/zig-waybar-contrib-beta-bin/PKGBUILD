@@ -14,7 +14,7 @@ optdepends=(
   'fakeroot: updates module'
 )
 source=(
-  "zig-waybar-contrib.zip::DOWNLOAD_URL"
+  "zig-waybar-contrib.zip::BINARY_DOWNLOAD_URL"
   "config.waybar.jsonc::CONFIG_DOWNLOAD_URL"
   "LICENSE::LICENSE_DOWNLOAD_URL"
 )
