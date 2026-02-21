@@ -91,7 +91,6 @@ jobs:
         with:
           entrypoint: /bin/bash
           args: |
-            set -e
             pacman -Sy --noconfirm openssh git pacman-contrib
 
             mkdir -p /root/.ssh
