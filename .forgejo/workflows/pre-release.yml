@@ -130,7 +130,7 @@ jobs:
             CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
             LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
       
-            sed -i "s|DOWNLOAD_URL|${BINARY_URL}|g" PKGBUILD
+            sed -i "s|BINARY_DOWNLOAD_URL|${BINARY_URL}|g" PKGBUILD
             sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|g" PKGBUILD
             sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|g" PKGBUILD
       
