@@ -108,16 +108,28 @@ jobs:
             git config --global user.email "${{ secrets.EMAIL }}"
             git config --global --add safe.directory "*"
       
+            # clone AUR repo
             git clone ssh://aur@aur.archlinux.org/zig-waybar-contrib-beta-bin.git aur-repo
             cd aur-repo
+      
             cp "$GITHUB_WORKSPACE/aur/zig-waybar-contrib-beta-bin/PKGBUILD" PKGBUILD
-            
+      
+            OLD_PKGVER=$(grep -oP "^pkgver=\\K.*" PKGBUILD 2>/dev/null || echo "")
+            OLD_PKGREL=$(grep -oP "^pkgrel=\\K\\d+" PKGBUILD 2>/dev/null || echo 0)
+      
+            if [[ "$OLD_PKGVER" == "${VERSION}" ]]; then
+              NEW_PKGREL=$((OLD_PKGREL + 1))
+            else
+              NEW_PKGREL=1
+            fi
+      
+            sed -i "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
+            sed -i "s|^pkgrel=.*|pkgrel=${NEW_PKGREL}|" PKGBUILD
+      
             BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
             CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
             LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
       
-            sed -i "s|^pkgver=.*|pkgver=${{ env.VERSION }}|" PKGBUILD
-            sed -i "s|^pkgrel=.*|pkgrel=1|" PKGBUILD
             sed -i "s|DOWNLOAD_URL|${BINARY_URL}|g" PKGBUILD
             sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|g" PKGBUILD
             sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|g" PKGBUILD
@@ -126,9 +138,10 @@ jobs:
             curl -L -o config.waybar.jsonc "${CONFIG_URL}"
             curl -L -o LICENSE "${LICENSE_URL}"
       
+            # makepkg non-root
             useradd -m builduser
             chown -R builduser .
-
+      
             su builduser -s /bin/bash -c "updpkgsums"
             su builduser -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
       
@@ -136,10 +149,10 @@ jobs:
       
             git add PKGBUILD .SRCINFO
       
-            if git diff-index --quiet HEAD; then
+            if git diff --quiet && git diff --cached --quiet; then
               echo "No changes detected. Skipping push."
             else
-              git commit -m "release: update to ${{ env.VERSION }}"
+              git commit -m "release: update to ${VERSION}-${NEW_PKGREL}"
               git push origin master
               echo "AUR updated successfully!"
             fi
