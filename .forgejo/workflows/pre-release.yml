@@ -111,12 +111,12 @@ jobs:
             # clone AUR repo
             git clone ssh://aur@aur.archlinux.org/zig-waybar-contrib-beta-bin.git aur-repo
             cd aur-repo
-      
+            
+            OLD_PKGVER=$(grep '^pkgver=' PKGBUILD | cut -d= -f2 || echo "")
+            OLD_PKGREL=$(grep '^pkgrel=' PKGBUILD | cut -d= -f2 || echo 0)
+
             cp "$GITHUB_WORKSPACE/aur/zig-waybar-contrib-beta-bin/PKGBUILD" PKGBUILD
-      
-            OLD_PKGVER=$(grep -oP "^pkgver=\\K.*" PKGBUILD 2>/dev/null || echo "")
-            OLD_PKGREL=$(grep -oP "^pkgrel=\\K\\d+" PKGBUILD 2>/dev/null || echo 0)
-      
+            
             if [[ "$OLD_PKGVER" == "${VERSION}" ]]; then
               NEW_PKGREL=$((OLD_PKGREL + 1))
             else
