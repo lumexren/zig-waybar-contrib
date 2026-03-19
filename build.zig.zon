@@ -5,7 +5,7 @@
     .minimum_zig_version = "0.16.0-dev.2915+065c6e794",
     .dependencies = .{
         .zig_sysinfo = .{
-            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/0.16.x.zip",
+            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/0.16.x.tar.gz",
             .hash = "zig_sysinfo-1.2.0-XZkGF191AwA3YE05pGW3lGNYecqjCfN1bTnDgs6G0o20",
         },
     },
