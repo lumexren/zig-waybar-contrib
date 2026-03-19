@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0-dev.2522+d84a638e8",
     .dependencies = .{
         .zig_sysinfo = .{
-            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/26.02.15.tar.gz",
-            .hash = "zig_sysinfo-1.2.0-XZkGF1l1AwDQ1JlB5uTKoCEfIzONJ2aVpC-mbO7AJTza",
+            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/0.16.x.zip",
+            .hash = "zig_sysinfo-1.2.0-XZkGF191AwA3YE05pGW3lGNYecqjCfN1bTnDgs6G0o20",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
