@@ -33,51 +33,43 @@ jobs:
           mv zig-out/bin zig-out-release
 
       - name: Set Version
-        id: set_version
-        run: |
-          VERSION=$(date +'%y.%m.%d')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        run: echo "VERSION=$(date +'%y.%m.%d')" >> "$GITHUB_ENV"
 
       - name: Create and Push Git Tag
         run: |
           git config user.name "forgejo-actions"
           git config user.email "actions@codeberg.org"
-          git remote set-url origin https://x-access-token:${{ github.token }}@codeberg.org/${{ github.repository }}.git
-          
+          git remote set-url origin "https://x-access-token:${{ github.token }}@codeberg.org/${{ github.repository }}.git"
+
           if git rev-parse "$VERSION" >/dev/null 2>&1; then
-            echo "Tag $VERSION already exists."
+            echo "Tag $VERSION already exists, skipping."
           else
-            git tag $VERSION
-            git push origin $VERSION
+            git tag "$VERSION"
+            git push origin "$VERSION"
           fi
 
       - name: Generate Changelog
-        id: changelog
         run: |
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "Initial release." > release_notes.md
           else
             echo "### Changes since $PREVIOUS_TAG" > release_notes.md
-            git log ${PREVIOUS_TAG}..HEAD --oneline --format="- %s (%h)" >> release_notes.md
+            git log "${PREVIOUS_TAG}..HEAD" --oneline --format="- %s (%h)" >> release_notes.md
           fi
 
       - name: Package Builds
         run: |
           DEBUG_FILENAME="zig-waybar-contrib-debug-${{ env.VERSION }}.zip"
           RELEASE_FILENAME="zig-waybar-contrib-release-${{ env.VERSION }}.zip"
-      
-          cd zig-out-debug
-          zip -r ../$DEBUG_FILENAME .
-          cd -
-      
-          cd zig-out-release
-          zip -r ../$RELEASE_FILENAME .
-          cd -
-      
-          echo "DEBUG_FILENAME=$DEBUG_FILENAME" >> $GITHUB_ENV
-          echo "RELEASE_FILENAME=$RELEASE_FILENAME" >> $GITHUB_ENV
-      
+
+          (cd zig-out-debug && zip -r "../$DEBUG_FILENAME" .)
+          (cd zig-out-release && zip -r "../$RELEASE_FILENAME" .)
+
+          echo "DEBUG_FILENAME=$DEBUG_FILENAME" >> "$GITHUB_ENV"
+          echo "RELEASE_FILENAME=$RELEASE_FILENAME" >> "$GITHUB_ENV"
+
       - name: Create Release
         uses: https://gitea.com/actions/gitea-release-action@v1
         with:
@@ -101,68 +93,59 @@ jobs:
           entrypoint: bash
           args: |
             -c '
-            set -e
-      
+            set -euo pipefail
+
             pacman-key --init
             pacman-key --populate archlinux
-            pacman -Sy --noconfirm archlinux-keyring
-            pacman -Sy --noconfirm openssh git pacman-contrib curl base-devel
-      
+            pacman -Sy --noconfirm archlinux-keyring openssh git pacman-contrib curl base-devel
+
             mkdir -p /root/.ssh
-            echo "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
+            printf "%s\n" "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
             chmod 600 /root/.ssh/id_ed25519
             ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
-      
+
             git config --global user.name "erffy"
             git config --global user.email "${{ secrets.EMAIL }}"
             git config --global --add safe.directory "*"
-      
-            # clone AUR repo
+
             git clone ssh://aur@aur.archlinux.org/zig-waybar-contrib-beta-bin.git aur-repo
             cd aur-repo
-            
-            OLD_PKGVER=$(grep '^pkgver=' PKGBUILD | cut -d= -f2 || echo "")
-            OLD_PKGREL=$(grep '^pkgrel=' PKGBUILD | cut -d= -f2 || echo 0)
+
+            OLD_PKGVER=$(grep "^pkgver=" PKGBUILD | cut -d= -f2 || echo "")
+            OLD_PKGREL=$(grep "^pkgrel=" PKGBUILD | cut -d= -f2 || echo 0)
 
             cp "$GITHUB_WORKSPACE/aur/zig-waybar-contrib-beta-bin/PKGBUILD" PKGBUILD
-            
-            if [[ "$OLD_PKGVER" == "${VERSION}" ]]; then
+
+            if [[ "$OLD_PKGVER" == "$VERSION" ]]; then
               NEW_PKGREL=$((OLD_PKGREL + 1))
             else
               NEW_PKGREL=1
             fi
-      
+
             sed -i "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
             sed -i "s|^pkgrel=.*|pkgrel=${NEW_PKGREL}|" PKGBUILD
-      
-            BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
-            CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
-            LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
-      
-            sed -i "s|BINARY_DOWNLOAD_URL|${BINARY_URL}|g" PKGBUILD
-            sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|g" PKGBUILD
-            sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|g" PKGBUILD
-      
-            curl -L -o zig-waybar-contrib.zip "${BINARY_URL}"
-            curl -L -o config.waybar.jsonc "${CONFIG_URL}"
-            curl -L -o LICENSE "${LICENSE_URL}"
-      
-            # makepkg non-root
+            sed -i "s|BINARY_DOWNLOAD_URL|${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}|g" PKGBUILD
+            sed -i "s|CONFIG_DOWNLOAD_URL|${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc|g" PKGBUILD
+            sed -i "s|LICENSE_DOWNLOAD_URL|${REPO_URL}/raw/tag/${VERSION}/LICENSE|g" PKGBUILD
+
+            curl -fsSL -o zig-waybar-contrib.zip "${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
+            curl -fsSL -o config.waybar.jsonc "${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
+            curl -fsSL -o LICENSE "${REPO_URL}/raw/tag/${VERSION}/LICENSE"
+
             useradd -m builduser
             chown -R builduser .
-      
+
             su builduser -s /bin/bash -c "updpkgsums"
-            su builduser -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
-      
+            su builduser -s /bin/bash -c "makepkg --printsrcinfo > .SRCINFO"
+
             rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
-      
+
             git add PKGBUILD .SRCINFO
-      
+
             if git diff --quiet && git diff --cached --quiet; then
-              echo "No changes detected. Skipping push."
+              echo "No changes detected, skipping push."
             else
               git commit -m "release: update to ${VERSION}-${NEW_PKGREL}"
               git push origin master
-              echo "AUR updated successfully!"
             fi
             '
