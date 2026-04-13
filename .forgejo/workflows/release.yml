@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: [codeberg-medium]
     steps:
       - name: Checkout
@@ -15,23 +15,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Dependencies
+        run: |
+          apt update
+          apt install -y libdbus-1-dev pkg-config build-essential zip curl
+
       - name: Install Zig
         uses: https://codeberg.org/mlugg/setup-zig@v2
         with:
           version: master
 
-      - name: Install system dependencies
-        run: |
-          apt update
-          apt install -y libdbus-1-dev pkg-config build-essential
-
       - name: Build Project
         run: |
           zig build
-          mv zig-out zig-out-debug
-
+          mv zig-out/bin zig-out-debug
           zig build -Drelease
-          mv zig-out zig-out-release
+          mv zig-out/bin zig-out-release
 
       - name: Set Version
         run: echo "VERSION=$(date +'%y.%m.%d')" >> "$GITHUB_ENV"
@@ -62,8 +61,14 @@ jobs:
 
       - name: Package Builds
         run: |
-          (cd zig-out-debug && zip -r "../zig-waybar-contrib-debug-${{ env.VERSION }}.zip" .)
-          (cd zig-out-release && zip -r "../zig-waybar-contrib-release-${{ env.VERSION }}.zip" .)
+          DEBUG_FILENAME="zig-waybar-contrib-debug-${{ env.VERSION }}.zip"
+          RELEASE_FILENAME="zig-waybar-contrib-release-${{ env.VERSION }}.zip"
+
+          (cd zig-out-debug && zip -r "../$DEBUG_FILENAME" .)
+          (cd zig-out-release && zip -r "../$RELEASE_FILENAME" .)
+
+          echo "DEBUG_FILENAME=$DEBUG_FILENAME" >> "$GITHUB_ENV"
+          echo "RELEASE_FILENAME=$RELEASE_FILENAME" >> "$GITHUB_ENV"
 
       - name: Create Release
         uses: https://gitea.com/actions/gitea-release-action@v1
@@ -74,5 +79,73 @@ jobs:
           prerelease: false
           md5sum: true
           files: |
-            zig-waybar-contrib-debug-${{ env.VERSION }}.zip
-            zig-waybar-contrib-release-${{ env.VERSION }}.zip
+            ${{ env.DEBUG_FILENAME }}
+            ${{ env.RELEASE_FILENAME }}
+
+      - name: Update AUR Package
+        uses: docker://archlinux:latest
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          VERSION: ${{ env.VERSION }}
+          RELEASE_FILENAME: ${{ env.RELEASE_FILENAME }}
+          REPO_URL: "https://codeberg.org/${{ github.repository }}"
+        with:
+          entrypoint: bash
+          args: |
+            -c '
+            set -euo pipefail
+
+            pacman-key --init
+            pacman-key --populate archlinux
+            pacman -Sy --noconfirm archlinux-keyring openssh git pacman-contrib curl base-devel
+
+            mkdir -p /root/.ssh
+            printf "%s\n" "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
+            chmod 600 /root/.ssh/id_ed25519
+            ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
+
+            git config --global user.name "erffy"
+            git config --global user.email "${{ secrets.EMAIL }}"
+            git config --global --add safe.directory "*"
+
+            git clone ssh://aur@aur.archlinux.org/zig-waybar-contrib.git aur-repo
+            cd aur-repo
+
+            OLD_PKGVER=$(grep "^pkgver=" PKGBUILD | cut -d= -f2 || echo "")
+            OLD_PKGREL=$(grep "^pkgrel=" PKGBUILD | cut -d= -f2 || echo 0)
+
+            cp "$GITHUB_WORKSPACE/aur/zig-waybar-contrib/PKGBUILD" PKGBUILD
+
+            if [[ "$OLD_PKGVER" == "$VERSION" ]]; then
+              NEW_PKGREL=$((OLD_PKGREL + 1))
+            else
+              NEW_PKGREL=1
+            fi
+
+            sed -i "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
+            sed -i "s|^pkgrel=.*|pkgrel=${NEW_PKGREL}|" PKGBUILD
+            sed -i "s|BINARY_DOWNLOAD_URL|${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}|g" PKGBUILD
+            sed -i "s|CONFIG_DOWNLOAD_URL|${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc|g" PKGBUILD
+            sed -i "s|LICENSE_DOWNLOAD_URL|${REPO_URL}/raw/tag/${VERSION}/LICENSE|g" PKGBUILD
+
+            curl -fsSL -o zig-waybar-contrib.zip "${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
+            curl -fsSL -o config.waybar.jsonc "${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
+            curl -fsSL -o LICENSE "${REPO_URL}/raw/tag/${VERSION}/LICENSE"
+
+            useradd -m builduser
+            chown -R builduser .
+
+            su builduser -s /bin/bash -c "updpkgsums"
+            su builduser -s /bin/bash -c "makepkg --printsrcinfo > .SRCINFO"
+
+            rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
+
+            git add PKGBUILD .SRCINFO
+
+            if git diff --quiet && git diff --cached --quiet; then
+              echo "No changes detected, skipping push."
+            else
+              git commit -m "release: update to ${VERSION}-${NEW_PKGREL}"
+              git push origin master
+            fi
+            '
