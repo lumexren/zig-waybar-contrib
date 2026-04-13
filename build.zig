@@ -21,7 +21,7 @@ const std = @import("std");
 const Build = std.Build;
 const SemanticVersion = std.SemanticVersion;
 
-const Version: SemanticVersion = .{ .major = 2, .minor = 0, .patch = 0 };
+const Version: SemanticVersion = .{ .major = 3, .minor = 0, .patch = 0 };
 
 const ModuleConfig = struct {
     name: []const u8,

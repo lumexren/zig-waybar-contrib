@@ -72,7 +72,7 @@ yay -S zig-waybar-contrib
 The installation script automates cloning, building, and installing.
 
 ```bash
-bash -c "$(curl -fsSL https://codeberg.org/erffy/zig-waybar-contrib/raw/branch/0.16.x/install.sh)"
+bash -c "$(curl -fsSL https://codeberg.org/erffy/zig-waybar-contrib/raw/branch/0.17.x/install.sh)"
 ```
 
 This script installs into your `$HOME` directory (`$HOME/.local/share/zig-waybar-contrib`) and places its binaries in `$HOME/.local/bin`.

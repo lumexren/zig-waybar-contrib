@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Configuration
 REPO_URL="https://codeberg.org/erffy/zig-waybar-contrib"
-BRANCH="0.16.x"
+BRANCH="0.17.x"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local}/share/zig-waybar-contrib"
 BIN_DIR="${XDG_DATA_HOME:-$HOME/.local}/bin"
 
