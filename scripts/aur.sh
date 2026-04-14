@@ -86,13 +86,11 @@ cleanup_sources() {
 }
 
 generate_srcinfo() {
-	local -r dir="$1"
-
 	useradd -m builduser 2>/dev/null || true
-	chown -R builduser "$dir"
+	chown -R builduser .
 
-	su builduser -s /bin/bash -c "cd '$dir' && updpkgsums"
-	su builduser -s /bin/bash -c "cd '$dir' && makepkg --printsrcinfo > '$dir/.SRCINFO'"
+	su builduser -s /bin/bash -c "updpkgsums"
+	su builduser -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
 }
 
 push_if_changed() {
@@ -133,10 +131,8 @@ main() {
 	log_info "Fetching release sources for checksum generation..."
 	fetch_sources
 
-	local -r aur_dir="$(pwd)"
-
 	log_info "Generating checksums and .SRCINFO..."
-	generate_srcinfo "$aur_dir"
+	generate_srcinfo
 	cleanup_sources
 
 	log_info "Committing and pushing..."
