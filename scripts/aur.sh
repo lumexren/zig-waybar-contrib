@@ -90,7 +90,7 @@ generate_srcinfo() {
 	chown -R builduser .
 
 	su builduser -s /bin/bash -c "updpkgsums"
-	su builduser -s /bin/bash -c "makepkg --printsrcinfo" > .SRCINFO
+	su builduser -s /bin/bash -c "makepkg --printsrcinfo > .SRCINFO"
 }
 
 push_if_changed() {
