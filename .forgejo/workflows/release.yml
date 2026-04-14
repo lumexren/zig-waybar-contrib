@@ -85,7 +85,7 @@ jobs:
       - name: Update AUR Package
         uses: docker://archlinux:latest
         env:
-          EMAIL: ${{ env.EMAIL }}
+          EMAIL: ${{ secrets.EMAIL }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           VERSION: ${{ env.VERSION }}
           RELEASE_FILENAME: ${{ env.RELEASE_FILENAME }}
