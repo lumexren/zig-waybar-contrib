@@ -125,7 +125,7 @@ main() {
 	local -r new_rel="$(compute_pkgrel "$old_ver" "$old_rel")"
 
 	log_info "Updating PKGBUILD to ${VERSION}-${new_rel}..."
-	cp "${GITHUB_WORKSPACE}/aur/${AUR_REPO}/PKGBUILD" PKGBUILD
+	cp -f "${GITHUB_WORKSPACE}/aur/${AUR_REPO}/PKGBUILD" PKGBUILD
 	patch_pkgbuild "$new_rel"
 
 	log_info "Fetching release sources for checksum generation..."
