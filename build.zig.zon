@@ -2,7 +2,7 @@
     .name = .zig_waybar_contrib,
     .version = "3.0.0",
     .fingerprint = 0xf0b38d05ea485bfd, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.17.0-dev.0000",
+    .minimum_zig_version = "0.17.0-dev.9+046002d1a",
     .dependencies = .{
         .zig_sysinfo = .{
             .url = "https://codeberg.org/erffy/zig-sysinfo/archive/26.04.06.tar.gz",
