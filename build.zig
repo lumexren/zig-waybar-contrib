@@ -42,7 +42,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "disk", .path = "src/disk.zig", .link_libc = true },
     .{ .name = "mpris", .path = "src/mpris.zig", .link_libc = true, .link_dbus = true },
     .{ .name = "battery", .path = "src/battery.zig", .link_libc = true, .link_dbus = true },
-    .{ .name = "backlight", .path = "src/backlight.zig" },
+    .{ .name = "backlight", .path = "src/backlight.zig", .link_libc = true, .link_dbus = true },
     .{ .name = "bluetooth", .path = "src/bluetooth.zig", .link_libc = true, .link_dbus = true },
 };
 
