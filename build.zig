@@ -51,16 +51,11 @@ pub fn build(b: *Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSmall });
 
     const zigsysinfo = b.dependency("zig_sysinfo", .{});
-
-    const utils = b.createModule(.{
-        .root_source_file = b.path("src/utils/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const zigwaybarutils = b.dependency("zig_waybar_utils", .{});
 
     const base_imports: []const Build.Module.Import = &.{
-        .{ .name = "utils", .module = utils },
         .{ .name = "sysinfo", .module = zigsysinfo.module("zig_sysinfo") },
+        .{ .name = "utils", .module = zigwaybarutils.module("zig_waybar_utils") },
     };
 
     for (modules) |config| {

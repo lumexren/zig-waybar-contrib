@@ -8,6 +8,10 @@
             .url = "https://codeberg.org/erffy/zig-sysinfo/archive/26.04.20.tar.gz",
             .hash = "zig_sysinfo-2.0.0-XZkGFz9zAwBs7jp76cmSGrvGZd0wgeGwkeVWPo3h2paY",
         },
+        .zig_waybar_utils = .{
+            .url = "https://codeberg.org/erffy/zig-waybar-utils/archive/26.04.21.tar.gz",
+            .hash = "zig_waybar_utils-1.0.0-_g--vNU-AQDQMFZIgjGfUP6K_LF9yWh6kpUiGc2-VccV",
+        },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
 }
