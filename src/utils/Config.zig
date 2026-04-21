@@ -40,16 +40,20 @@ pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
     return .{ .io = io, .environ_map = environ_map, .allocator = allocator };
 }
 
-/// Load configuration
-///
-/// If config file doesn't exist or fails to parse, returns a default instance.
-pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
-    const config_dir = this.environ_map.get("XDG_CONFIG_HOME") orelse
-        if (this.environ_map.get("HOME")) |home| blk: {
-            break :blk try path.join(this.allocator, &.{ home, ".config" });
-        } else return T{};
+/// Resolves XDG_CONFIG_HOME or falls back to $HOME/.config.
+/// Caller owns the returned slice only when XDG_CONFIG_HOME is absent.
+fn resolveConfigDir(this: *Config) !?[]const u8 {
+    if (this.environ_map.get("XDG_CONFIG_HOME")) |dir| return dir;
 
-    defer if (this.environ_map.get("XDG_CONFIG_HOME") == null) this.allocator.free(config_dir);
+    const home = this.environ_map.get("HOME") orelse return null;
+    return try path.join(this.allocator, &.{ home, ".config" });
+}
+
+/// Loads a typed config struct `T` for the given module.
+/// Returns `T{}` on missing file, parse failure, or missing config dir.
+pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
+    const config_dir = try this.resolveConfigDir() orelse return T{};
+    defer this.allocator.free(config_dir);
 
     const config_file = try fmt.allocPrint(this.allocator, "{s}.zon", .{module_name});
     defer this.allocator.free(config_file);
