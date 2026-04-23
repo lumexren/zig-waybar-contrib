@@ -18,11 +18,13 @@ on:
 jobs:
   build:
     runs-on: [codeberg-medium]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install Dependencies
         run: |
           apt update
           apt install -y libdbus-1-dev pkg-config build-essential
@@ -32,32 +34,29 @@ jobs:
         with:
           version: master
 
-      - name: Build Project
+      - name: Build
         run: |
           zig build
-          mv zig-out zig-out-debug
-
+          mv zig-out/bin zig-out-debug
           zig build -Drelease
-          mv zig-out zig-out-release
+          mv zig-out/bin zig-out-release
 
       - name: Set Version
-        id: set_version
+        id: version
         run: |
-          # Generate version string (YY.MM.DD)
-          VERSION=$(date +'%y.%m.%d')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Target version is: $VERSION"
+          VERSION="$(date +'%y.%m.%d')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Upload binaries
+      - name: Upload Debug Binaries
         uses: actions/upload-artifact@v3
         with:
-          name: zig-waybar-contrib-debug-${{ env.VERSION }}-${{ github.run_id }}
+          name: ${{ github.event.repository.name }}-debug-${{ steps.version.outputs.version }}-${{ github.run_id }}
           path: zig-out-debug/*
           retention-days: 7
 
-      - name: Upload binaries
+      - name: Upload Release Binaries
         uses: actions/upload-artifact@v3
         with:
-          name: zig-waybar-contrib-release-${{ env.VERSION }}-${{ github.run_id }}
+          name: ${{ github.event.repository.name }}-release-${{ steps.version.outputs.version }}-${{ github.run_id }}
           path: zig-out-release/*
           retention-days: 7
