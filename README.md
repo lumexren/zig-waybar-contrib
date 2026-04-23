@@ -64,20 +64,7 @@ paru -S zig-waybar-contrib
 yay -S zig-waybar-contrib
 ```
 
-#### Script Installation
-
-> [!NOTE]
-> This script doesn't need root permissions.
-
-The installation script automates cloning, building, and installing.
-
-```bash
-bash -c "$(curl -fsSL https://codeberg.org/erffy/zig-waybar-contrib/raw/branch/0.17.x/install.sh)"
-```
-
-This script installs into your `$HOME` directory (`$HOME/.local/share/zig-waybar-contrib`) and places its binaries in `$HOME/.local/bin`.
-
-#### Manual Build (From Source)
+#### Manual Build
 
 To build from source, you need [Zig](https://ziglang.org/download) installed (check `build.zig` for version requirements).
 
@@ -100,7 +87,6 @@ Add the modules to your Waybar configuration. You can include the provided confi
   // Load module configurations from zig-waybar-contrib
   "include": [
     "/usr/share/zig-waybar-contrib/config.jsonc", // if you installed from aur
-    "~/.local/share/zig-waybar-contrib/config.waybar.jsonc" // if you installed with script
   ],
 
   "modules-right": [
