@@ -7,8 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: [codeberg-medium]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_filename: ${{ steps.package.outputs.release_filename }}
+      debug_filename: ${{ steps.package.outputs.debug_filename }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +29,7 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Build Project
+      - name: Build
         run: |
           zig build
           mv zig-out/bin zig-out-debug
@@ -33,9 +37,14 @@ jobs:
           mv zig-out/bin zig-out-release
 
       - name: Set Version
-        run: echo "VERSION=$(date +'%y.%m.%d')" >> "$GITHUB_ENV"
+        id: version
+        run: |
+          VERSION="$(date +'%y.%m.%d')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create and Push Git Tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config user.name "forgejo-actions"
           git config user.email "actions@codeberg.org"
@@ -49,10 +58,12 @@ jobs:
           fi
 
       - name: Generate Changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")"
 
-          if [ -z "$PREVIOUS_TAG" ]; then
+          if [[ -z "$PREVIOUS_TAG" ]]; then
             echo "Initial release." > release_notes.md
           else
             echo "### Changes since $PREVIOUS_TAG" > release_notes.md
@@ -60,37 +71,62 @@ jobs:
           fi
 
       - name: Package Builds
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          DEBUG_FILENAME="zig-waybar-contrib-debug-${{ env.VERSION }}.zip"
-          RELEASE_FILENAME="zig-waybar-contrib-release-${{ env.VERSION }}.zip"
+          DEBUG_FILENAME="${{ github.event.repository.name }}-debug-${VERSION}.zip"
+          RELEASE_FILENAME="${{ github.event.repository.name }}-release-${VERSION}.zip"
 
           (cd zig-out-debug && zip -r "../$DEBUG_FILENAME" .)
           (cd zig-out-release && zip -r "../$RELEASE_FILENAME" .)
 
-          echo "DEBUG_FILENAME=$DEBUG_FILENAME" >> "$GITHUB_ENV"
-          echo "RELEASE_FILENAME=$RELEASE_FILENAME" >> "$GITHUB_ENV"
+          echo "debug_filename=$DEBUG_FILENAME" >> "$GITHUB_OUTPUT"
+          echo "release_filename=$RELEASE_FILENAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-zips
+          path: |
+            ${{ steps.package.outputs.debug_filename }}
+            ${{ steps.package.outputs.release_filename }}
+            release_notes.md
+
+  publish:
+    runs-on: [codeberg-medium]
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-zips
 
       - name: Create Release
         uses: https://gitea.com/actions/gitea-release-action@v1
         with:
-          tag_name: ${{ env.VERSION }}
-          name: ${{ env.VERSION }}
+          tag_name: ${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.version }}
           body_path: release_notes.md
           prerelease: false
           md5sum: true
           files: |
-            ${{ env.DEBUG_FILENAME }}
-            ${{ env.RELEASE_FILENAME }}
+            ${{ needs.build.outputs.debug_filename }}
+            ${{ needs.build.outputs.release_filename }}
 
       - name: Update AUR Package
         uses: docker://archlinux:latest
         env:
           EMAIL: ${{ secrets.EMAIL }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
-          VERSION: ${{ env.VERSION }}
-          RELEASE_FILENAME: ${{ env.RELEASE_FILENAME }}
+          VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_FILENAME: ${{ needs.build.outputs.release_filename }}
           REPO_URL: "https://codeberg.org/${{ github.repository }}"
-          AUR_REPO: "zig-waybar-contrib"
+          AUR_REPO: "${{ github.event.repository.name }}"
+          GITHUB_WORKSPACE: ${{ github.workspace }}
         with:
           entrypoint: bash
           args: ${{ github.workspace }}/scripts/aur.sh
