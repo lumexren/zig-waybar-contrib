@@ -9,7 +9,7 @@ log_info()  { printf "[INFO]  %s\n" "$1"; }
 log_error() { printf "[ERROR] %s\n" "$1" >&2; }
 
 main() {
-	local missing=0
+  local missing=0
 	local var
 
 	for var in $REQUIRED_ENV; do
@@ -19,6 +19,13 @@ main() {
 		fi
 	done
 
+	log_info "Initializing pacman keyring..."
+	pacman-key --init
+	pacman-key --populate archlinux
+
+	log_info "Installing required packages..."
+	pacman -Sy --noconfirm archlinux-keyring openssh git pacman-contrib curl base-devel
+
 	for dep in $DEPENDENCIES; do
 		if ! command -v "$dep" &>/dev/null; then
 			log_error "Missing dependency: $dep"
@@ -27,13 +34,6 @@ main() {
 	done
 
 	[[ "$missing" -eq 0 ]] || exit 1
-
-	log_info "Initializing pacman keyring..."
-	pacman-key --init
-	pacman-key --populate archlinux
-
-	log_info "Installing required packages..."
-	pacman -Sy --noconfirm archlinux-keyring openssh git pacman-contrib curl base-devel
 
 	log_info "Setting up SSH..."
 	mkdir -p /root/.ssh
