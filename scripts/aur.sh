@@ -2,98 +2,58 @@
 
 set -euo pipefail
 
-readonly DEPENDENCIES="git ssh curl pacman useradd chown sed"
-readonly REQUIRED_ENV="AUR_SSH_KEY AUR_REPO VERSION RELEASE_FILENAME REPO_URL EMAIL GITHUB_WORKSPACE"
+pacman -Sy --noconfirm git openssh pacman-contrib
 
-log_info()  { printf "[INFO]  %s\n" "$1"; }
-log_error() { printf "[ERROR] %s\n" "$1" >&2; }
+mkdir -p /root/.ssh
+echo "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
+ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
 
-main() {
-	local missing=0
-	local var
+git config --global user.name "erffy"
+git config --global user.email "$EMAIL"
 
-	for var in $REQUIRED_ENV; do
-		if [[ -z "${!var:-}" ]]; then
-			log_error "Required env var not set: $var"
-			missing=1
-		fi
-	done
+cd aur/$AUR_REPO
 
-	for dep in $DEPENDENCIES; do
-		if ! command -v "$dep" &>/dev/null; then
-			log_error "Missing dependency: $dep"
-			missing=1
-		fi
-	done
+BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
+CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
+LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
 
-	[[ "$missing" -eq 0 ]] || exit 1
+old_ver="$(grep "^pkgver=" PKGBUILD | cut -d= -f2 || printf "")"
+old_rel="$(grep "^pkgrel=" PKGBUILD | cut -d= -f2 || printf "0")"
+if [[ "$old_ver" == "$VERSION" ]]; then
+	new_rel=$(( old_rel + 1 ))
+else
+	new_rel="1"
+fi
 
-	log_info "Initializing pacman keyring..."
-	pacman-key --init
-	pacman-key --populate archlinux
+sed -i "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
+sed -i "s|^pkgrel=.*|pkgrel=$new_rel|" PKGBUILD
+sed -i "s|BINARY_DOWNLOAD_URL|${BINARY_URL}|" PKGBUILD
+sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|" PKGBUILD
+sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|" PKGBUILD
 
-	log_info "Installing required packages..."
-	pacman -Sy --noconfirm archlinux-keyring openssh git pacman-contrib curl base-devel
+curl -fsSL -o zig-waybar-contrib.zip "${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
+curl -fsSL -o config.waybar.jsonc "${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
+curl -fsSL -o LICENSE "${REPO_URL}/raw/tag/${VERSION}/LICENSE"
 
-	log_info "Setting up SSH..."
-	mkdir -p /root/.ssh
-	printf "%s\n" "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
-	chmod 600 /root/.ssh/id_ed25519
-	ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
+chown -R nobody .
 
-	log_info "Configuring git..."
-	git config --global user.name "erffy"
-	git config --global user.email "$EMAIL"
-	git config --global --add safe.directory "*"
+updpkgsums
+su nobody -s /bin/bash -c "makepkg --printsrcinfo > .SRCINFO"
 
-	log_info "Cloning AUR repo..."
-	local -r aur_url="ssh://aur@aur.archlinux.org/${AUR_REPO}.git"
-	git clone "$aur_url" aur-repo
-	cd aur-repo
+rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
 
-	local -r old_ver="$(grep "^pkgver=" PKGBUILD | cut -d= -f2 || printf "")"
-	local -r old_rel="$(grep "^pkgrel=" PKGBUILD | cut -d= -f2 || printf "0")"
-	local new_rel
+cd ../..
+git clone ssh://aur@aur.archlinux.org/${AUR_REPO}.git aur-repo
 
-	if [[ "$old_ver" == "$VERSION" ]]; then
-		new_rel=$(( old_rel + 1 ))
-	else
-		new_rel=1
-	fi
+cp aur/$AUR_REPO/{PKGBUILD,.SRCINFO} aur-repo
 
-	log_info "Updating PKGBUILD to ${VERSION}-${new_rel}..."
-	cp -f "${GITHUB_WORKSPACE}/aur/${AUR_REPO}/PKGBUILD" PKGBUILD
+cd aur-repo
+git add PKGBUILD .SRCINFO
 
-	sed -i "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
-	sed -i "s|^pkgrel=.*|pkgrel=${new_rel}|" PKGBUILD
-	sed -i "s|BINARY_DOWNLOAD_URL|${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}|g" PKGBUILD
-	sed -i "s|CONFIG_DOWNLOAD_URL|${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc|g" PKGBUILD
-	sed -i "s|LICENSE_DOWNLOAD_URL|${REPO_URL}/raw/tag/${VERSION}/LICENSE|g" PKGBUILD
+if git diff --cached --quiet; then
+  echo "No changes detected, skipping push."
+	exit 0
+fi
 
-	log_info "Fetching release sources for checksum generation..."
-	curl -fsSL -o zig-waybar-contrib.zip "${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
-	curl -fsSL -o config.waybar.jsonc "${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
-	curl -fsSL -o LICENSE "${REPO_URL}/raw/tag/${VERSION}/LICENSE"
-
-	log_info "Generating checksums and .SRCINFO..."
-	useradd -m builduser 2>/dev/null || true
-	chown -R builduser .
-	su builduser -s /bin/bash -c "cd $(pwd) && updpkgsums && makepkg --printsrcinfo > .SRCINFO"
-
-	rm -f zig-waybar-contrib.zip config.waybar.jsonc LICENSE
-
-	log_info "Committing and pushing..."
-	git add PKGBUILD .SRCINFO
-
-	if git diff --cached --quiet; then
-		log_info "No changes detected, skipping push."
-		exit 0
-	fi
-
-	git commit -m "release: update to ${VERSION}-${new_rel}"
-	git push origin master
-
-	log_info "Done."
-}
-
-main
+git commit -m "release: update to ${VERSION}-${new_rel}"
+git push origin master
