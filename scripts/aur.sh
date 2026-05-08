@@ -5,7 +5,9 @@ set -euo pipefail
 pacman -Sy --noconfirm sudo git openssh pacman-contrib
 
 mkdir -p /root/.ssh
+chmod 700 /root/.ssh
 echo "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
+chmod 600 /root/.ssh/id_ed25519
 ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
 
 git config --global user.name "erffy"
