@@ -111,7 +111,7 @@ jobs:
           tag_name: ${{ needs.build.outputs.version }}
           name: ${{ needs.build.outputs.version }}
           body_path: release_notes.md
-          prerelease: false
+          prerelease: true
           md5sum: true
           files: |
             ${{ needs.build.outputs.debug_filename }}
