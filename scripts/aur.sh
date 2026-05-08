@@ -35,11 +35,12 @@ curl -fsSL -o zig-waybar-contrib.zip "${REPO_URL}/releases/download/${VERSION}/$
 curl -fsSL -o config.waybar.jsonc "${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
 curl -fsSL -o LICENSE "${REPO_URL}/raw/tag/${VERSION}/LICENSE"
 
-chage -E -1 nobody
-chown -R nobody .
+useradd -m builder
+echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-su nobody -s /bin/bash -c "updpkgsums"
-su nobody -s /bin/bash -c "makepkg --printsrcinfo > .SRCINFO"
+chown -R builder .
+
+sudo -u builder bash -c "updpkgsums && makepkg --printsrcinfo > .SRCINFO"
 
 rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
 
