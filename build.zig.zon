@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0-dev.44+0177cb57c",
     .dependencies = .{
         .zig_sysinfo = .{
-            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/0.17.x.tar.gz",
-            .hash = "zig_sysinfo-2.0.0-XZkGF0lzAwC1Uisd5RPiA18KaG95jxpH0c7K_aTJ93nT",
+            .url = "https://codeberg.org/erffy/zig-sysinfo/archive/26.05.07.tar.gz",
+            .hash = "zig_sysinfo-2.0.0-XZkGF1RzAwClJ6tC4D29EE6BZUlDnyxABQ8l174o7dfk",
         },
         .zig_waybar_utils = .{
             .url = "https://codeberg.org/erffy/zig-waybar-utils/archive/26.04.21.tar.gz",
