@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-pacman -Sy --noconfirm git openssh pacman-contrib
+pacman -Sy --noconfirm sudo git openssh pacman-contrib
 
 mkdir -p /root/.ssh
 echo "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
