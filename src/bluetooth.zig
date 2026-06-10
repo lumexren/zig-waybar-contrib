@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// This file is part of zig-waybar-contrib.
+//
+// Copyright (c) 2026 erffy
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://gnu.org/licenses>.
+
+const sysinfo = @import("sysinfo").bluetooth;
+
+const std = @import("std");
+const utils = @import("utils");
+const ArrayList = std.ArrayList;
+const Io = std.Io;
+const File = Io.File;
+const process = std.process;
+
+const Config = utils.Config;
+const Json = utils.Json;
+const Waybar = utils.Waybar;
+const Replacer = utils.Replacer;
+const Output = utils.Output;
+
+pub const ModuleConfig = struct {
+    update_interval: i64 = 5,
+    signal_number: u8 = 12,
+    icon_on: []const u8 = "",
+    icon_off: []const u8 = "",
+    text: []const u8 = "{icon}  {device_count}",
+    tooltip: []const u8 = "Adapter: {adapter_name}{nl}Power: {adapter_powered}{nl}Connected: {device_count} devices{nl}{devices}",
+    device_format: []const u8 = "{device_alias}",
+};
+
+pub fn main(init: process.Init) !void {
+    const allocator = init.arena.allocator();
+    const io = init.io;
+
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    var cfg: Config = .init(io, init.environ_map, allocator);
+    const config = try cfg.load("bluetooth", ModuleConfig);
+
+    var json: Json = .init(allocator);
+    defer json.deinit();
+
+    var replacer: Replacer = .init(allocator);
+    defer replacer.deinit();
+
+    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+
+    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+        defer json.clear();
+        defer replacer.clear();
+
+        // Get adapters
+        const adapters = sysinfo.getAdapters(allocator) catch |err| {
+            try json.set("text", config.icon_off);
+            try json.set("tooltip", @as([]const u8, "Bluetooth unavailable"));
+            try json.write(stdout);
+            try stdout.flush();
+            try waybar.updateOrRefresh();
+
+            if (err == sysinfo.BluetoothError.NoAdapter or err == sysinfo.BluetoothError.ConnectionFailed) continue;
+            return err;
+        };
+        defer {
+            for (adapters) |*a| @constCast(a).deinit(allocator);
+            allocator.free(adapters);
+        }
+
+        if (adapters.len == 0) {
+            try json.set("text", config.icon_off);
+            try json.set("tooltip", @as([]const u8, "No Bluetooth adapter"));
+            try json.write(stdout);
+            try stdout.flush();
+            try waybar.updateOrRefresh();
+            continue;
+        }
+
+        const adapter = adapters[0];
+
+        // Get connected devices
+        const devices = sysinfo.getDevices(allocator) catch &[_]sysinfo.DeviceInfo{};
+        defer {
+            for (devices) |*d| @constCast(d).deinit(allocator);
+            allocator.free(devices);
+        }
+
+        // Count connected devices
+        var connected_count: usize = 0;
+        for (devices) |d| {
+            if (d.connected) connected_count += 1;
+        }
+
+        // Build device list string
+        var device_list: ArrayList(u8) = .empty;
+        defer device_list.deinit(allocator);
+
+        for (devices) |device| {
+            if (!device.connected) continue;
+
+            try replacer.addKey("device_name", device.name orelse "Unknown");
+            try replacer.addKey("device_alias", device.alias orelse device.name orelse "Unknown");
+            try replacer.addKeyAny("device_connected", device.connected);
+            try replacer.addKeyAny("device_battery", device.battery orelse @as(u8, 0));
+
+            const line = try replacer.render(config.device_format);
+            if (device_list.items.len > 0) try device_list.appendSlice(allocator, "\n");
+            try device_list.appendSlice(allocator, line);
+        }
+
+        const icon = if (adapter.powered) config.icon_on else config.icon_off;
+
+        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addKey("icon", icon);
+        try replacer.addKey("adapter_name", adapter.name orelse "Unknown");
+        try replacer.addKeyAny("adapter_powered", adapter.powered);
+        try replacer.addKeyAny("adapter_discoverable", adapter.discoverable);
+        try replacer.addKeyAny("device_count", connected_count);
+        try replacer.addKey("devices", if (device_list.items.len > 0) device_list.items else "No connected devices");
+
+        const text_line = try replacer.render(config.text);
+        try json.set("text", text_line);
+
+        const tooltip_line = try replacer.render(config.tooltip);
+        try json.set("tooltip", tooltip_line);
+
+        try json.write(stdout);
+        try stdout.flush();
+
+        try waybar.updateOrRefresh();
+    }
+}

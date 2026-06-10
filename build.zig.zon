@@ -1,0 +1,8 @@
+.{
+    .name = .zig_waybar_contrib,
+    .version = "1.0.0",
+    .fingerprint = 0xf0b38d05ded55151,
+    .minimum_zig_version = "0.17.0-dev.813+2153f8143",
+    .dependencies = .{},
+    .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
+}

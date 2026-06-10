@@ -1,0 +1,135 @@
+![zig-waybar-contrib](https://img.shields.io/badge/zig--waybar--contrib-gray?style=for-the-badge&logo=zig&logoColor=orange) 
+![License](https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge) 
+![Stars](https://img.shields.io/gitea/stars/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=DAA520)
+![Issues](https://img.shields.io/gitea/issues/open/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge)
+![Last Commit](https://img.shields.io/gitea/last-commit/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=F7A41D)
+<br>
+**High-performance Waybar modules written in Zig for efficient system monitoring**
+
+## Table of Contents
+- [Overview](#overview)
+- [Support](#support)
+- [Community](#community)
+- [Modules](#modules)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Contributing](#contributing)
+- [Acknowledgments](#acknowledgments)
+
+### Overview
+
+`zig-waybar-contrib` is a collection of high-performance custom modules for [Waybar](https://github.com/Alexays/Waybar), built using the [Zig](https://ziglang.org).
+
+- **Blazingly Fast**: Minimal startup time and runtime overhead.
+- **Memory Safe**: Leveraging Zig's safety features to prevent common crashes and leaks.
+- **Zero Dependencies**: Statically linked binaries that run anywhere without runtime interpreters.
+- **Deeply Configurable**: Simple, type-safe configuration using Zig Object Notation.
+
+### Support
+
+If you find these projects useful and want to support my work, you can do so on [GitHub Sponsors](https://github.com/sponsors/erffy).<br>
+Every bit of support helps me continue improving and maintaining these projects — thank you! ❤️
+
+### Community
+
+Join our Discord server for updates, support and discussion:<br>
+[![Discord](https://img.shields.io/badge/discord-gray?style=for-the-badge&logo=discord)](https://discord.gg/tb8MvnnSfZ)
+
+### Modules
+
+| Module      | Description                            |
+|:------------|:---------------------------------------|
+| **CPU**     | Displays per-core CPU usage            |
+| **Memory**  | Reports RAM usage and statistics       |
+| **Disk**    | Monitors disk usage and space statistics |
+| **Network** | Monitors network traffic and speed     |
+| **Ping**    | Measures network latency               |
+| **Fan**     | Monitors fan speeds                    |
+| **GPU**     | Monitors GPU usage and temperature     |
+| **Bluetooth** | Monitors Bluetooth device status     |
+| **Updates** | Tracks system package updates          |
+
+See the source code for detailed documentation on each module.
+
+### Installation
+![Latest Release](https://img.shields.io/gitea/v/release/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&display_name=tag&style=for-the-badge&label=release)
+![Latest Pre-release](https://img.shields.io/gitea/v/release/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&include_prereleases&display_name=tag&style=for-the-badge&label=pre-release)
+
+> [!NOTE]
+> To try the Nightly versions, follow `Script Installation` section.<br>
+> To try the Beta versions, install the `zig-waybar-contrib-beta-bin` package from [AUR](https://aur.archlinux.org/packages/zig-waybar-contrib-beta-bin) (when available).
+
+#### Quick Installation (AUR)
+
+You can easily install the latest version from the [AUR](https://aur.archlinux.org/packages/zig-waybar-contrib).
+
+```bash
+# Using paru
+paru -S zig-waybar-contrib
+
+# Using yay
+yay -S zig-waybar-contrib
+```
+
+#### Manual Build
+
+To build from source, you need [Zig](https://ziglang.org/download) installed (check `build.zig` for version requirements).
+
+```bash
+git clone https://codeberg.org/erffy/zig-waybar-contrib.git
+cd zig-waybar-contrib
+zig build -Drelease
+```
+
+Binaries will be available in `zig-out/bin/`.
+
+### Configuration
+
+Add the modules to your Waybar configuration. You can include the provided config file or define modules manually.
+
+**Method 1: Include Config**
+
+```jsonc
+{
+  // Load module configurations from zig-waybar-contrib
+  "include": [
+    "/usr/share/zig-waybar-contrib/config.jsonc", // if you installed from aur
+  ],
+
+  "modules-right": [
+    "custom/updates",
+    "custom/memory",
+    "custom/ping",
+    "custom/cpu",
+    "custom/fan"
+  ]
+}
+```
+
+**Method 2: Manual Definition**
+
+See the source code in `src/modules/` for the default configuration values and adapt them to your needs.
+
+### Contributing
+
+See [CONTRIBUTING](CONTRIBUTING.md)
+
+### Acknowledgments
+
+- **Zig Team** - For creating an amazing systems programming language
+- **Waybar Contributors** - For the excellent status bar that makes this possible
+- **Community** - For feedback, bug reports, and contributions
+
+---
+
+<div align="center">
+
+**Made with ❤️ by Me**
+
+*Star ⭐ this repo if you find it useful!*<br>
+*Support the project on [GitHub Sponsors](https://github.com/sponsors/erffy)* 💖<br>
+*Join our [Discord](https://discord.gg/tb8MvnnSfZ) for support and updates!*
+
+This project is licensed under the **GNU General Public License v3.0**. See [LICENSE](./LICENSE) for details.
+
+</div>
