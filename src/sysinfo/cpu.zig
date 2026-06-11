@@ -17,6 +17,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+const CPU = @This();
+
 const std = @import("std");
 const mem = std.mem;
 const fmt = std.fmt;
@@ -25,10 +27,15 @@ const ascii = std.ascii;
 const Io = std.Io;
 const Dir = Io.Dir;
 const Allocator = mem.Allocator;
-const ArrayList = std.ArrayListUnmanaged;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
+
+const MAX_CORES: usize = 1024;
+const STAT_BUFFER_SIZE: usize = 16 * 1024;
+const CPUINFO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub const CPUError = error{
     UnexpectedFormat,
+    CoreCountChanged,
 };
 
 /// Raw CPU time sample as read from the system.
@@ -75,17 +82,120 @@ pub const FrequencyValue = struct {
     fraction: bool = false,
 };
 
-// Maximum expected cores (pre-allocate to avoid reallocations)
-const MAX_CORES: usize = 256;
+io: Io,
+allocator: Allocator,
+// Historical counters used for delta tracking
+prev_overall: Sample = .{ .idle = 0, .total = 0 },
+prev_cores: []Sample = &.{},
+// Public metrics read by the caller after calling update()
+overall: f64 = 0.0,
+avg: f64 = 0.0,
+cores: []CoreInfo = &.{},
+// Internal reusable scratch buffer to avoid heap allocations during parsing
+scratch_samples: ArrayListUnmanaged(Sample) = .empty,
 
-// Optimized buffer sizes based on typical file sizes
-const STAT_BUFFER_SIZE: usize = 16 * 1024; // /proc/stat is typically small
-const CPUINFO_BUFFER_SIZE: usize = 64 * 1024; // /proc/cpuinfo can be larger
+pub fn init(io: Io, allocator: Allocator) CPU {
+    return .{ .io = io, .allocator = allocator };
+}
 
-/// Parses a single `/proc/stat` CPU line and extracts usage counters.
+pub fn deinit(this: *CPU) void {
+    this.allocator.free(this.prev_cores);
+    this.allocator.free(this.cores);
+    this.scratch_samples.deinit(this.allocator);
+}
+
+/// Updates CPU usage metrics and frequencies.
+/// On the very first run, it establishes a quick baseline snapshot automatically.
+pub fn update(this: *CPU) !void {
+    var curr_overall: Sample = undefined;
+
+    if (this.prev_cores.len == 0) {
+        try this.captureSnapshot(&this.prev_overall);
+
+        const core_count = this.scratch_samples.items.len;
+
+        this.prev_cores = try this.allocator.alloc(Sample, core_count);
+        errdefer {
+            this.allocator.free(this.prev_cores);
+            this.prev_cores = &.{};
+        }
+
+        @memcpy(this.prev_cores, this.scratch_samples.items);
+
+        this.cores = try this.allocator.alloc(CoreInfo, core_count);
+        errdefer {
+            this.allocator.free(this.cores);
+            this.cores = &.{};
+        }
+
+        @memset(this.cores, .{});
+
+        try this.io.sleep(.fromMilliseconds(100), .boot);
+    }
+
+    try this.captureSnapshot(&curr_overall);
+
+    if (this.scratch_samples.items.len != this.prev_cores.len) {
+        return CPUError.CoreCountChanged;
+    }
+
+    this.overall = computeUsage(this.prev_overall, curr_overall);
+
+    var sum: f64 = 0.0;
+    for (this.prev_cores, this.scratch_samples.items, 0..) |core_a, core_b, i| {
+        const usage = computeUsage(core_a, core_b);
+        this.cores[i].usage = usage;
+        sum += usage;
+    }
+
+    this.avg = if (this.cores.len > 0) sum / @as(f64, @floatFromInt(this.cores.len)) else 0.0;
+
+    this.updateFrequencies();
+
+    this.prev_overall = curr_overall;
+    @memcpy(this.prev_cores, this.scratch_samples.items);
+}
+
+fn captureSnapshot(this: *CPU, overall: *Sample) !void {
+    this.scratch_samples.clearRetainingCapacity();
+
+    var file = try Dir.openFileAbsolute(this.io, "/proc/stat", .{ .mode = .read_only });
+    defer file.close(this.io);
+
+    var buffer: [STAT_BUFFER_SIZE]u8 = undefined;
+    var reader = file.reader(this.io, &.{});
+    const bytes_read = try reader.interface.readSliceShort(&buffer);
+
+    var have_overall = false;
+    var lines = mem.splitScalar(u8, buffer[0..bytes_read], '\n');
+    while (lines.next()) |raw| {
+        const line = mem.trimStart(u8, raw, " \t");
+        if (!mem.startsWith(u8, line, "cpu")) break;
+        if (line.len > 3 and (line[3] == ' ' or line[3] == '\t')) {
+            overall.* = try parseLine(line);
+            have_overall = true;
+        } else if (line.len > 3 and ascii.isDigit(line[3])) {
+            try this.scratch_samples.append(this.allocator, try parseLine(line));
+        }
+    }
+
+    if (!have_overall) return CPUError.UnexpectedFormat;
+}
+
+fn updateFrequencies(this: *CPU) void {
+    var path_buf: [128]u8 = undefined;
+    for (this.cores, 0..) |*core, i| {
+        core.frequency = .{
+            .min = readFrequencyFromSysfs(this.io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_min_freq", .{i}) catch "") orelse .{},
+            .max = readFrequencyFromSysfs(this.io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_max_freq", .{i}) catch "") orelse .{},
+            .current = readFrequencyFromSysfs(this.io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{i}) catch "") orelse .{},
+        };
+    }
+}
+
 pub inline fn parseLine(line: []const u8) CPUError!Sample {
     var it = mem.tokenizeScalar(u8, line, ' ');
-    _ = it.next() orelse return CPUError.UnexpectedFormat; // Skip prefix (e.g. "cpu" or "cpu0")
+    _ = it.next() orelse return CPUError.UnexpectedFormat;
 
     var fields: [8]u64 = .{ 0, 0, 0, 0, 0, 0, 0, 0 };
     var idx: usize = 0;
@@ -102,91 +212,15 @@ pub inline fn parseLine(line: []const u8) CPUError!Sample {
     return .{ .idle = idle_all, .total = idle_all + non_idle };
 }
 
-/// Reads a snapshot of CPU usage counters from `/proc/stat`.
-pub fn readSnapshot(io: Io, allocator: Allocator) !SnapshotResult {
-    var file = try Dir.openFileAbsolute(io, "/proc/stat", .{ .mode = .read_only });
-    defer file.close(io);
-
-    var buffer: [STAT_BUFFER_SIZE]u8 = undefined;
-    var reader = file.reader(io, &.{});
-    const bytes_read = try reader.interface.readSliceShort(&buffer);
-
-    var overall: Sample = undefined;
-    var have_overall = false;
-
-    var cores_list: ArrayList(Sample) = .empty;
-    errdefer cores_list.deinit(allocator);
-    try cores_list.ensureTotalCapacity(allocator, MAX_CORES);
-
-    var lines = mem.splitScalar(u8, buffer[0..bytes_read], '\n');
-    while (lines.next()) |raw| {
-        const line = mem.trimStart(u8, raw, " \t");
-        if (!mem.startsWith(u8, line, "cpu")) break;
-        if (line.len > 3 and (line[3] == ' ' or line[3] == '\t')) {
-            overall = try parseLine(line);
-            have_overall = true;
-        } else if (line.len > 3 and ascii.isDigit(line[3])) try cores_list.append(allocator, try parseLine(line));
-    }
-
-    if (!have_overall) return CPUError.UnexpectedFormat;
-
-    return .{
-        .overall = overall,
-        .cores = try cores_list.toOwnedSlice(allocator),
-    };
-}
-
-/// Computes CPU usage percentage between two samples.
-/// Handles counter wrap-around by returning 0.0 if counters decrease.
 pub inline fn computeUsage(a: Sample, b: Sample) f64 {
-    // Guard against counter wrap-around or CPU hotplug scenarios
     if (b.total <= a.total or b.idle < a.idle) return 0.0;
-
     const totald = b.total - a.total;
     const idled = b.idle - a.idle;
-
     if (idled > totald) return 0.0;
 
-    const total_f: f64 = @floatFromInt(totald);
-    const idle_f: f64 = @floatFromInt(idled);
-
-    return (total_f - idle_f) / total_f * 100.0;
+    return (@as(f64, @floatFromInt(totald)) - @as(f64, @floatFromInt(idled))) / @as(f64, @floatFromInt(totald)) * 100.0;
 }
 
-/// Reads per-CPU frequency information from `/proc/cpuinfo`.
-pub fn readFrequencies(io: Io, allocator: Allocator) ![]Frequency {
-    var file = try Dir.openFileAbsolute(io, "/proc/cpuinfo", .{ .mode = .read_only });
-    defer file.close(io);
-
-    var buffer: [CPUINFO_BUFFER_SIZE]u8 = undefined;
-    var reader = file.reader(io, &.{});
-    const bytes_read = try reader.interface.readSliceShort(&buffer);
-
-    var freqs_list: ArrayList(Frequency) = .empty;
-    errdefer freqs_list.deinit(allocator);
-    try freqs_list.ensureTotalCapacity(allocator, MAX_CORES);
-
-    var lines = mem.splitScalar(u8, buffer[0..bytes_read], '\n');
-    while (lines.next()) |raw| {
-        const line = mem.trimStart(u8, raw, " \t");
-        if (!mem.startsWith(u8, line, "cpu MHz")) continue;
-
-        if (mem.findScalar(u8, line, ':')) |colon_pos| {
-            if (colon_pos + 1 < line.len) {
-                const val_str = mem.trim(u8, line[colon_pos + 1 ..], " \t\r");
-                if (fmt.parseFloat(f64, val_str)) |mhz| {
-                    try freqs_list.append(allocator, calculateFrequency(mhz));
-                } else |_| {
-                    continue;
-                }
-            }
-        }
-    }
-
-    return try freqs_list.toOwnedSlice(allocator);
-}
-
-/// Calculates frequency with unit conversion.
 pub inline fn calculateFrequency(mhz: f64) Frequency {
     const is_ghz = mhz >= 1000.0;
     const value = if (is_ghz) mhz * 0.001 else mhz;
@@ -203,7 +237,6 @@ pub inline fn calculateFrequency(mhz: f64) Frequency {
     };
 }
 
-/// Reads a frequency value from a sysfs file (value is in kHz).
 fn readFrequencyFromSysfs(io: Io, path: []const u8) ?Frequency {
     var file = Dir.openFileAbsolute(io, path, .{ .mode = .read_only }) catch return null;
     defer file.close(io);
@@ -213,78 +246,48 @@ fn readFrequencyFromSysfs(io: Io, path: []const u8) ?Frequency {
     const bytes_read = reader.interface.readSliceShort(&buf) catch return null;
     const line = mem.trim(u8, buf[0..bytes_read], " \t\n\r");
 
-    const khz = fmt.parseInt(u64, line, 10) catch return null;
-    const mhz: f64 = @as(f64, @floatFromInt(khz)) * 0.001;
+    const mhz: f64 = @as(f64, @floatFromInt(fmt.parseInt(u64, line, 10) catch return null)) * 0.001;
     return calculateFrequency(mhz);
 }
 
-/// Reads frequency ranges (min, max, current) for all CPU cores from sysfs.
-pub fn readFrequencyRanges(io: Io, allocator: Allocator, core_count: usize) ![]FrequencyRange {
-    var ranges = try allocator.alloc(FrequencyRange, core_count);
-    errdefer allocator.free(ranges);
 
-    var path_buf: [128]u8 = undefined;
-    for (0..core_count) |i| {
-        ranges[i] = .{
-            .min = readFrequencyFromSysfs(io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_min_freq", .{i}) catch "") orelse .{},
-            .max = readFrequencyFromSysfs(io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_max_freq", .{i}) catch "") orelse .{},
-            .current = readFrequencyFromSysfs(io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{i}) catch "") orelse .{},
-        };
-    }
-
-    return ranges;
-}
-
-/// Collects a single CPU usage sample by comparing two `/proc/stat` snapshots.
-pub fn cpuUsageAllOnce(io: Io, allocator: Allocator) !Metrics {
-    const a = try readSnapshot(io, allocator);
-    defer allocator.free(a.cores);
-
-    try io.sleep(.fromMilliseconds(200), .boot);
-
-    const b = try readSnapshot(io, allocator);
-    defer allocator.free(b.cores);
-
-    if (a.cores.len != b.cores.len) return CPUError.UnexpectedFormat;
-
-    const core_count = a.cores.len;
-    const freq_ranges = try readFrequencyRanges(io, allocator, core_count);
-    defer allocator.free(freq_ranges);
-
-    const cores = try allocator.alloc(CoreInfo, core_count);
-    errdefer allocator.free(cores);
-
-    var sum: f64 = 0.0;
-    for (a.cores, b.cores, 0..) |core_a, core_b, i| {
-        const usage = computeUsage(core_a, core_b);
-        cores[i] = .{
-            .usage = usage,
-            .frequency = freq_ranges[i],
-        };
-        sum += usage;
-    }
-
-    const avg: f64 = if (core_count > 0) sum / @as(f64, @floatFromInt(core_count)) else 0.0;
-
-    return .{
-        .overall = computeUsage(a.overall, b.overall),
-        .avg = avg,
-        .cores = cores,
-    };
-}
-
-test "cpu usage leak" {
+// Tests
+test "cpu lifecycle and update integration" {
     const allocator = std.testing.allocator;
     const Threaded = std.Io.Threaded;
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    const metrics_or_err = cpuUsageAllOnce(io, allocator);
-    if (metrics_or_err) |metrics| {
-        defer allocator.free(metrics.cores);
-    } else |err| {
-        if (err == error.FileNotFound) return;
+    // 1. Initialize the stateful CPU container
+    var cpu: CPU = .init(allocator);
+
+    // 2. Ensure everything deallocates cleanly.
+    // This entirely replaces the old "cpu usage leak" verification.
+    defer cpu.deinit();
+
+    // First update handles internal allocations and primes the baseline counters
+    cpu.update(io) catch |err| {
+        if (err == error.FileNotFound) return; // Guard for non-Linux platforms
         return err;
+    };
+
+    // Confirm that backing slices were allocated properly based on the host system
+    try std.testing.expect(cpu.cores.len > 0);
+    try std.testing.expect(cpu.prev_cores.len == cpu.cores.len);
+
+    // Sleep briefly to accumulate a tiny amount of CPU jitter for delta testing
+    try io.sleep(.fromMilliseconds(50), .boot);
+
+    // Second update cycles counters and calculates the real deltas
+    try cpu.update(io);
+
+    // Smoke check metric boundaries
+    try std.testing.expect(cpu.overall >= 0.0 and cpu.overall <= 100.0);
+    try std.testing.expect(cpu.avg >= 0.0 and cpu.avg <= 100.0);
+
+    for (cpu.cores) |core| {
+        try std.testing.expect(core.usage >= 0.0 and core.usage <= 100.0);
+        try std.testing.expect(core.frequency.current.value.raw >= 0.0);
     }
 }
 
@@ -318,7 +321,7 @@ test "computeUsage" {
     const s0 = Sample{ .idle = 0, .total = 0 };
     const s1 = Sample{ .idle = 50, .total = 100 };
     const s2 = Sample{ .idle = 100, .total = 200 };
-    const s3 = Sample{ .idle = 50, .total = 100 }; // Same as s1 (no time passing)
+    const s3 = Sample{ .idle = 50, .total = 100 };
 
     // 0 -> 1: total delta 100, idle delta 50. Usage = (100-50)/100 = 50%
     try std.testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s0, s1), 0.001);
@@ -330,56 +333,20 @@ test "computeUsage" {
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s3), 0.001);
 
     // 100% usage: total increases, idle stays same
-    const s_busy = Sample{ .idle = 50, .total = 200 }; // +100 total, +0 idle
+    const s_busy = Sample{ .idle = 50, .total = 200 };
     try std.testing.expectApproxEqAbs(@as(f64, 100.0), computeUsage(s1, s_busy), 0.001);
 
     // 0% usage: total increases, idle increases same amount
-    const s_idle = Sample{ .idle = 150, .total = 200 }; // +100 total, +100 idle
+    const s_idle = Sample{ .idle = 150, .total = 200 };
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle), 0.001);
 
-    // Counter wrap-around: b.total < a.total (CPU hotplug or counter reset)
-    const s_wrap = Sample{ .idle = 10, .total = 50 }; // Lower than s1
+    // Counter wrap-around: b.total < a.total
+    const s_wrap = Sample{ .idle = 10, .total = 50 };
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_wrap), 0.001);
 
     // Idle counter decreases: b.idle < a.idle
-    const s_idle_dec = Sample{ .idle = 30, .total = 150 }; // total up, idle down
+    const s_idle_dec = Sample{ .idle = 30, .total = 150 };
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle_dec), 0.001);
-}
-
-test "readSnapshot smoke test" {
-    const allocator = std.testing.allocator;
-    const Threaded = std.Io.Threaded;
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
-
-    const result = readSnapshot(io, allocator) catch |err| {
-        if (err == error.FileNotFound) return; // Not on linux or proc fs not mounted
-        return err;
-    };
-    defer allocator.free(result.cores);
-
-    // Smoke check
-    if (result.overall.total > 0) {
-        try std.testing.expect(result.overall.total >= result.overall.idle);
-    }
-}
-
-test "readFrequencies smoke test" {
-    const allocator = std.testing.allocator;
-    const Threaded = std.Io.Threaded;
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
-
-    const freqs = readFrequencies(io, allocator) catch |err| {
-        if (err == error.FileNotFound) return;
-        return err;
-    };
-    defer allocator.free(freqs);
-
-    // Just verify we can iterate them
-    for (freqs) |f| {
-        try std.testing.expect(f.value.raw >= 0.0);
-    }
 }
 
 test "calculateFrequency" {
@@ -394,8 +361,8 @@ test "calculateFrequency" {
     const f2 = calculateFrequency(2500.0);
     try std.testing.expectEqualStrings("GHz", f2.unit);
     try std.testing.expectApproxEqAbs(@as(f64, 2.5), f2.value.raw, 0.001);
-    try std.testing.expectEqual(@as(i64, 3), f2.value.rounded); // rounds to nearest integer
-    try std.testing.expectEqual(true, f2.value.fraction); // 2.5 != 3.0
+    try std.testing.expectEqual(@as(i64, 3), f2.value.rounded);
+    try std.testing.expectEqual(true, f2.value.fraction);
 
     // 3000 MHz -> 3 GHz
     const f3 = calculateFrequency(3000.0);
@@ -404,10 +371,8 @@ test "calculateFrequency" {
     try std.testing.expectEqual(@as(i64, 3), f3.value.rounded);
     try std.testing.expectEqual(false, f3.value.fraction);
 
-    // 2500.0000001 MHz -> 2.5 GHz (noise suppression check)
-    // 2.5 GHz value. 2.5 vs 3 rounded. Fraction IS true.
-    // Wait, let's check strict noise like 800.0000001 MHz -> 800 MHz
+    // Noise suppression check
     const f4 = calculateFrequency(800.0000001);
     try std.testing.expectEqualStrings("MHz", f4.unit);
-    try std.testing.expectEqual(false, f4.value.fraction); // Should match 800.0 within epsilon
+    try std.testing.expectEqual(false, f4.value.fraction);
 }

@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const sysinfo = @import("sysinfo").cpu;
+const sysinfo = @import("sysinfo").CPU;
 
 const std = @import("std");
 const utils = @import("utils");
@@ -61,20 +61,23 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var cpu: sysinfo = .init(io, gpa);
+    defer cpu.deinit();
+
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const data = try sysinfo.cpuUsageAllOnce(io, gpa);
+        try cpu.update();
 
         var max_frequency: sysinfo.Frequency = .{};
         var min_frequency: sysinfo.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
         var global_freq_min: sysinfo.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
         var global_freq_max: sysinfo.Frequency = .{};
 
-        for (data.cores) |core| {
+        for (cpu.cores) |core| {
             if (core.frequency.current.value.raw > max_frequency.value.raw) max_frequency = core.frequency.current;
             if (core.frequency.current.value.raw < min_frequency.value.raw) min_frequency = core.frequency.current;
             if (core.frequency.min.value.raw < global_freq_min.value.raw) global_freq_min = core.frequency.min;
@@ -84,14 +87,14 @@ pub fn main(init: process.Init) !void {
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
 
-        try replacer.addKeyAny("usage_percentage", @as(i64, @intFromFloat(@round(data.avg))));
+        try replacer.addKeyAny("usage_percentage", @as(i64, @intFromFloat(@round(cpu.avg))));
         try replacer.addKeyAny("frequency", if (max_frequency.value.fraction) max_frequency.value.raw else @as(f64, @floatFromInt(max_frequency.value.rounded)));
         try replacer.addKeyAny("frequency_unit", max_frequency.unit);
         try replacer.addKeyAny("frequency_min", if (global_freq_min.value.fraction) global_freq_min.value.raw else @as(f64, @floatFromInt(global_freq_min.value.rounded)));
         try replacer.addKeyAny("frequency_min_unit", global_freq_min.unit);
         try replacer.addKeyAny("frequency_max", if (global_freq_max.value.fraction) global_freq_max.value.raw else @as(f64, @floatFromInt(global_freq_max.value.rounded)));
         try replacer.addKeyAny("frequency_max_unit", global_freq_max.unit);
-        try replacer.addKeyAny("core_count", data.cores.len);
+        try replacer.addKeyAny("core_count", cpu.cores.len);
 
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(gpa);
@@ -99,7 +102,7 @@ pub fn main(init: process.Init) !void {
         const text_line = try replacer.render(config.text);
         try json.set("text", text_line);
 
-        for (data.cores, 0..) |core, i| {
+        for (cpu.cores, 0..) |core, i| {
             const usage_i: i64 = @intFromFloat(@round(core.usage));
             const freq_current = core.frequency.current;
             const freq_min = core.frequency.min;

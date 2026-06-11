@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const sysinfo = @import("sysinfo").updates;
+const Updates = @import("sysinfo").Updates;
 
 const std = @import("std");
 const utils = @import("utils");
@@ -43,7 +43,7 @@ pub const ModuleConfig = struct {
     tooltip: []const u8 = "{package_name}: {new_version}",
 };
 
-fn getManager(name: []const u8) sysinfo.Managers {
+fn getManager(name: []const u8) Updates.Managers {
     if (mem.eql(u8, name, "apt")) return .apt;
     if (mem.eql(u8, name, "pacman")) return .pacman;
     if (mem.eql(u8, name, "dnf")) return .dnf;
@@ -65,11 +65,13 @@ pub fn main(init: process.Init) !void {
     const config = try cfg.load("updates", ModuleConfig);
     defer cfg.free(config);
 
-    var manager: sysinfo.Managers = undefined;
+    var updates_tracker = Updates.init(io, init.environ_map, gpa);
+
+    var manager: Updates.Managers = undefined;
     if (config.manager) |mgr| {
         manager = getManager(mgr);
     } else {
-        manager = try sysinfo.getManager(io, init.environ_map, gpa);
+        manager = try updates_tracker.getManager();
     }
 
     var json: Json = .init(gpa);
@@ -84,7 +86,8 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        const updates = sysinfo.checkUpdates(io, init.environ_map, gpa, manager) catch null;
+        const updates = updates_tracker.checkUpdates(manager) catch null;
+        defer if (updates) |u| gpa.free(u);
 
         const total_updates: usize = if (updates) |u| u.len else 0;
 

@@ -17,10 +17,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const sysinfo = @import("sysinfo").memory;
+const sysinfo = @import("sysinfo").Memory;
 
 const std = @import("std");
 const utils = @import("utils");
+const mem = std.mem;
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
@@ -56,16 +57,21 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var memory: sysinfo = .init(io);
+    defer memory.deinit();
+
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const data = try sysinfo.fetchMemoryInfo(io);
+        try memory.update();
 
-        inline for (@typeInfo(@TypeOf(data)).@"struct".field_names, @typeInfo(@TypeOf(data)).@"struct".field_types) |name, FieldType| {
-            const value = @field(data, name);
+        inline for (@typeInfo(@TypeOf(memory)).@"struct".field_names, @typeInfo(@TypeOf(memory)).@"struct".field_types) |name, FieldType| {
+            if (comptime mem.eql(u8, name, "io")) continue;
+
+            const value = @field(memory, name);
 
             if (@typeInfo(FieldType) == .@"struct") {
                 inline for (@typeInfo(FieldType).@"struct".field_names) |nested_name| {
@@ -78,7 +84,7 @@ pub fn main(init: process.Init) !void {
 
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
-        try replacer.addKeyAny("total_usage", data.physical.used + data.swap.used);
+        try replacer.addKeyAny("total_usage", memory.physical.used + memory.swap.used);
 
         const text_line = try replacer.render(config.text);
         try json.set("text", text_line);

@@ -17,6 +17,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+const Updates = @This();
+
 const std = @import("std");
 const uProcess = @import("utils").Process;
 const findExecutable = uProcess.findExecutable;
@@ -63,24 +65,33 @@ pub const UpdateInfo = struct {
     new_version: [MAX_VERSION_LENGTH + 1]u8,
 };
 
+io: Io,
+environ_map: *Map,
+allocator: Allocator,
+
+pub inline fn init(io: Io, environ_map: *Map, allocator: Allocator) Updates {
+    return .{ .io = io, .environ_map = environ_map, .allocator = allocator };
+}
+
 /// Detects and returns the first available package manager.
-pub fn getManager(io: Io, environ_map: *Map, allocator: Allocator) !Managers {
+pub fn getManager(this: Updates) !Managers {
     inline for (meta.tags(Managers)) |manager| {
-        if (try findExecutable(io, environ_map, allocator, manager.name())) |path| {
-            allocator.free(path);
+        if (try findExecutable(this.io, this.environ_map, this.allocator, manager.name())) |path| {
+            this.allocator.free(path);
             return manager;
         }
     }
+
     return UpdatesError.NoSupportedManager;
 }
 
 /// Checks for updates and returns parsed update info, or null if none available.
-pub fn checkUpdates(io: Io, environ_map: *Map, allocator: Allocator, manager: Managers) !?[]UpdateInfo {
-    const output = try fetchUpdates(io, environ_map, allocator, manager);
-    defer allocator.free(output);
+pub fn checkUpdates(this: Updates, manager: Managers) !?[]UpdateInfo {
+    const output = try this.fetchUpdates(manager);
+    defer this.allocator.free(output);
 
     if (output.len == 0) return null;
-    return try parseUpdates(allocator, manager, output);
+    return try parseUpdates(this.allocator, manager, output);
 }
 
 /// Parses raw command output into structured update information.
@@ -107,10 +118,10 @@ pub fn parseUpdates(allocator: Allocator, manager: Managers, output: []const u8)
     return updates.toOwnedSlice(allocator);
 }
 
-fn fetchUpdates(io: Io, environ_map: *Map, allocator: Allocator, manager: Managers) ![]u8 {
+fn fetchUpdates(this: Updates, manager: Managers) ![]u8 {
     var pacman_db: ?[]u8 = null;
-    defer if (pacman_db) |db| allocator.free(db);
-    if (manager == .pacman) pacman_db = try setupPacmanDatabase(io, allocator, environ_map);
+    defer if (pacman_db) |db| this.allocator.free(db);
+    if (manager == .pacman) pacman_db = try this.setupPacmanDatabase();
 
     const argv: []const []const u8 = switch (manager) {
         .apt => &.{ "apt", "list", "--upgradable" },
@@ -120,15 +131,15 @@ fn fetchUpdates(io: Io, environ_map: *Map, allocator: Allocator, manager: Manage
         .xbps => &.{ "xbps-install", "--dry-run", "--sync", "--update" },
     };
 
-    var child = try process.spawn(io, .{ .argv = argv, .stdout = .pipe, .stderr = .pipe });
+    var child = try process.spawn(this.io, .{ .argv = argv, .stdout = .pipe, .stderr = .pipe });
 
-    const stdout = try uProcess.readAll(io, allocator, child.stdout.?);
-    errdefer allocator.free(stdout);
+    const stdout = try uProcess.readAll(this.io, this.allocator, child.stdout.?);
+    errdefer this.allocator.free(stdout);
 
-    const term = try child.wait(io);
+    const term = try child.wait(this.io);
     if (term != .exited) return &.{};
 
-    return filterOutput(allocator, manager, stdout);
+    return filterOutput(this.allocator, manager, stdout);
 }
 
 fn filterOutput(allocator: Allocator, manager: Managers, raw: []u8) ![]u8 {
@@ -146,46 +157,46 @@ fn filterOutput(allocator: Allocator, manager: Managers, raw: []u8) ![]u8 {
     return result.toOwnedSlice(allocator);
 }
 
-fn setupPacmanDatabase(io: Io, allocator: Allocator, environ_map: *Map) ![]u8 {
-    const db_path = try getCheckupPath(allocator, environ_map);
-    const pacman_db = try getPacmanDatabasePath(allocator, io);
-    defer allocator.free(pacman_db);
+fn setupPacmanDatabase(this: Updates) ![]u8 {
+    const db_path = try this.getCheckupPath();
+    const pacman_db = try this.getPacmanDatabasePath();
+    defer this.allocator.free(pacman_db);
 
-    try createDirectory(io, db_path);
-    try deleteLockFile(io, allocator, db_path);
-    try createLocalSymlink(io, allocator, db_path, pacman_db);
+    try createDirectory(this.io, db_path);
+    try deleteLockFile(this.io, this.allocator, db_path);
+    try createLocalSymlink(this.io, this.allocator, db_path, pacman_db);
 
-    const status = try uProcess.runCommand(io, &.{ "fakeroot", "pacman", "-Sy", "--disable-sandbox", "--dbpath", db_path, "--logfile", "/dev/null" });
+    const status = try uProcess.runCommand(this.io, &.{ "fakeroot", "pacman", "-Sy", "--disable-sandbox", "--dbpath", db_path, "--logfile", "/dev/null" });
 
     if (status != 0) return UpdatesError.CannotFetchUpdates;
     return db_path;
 }
 
-fn getCheckupPath(allocator: Allocator, environ_map: *Map) ![]u8 {
-    if (environ_map.get("CHECKUPDATES_DB")) |path| {
-        return try allocator.dupe(u8, path);
+fn getCheckupPath(this: Updates) ![]u8 {
+    if (this.environ_map.get("CHECKUPDATES_DB")) |path| {
+        return try this.allocator.dupe(u8, path);
     }
 
     const uid = linux.geteuid();
-    return try fmt.allocPrint(allocator, "/run/user/{d}/zwc-updates-check", .{uid});
+    return try fmt.allocPrint(this.allocator, "/run/user/{d}/zwc-updates-check", .{uid});
 }
 
-fn getPacmanDatabasePath(allocator: Allocator, io: Io) ![]const u8 {
-    var child = process.spawn(io, .{
+fn getPacmanDatabasePath(this: Updates) ![]const u8 {
+    var child = process.spawn(this.io, .{
         .argv = &.{ "pacman-conf", "DBPath" },
         .stdout = .pipe,
         .stderr = .ignore,
-    }) catch return try allocator.dupe(u8, DEFAULT_PACMAN_DB);
+    }) catch return try this.allocator.dupe(u8, DEFAULT_PACMAN_DB);
 
-    const stdout = uProcess.readAll(io, allocator, child.stdout.?) catch {
-        _ = child.wait(io) catch {};
-        return try allocator.dupe(u8, DEFAULT_PACMAN_DB);
+    const stdout = uProcess.readAll(this.io, this.allocator, child.stdout.?) catch {
+        _ = child.wait(this.io) catch {};
+        return try this.allocator.dupe(u8, DEFAULT_PACMAN_DB);
     };
-    defer allocator.free(stdout);
-    _ = child.wait(io) catch {};
+    defer this.allocator.free(stdout);
+    _ = child.wait(this.io) catch {};
 
     const trimmed = mem.trim(u8, stdout, WHITESPACE);
-    return try allocator.dupe(u8, if (trimmed.len == 0) DEFAULT_PACMAN_DB else trimmed);
+    return try this.allocator.dupe(u8, if (trimmed.len == 0) DEFAULT_PACMAN_DB else trimmed);
 }
 
 inline fn createDirectory(io: Io, path: []const u8) !void {
@@ -298,6 +309,8 @@ inline fn parseLine(manager: Managers, line: []const u8, info: *UpdateInfo) bool
     @memcpy(info.new_version[0..new_version.len], new_version);
     return true;
 }
+
+// Tests
 
 const testing = std.testing;
 
