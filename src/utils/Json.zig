@@ -107,9 +107,14 @@ pub fn set(this: *JsonBuilder, key: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
     const v = switch (T) {
-        []const u8 => Value{ .string = value },
-        []u8 => Value{ .string = value },
-        *const [0:0]u8 => Value{ .string = value[0..] },
+        []const u8, []u8 => bk: {
+            const owned_str = try this.allocator.dupe(u8, value);
+            break :bk Value{ .string = owned_str };
+        },
+        *const [0:0]u8 => bk: {
+            const owned_str = try this.allocator.dupe(u8, value[0..]);
+            break :bk Value{ .string = owned_str };
+        },
         bool => Value{ .boolean = value },
         u8, i8, u16, i16, u32, i32, u64, i64 => Value{ .number = @intCast(value) },
         else => @compileError("Unsupported JSON value type"),
