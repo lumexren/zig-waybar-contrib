@@ -65,7 +65,7 @@ pub fn main(init: process.Init) !void {
     const config = try cfg.load("updates", ModuleConfig);
     defer cfg.free(config);
 
-    var updates_tracker = Updates.init(io, init.environ_map, gpa);
+    var updates_tracker: Updates = .init(io, init.environ_map, gpa);
 
     var manager: Updates.Managers = undefined;
     if (config.manager) |mgr| {
