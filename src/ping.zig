@@ -55,25 +55,26 @@ pub const PingError = error{
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("ping", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
-    var resolved = try sysinfolib.resolveIP(allocator, io, config.target_domain);
+    var resolved = try sysinfolib.resolveIP(gpa, io, config.target_domain);
     var last_update_ts: i64 = 0;
 
     const local_addr: IpAddress = try .parseIp4("0.0.0.0", 0);
@@ -95,7 +96,7 @@ pub fn main(init: process.Init) !void {
         const now_s = current.toSeconds();
 
         if (resolved == null or (now_s - last_update_ts) >= config.target_domain_ip_update_interval) {
-            resolved = try sysinfolib.resolveIP(allocator, io, config.target_domain);
+            resolved = try sysinfolib.resolveIP(gpa, io, config.target_domain);
             last_update_ts = now_s;
 
             target_addr = try .parseIp4(resolved.?, 80);

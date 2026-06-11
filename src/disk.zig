@@ -44,20 +44,21 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("disk", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -92,17 +93,17 @@ pub fn main(init: process.Init) !void {
         try json.set("text", text_line);
 
         if (config.show_all_mounts) {
-            const filesystems = sysinfo.fetchMountedFilesystems(allocator) catch {
+            const filesystems = sysinfo.fetchMountedFilesystems(gpa) catch {
                 try json.set("tooltip", @as([]const u8, "Failed to read mounted filesystems"));
                 try json.write(stdout);
                 try stdout.flush();
                 try waybar.updateOrRefresh();
                 continue;
             };
-            defer sysinfo.freeMountedFilesystems(allocator, filesystems);
+            defer sysinfo.freeMountedFilesystems(gpa, filesystems);
 
             var tooltip_text: ArrayList(u8) = .empty;
-            defer tooltip_text.deinit(allocator);
+            defer tooltip_text.deinit(gpa);
 
             for (filesystems) |fs| {
                 try replacer.addKey("device", fs.device);
@@ -115,8 +116,8 @@ pub fn main(init: process.Init) !void {
                 try replacer.addKeyAny("percentage_free", fs.disk_info.percentage_free);
 
                 const line = try replacer.render(config.mount_tooltip);
-                if (tooltip_text.items.len > 0) try tooltip_text.append(allocator, '\n');
-                try tooltip_text.appendSlice(allocator, line);
+                if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
+                try tooltip_text.appendSlice(gpa, line);
             }
 
             try json.set("tooltip", tooltip_text.items);

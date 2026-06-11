@@ -40,20 +40,20 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("memory", ModuleConfig);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });

@@ -43,20 +43,21 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("bluetooth", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -65,8 +66,7 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        // Get adapters
-        const adapters = sysinfo.getAdapters(allocator) catch |err| {
+        const adapters = sysinfo.getAdapters(gpa) catch |err| {
             try json.set("text", config.icon_off);
             try json.set("tooltip", @as([]const u8, "Bluetooth unavailable"));
             try json.write(stdout);
@@ -76,9 +76,10 @@ pub fn main(init: process.Init) !void {
             if (err == sysinfo.BluetoothError.NoAdapter or err == sysinfo.BluetoothError.ConnectionFailed) continue;
             return err;
         };
+
         defer {
-            for (adapters) |*a| @constCast(a).deinit(allocator);
-            allocator.free(adapters);
+            for (adapters) |*a| @constCast(a).deinit(gpa);
+            gpa.free(adapters);
         }
 
         if (adapters.len == 0) {
@@ -92,22 +93,19 @@ pub fn main(init: process.Init) !void {
 
         const adapter = adapters[0];
 
-        // Get connected devices
-        const devices = sysinfo.getDevices(allocator) catch &[_]sysinfo.DeviceInfo{};
+        const devices = sysinfo.getDevices(gpa) catch &[_]sysinfo.DeviceInfo{};
         defer {
-            for (devices) |*d| @constCast(d).deinit(allocator);
-            allocator.free(devices);
+            for (devices) |*d| @constCast(d).deinit(gpa);
+            gpa.free(devices);
         }
 
-        // Count connected devices
         var connected_count: usize = 0;
         for (devices) |d| {
             if (d.connected) connected_count += 1;
         }
 
-        // Build device list string
         var device_list: ArrayList(u8) = .empty;
-        defer device_list.deinit(allocator);
+        defer device_list.deinit(gpa);
 
         for (devices) |device| {
             if (!device.connected) continue;
@@ -118,8 +116,8 @@ pub fn main(init: process.Init) !void {
             try replacer.addKeyAny("device_battery", device.battery orelse @as(u8, 0));
 
             const line = try replacer.render(config.device_format);
-            if (device_list.items.len > 0) try device_list.appendSlice(allocator, "\n");
-            try device_list.appendSlice(allocator, line);
+            if (device_list.items.len > 0) try device_list.appendSlice(gpa, "\n");
+            try device_list.appendSlice(gpa, line);
         }
 
         const icon = if (adapter.powered) config.icon_on else config.icon_off;

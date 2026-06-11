@@ -25,6 +25,8 @@ const Io = std.Io;
 const File = Io.File;
 const process = std.process;
 const fmt = std.fmt;
+const heap = std.heap;
+const ArenaAllocator = heap.ArenaAllocator;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -62,20 +64,21 @@ fn stateToString(state: sysinfo.BatteryState) []const u8 {
 }
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("battery", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -84,9 +87,7 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        // Get display device (primary battery)
-        const battery = sysinfo.getDisplayDevice(allocator) catch |err| {
-            // No battery found - output empty state
+        const battery = sysinfo.getDisplayDevice(gpa) catch |err| {
             try json.set("text", @as([]const u8, "No battery found"));
             try json.set("tooltip", @as([]const u8, "No battery found"));
             try json.write(stdout);
@@ -96,9 +97,9 @@ pub fn main(init: process.Init) !void {
             if (err == sysinfo.BatteryError.NotFound) continue;
             return err;
         };
-        defer @constCast(&battery).deinit(allocator);
 
-        // Check if the display device is actually a battery
+        defer @constCast(&battery).deinit(gpa);
+
         if (battery.device_type != .battery or !battery.is_present) {
             try json.set("text", @as([]const u8, "No battery found"));
             try json.set("tooltip", @as([]const u8, "No battery found"));
@@ -111,14 +112,12 @@ pub fn main(init: process.Init) !void {
         const percentage: i64 = @intFromFloat(@round(battery.percentage));
         const state_str = stateToString(battery.state);
 
-        // Select icon based on state
         const icon = switch (battery.state) {
             .charging, .pending_charge => config.icon_charging,
             .fully_charged => config.icon_full,
             else => config.icon,
         };
 
-        // Format time remaining
         const time_seconds = switch (battery.state) {
             .charging, .pending_charge => battery.time_to_full,
             else => battery.time_to_empty,
@@ -150,7 +149,6 @@ pub fn main(init: process.Init) !void {
         const tooltip_line = try replacer.render(config.tooltip);
         try json.set("tooltip", tooltip_line);
 
-        // Set percentage for waybar's built-in styling
         try json.set("percentage", percentage);
 
         try json.write(stdout);

@@ -54,27 +54,28 @@ fn getManager(name: []const u8) sysinfo.Managers {
 }
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("updates", ModuleConfig);
+    defer cfg.free(config);
 
     var manager: sysinfo.Managers = undefined;
     if (config.manager) |mgr| {
         manager = getManager(mgr);
     } else {
-        manager = try sysinfo.getManager(io, init.environ_map, allocator);
+        manager = try sysinfo.getManager(io, init.environ_map, gpa);
     }
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -83,7 +84,7 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        const updates = sysinfo.checkUpdates(io, init.environ_map, allocator, manager) catch null;
+        const updates = sysinfo.checkUpdates(io, init.environ_map, gpa, manager) catch null;
 
         const total_updates: usize = if (updates) |u| u.len else 0;
 
@@ -97,7 +98,7 @@ pub fn main(init: process.Init) !void {
         try json.set("text", text_line);
 
         var tooltip_text: ArrayList(u8) = .empty;
-        defer tooltip_text.deinit(allocator);
+        defer tooltip_text.deinit(gpa);
 
         if (updates) |update_list| {
             for (update_list) |update| {
@@ -108,8 +109,8 @@ pub fn main(init: process.Init) !void {
                 try replacer.addKey("new_version", new_version);
 
                 const line = try replacer.render(config.tooltip);
-                if (tooltip_text.items.len > 0) try tooltip_text.append(allocator, '\n');
-                try tooltip_text.appendSlice(allocator, line);
+                if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
+                try tooltip_text.appendSlice(gpa, line);
             }
         }
 

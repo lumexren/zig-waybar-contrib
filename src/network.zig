@@ -41,29 +41,28 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("network", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
-    // Get initial route info
-    const route = try sysinfo.getDefaultRoute(io, allocator);
-    const local_ip = try sysinfo.getLocalIP(allocator, route.interface);
+    const route = try sysinfo.getDefaultRoute(io, gpa);
+    const local_ip = try sysinfo.getLocalIP(gpa, route.interface);
 
-    // Get initial network stats
     const initial_time = Clock.now(.boot, io);
     var prev_stats = try sysinfo.getNetworkStats(io, route.interface, initial_time.toSeconds());
 
@@ -74,10 +73,8 @@ pub fn main(init: process.Init) !void {
         const current_time = Clock.now(.boot, io);
         const timestamp = current_time.toSeconds();
 
-        // Get current network stats
         const current_stats = sysinfo.getNetworkStats(io, route.interface, timestamp) catch continue;
 
-        // Calculate rates
         const rates = sysinfo.NetworkStats.calculateRates(prev_stats, current_stats);
         prev_stats = current_stats;
 

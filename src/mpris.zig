@@ -47,20 +47,21 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("mpris", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -71,7 +72,7 @@ pub fn main(init: process.Init) !void {
 
         try Output.addCommonPlaceholders(&replacer);
 
-        const player_info = mpris.getActivePlayer(allocator) catch |err| {
+        const player_info = mpris.getActivePlayer(gpa) catch |err| {
             switch (err) {
                 mpris.MprisError.NoPlayers, mpris.MprisError.ConnectionFailed => {
                     try replacer.addKey("icon", config.icon);
@@ -90,7 +91,7 @@ pub fn main(init: process.Init) !void {
         };
         defer {
             var info = player_info;
-            info.deinit(allocator);
+            info.deinit(gpa);
         }
 
         // Status icon

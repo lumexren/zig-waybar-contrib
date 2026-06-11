@@ -41,20 +41,21 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("fan", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -64,9 +65,9 @@ pub fn main(init: process.Init) !void {
         defer replacer.clear();
 
         var fans: ArrayList(sysinfo.FanInfo) = .empty;
-        defer fans.deinit(allocator);
+        defer fans.deinit(gpa);
 
-        try sysinfo.scanHwmonFans(io, allocator, &fans, "/sys/class/hwmon");
+        try sysinfo.scanHwmonFans(io, gpa, &fans, "/sys/class/hwmon");
 
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
@@ -76,15 +77,15 @@ pub fn main(init: process.Init) !void {
         try json.set("text", text_line);
 
         var tooltip_text: ArrayList(u8) = .empty;
-        defer tooltip_text.deinit(allocator);
+        defer tooltip_text.deinit(gpa);
 
         for (fans.items) |fan| {
             try replacer.addKey("name", fan.name);
             try replacer.addKeyAny("speed", fan.speed);
 
             const line = try replacer.render(config.tooltip);
-            if (tooltip_text.items.len > 0) try tooltip_text.append(allocator, '\n');
-            try tooltip_text.appendSlice(allocator, line);
+            if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
+            try tooltip_text.appendSlice(gpa, line);
         }
 
         try json.set("tooltip", tooltip_text.items);

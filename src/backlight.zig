@@ -24,6 +24,8 @@ const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
+const heap = std.heap;
+const Arenagpa = heap.Arenagpa;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -40,20 +42,21 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const allocator = init.arena.allocator();
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, allocator);
+    var cfg: Config = .init(io, init.environ_map, gpa);
     const config = try cfg.load("backlight", ModuleConfig);
+    defer cfg.free(config);
 
-    var json: Json = .init(allocator);
+    var json: Json = .init(gpa);
     defer json.deinit();
 
-    var replacer: Replacer = .init(allocator);
+    var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -62,9 +65,7 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        // Get default backlight
-        const backlight = sysinfo.getDefaultBacklight(io, allocator) catch |err| {
-            // No backlight found - output empty state
+        const backlight = sysinfo.getDefaultBacklight(io, gpa) catch |err| {
             try json.set("text", @as([]const u8, "No backlight"));
             try json.set("tooltip", @as([]const u8, "No backlight detected"));
             try json.write(stdout);
@@ -74,7 +75,8 @@ pub fn main(init: process.Init) !void {
             if (err == sysinfo.BacklightError.NotFound) continue;
             return err;
         };
-        defer @constCast(&backlight).deinit(allocator);
+
+        defer @constCast(&backlight).deinit(gpa);
 
         try Output.addCommonPlaceholders(&replacer);
         try replacer.addKey("icon", config.icon);
@@ -89,7 +91,6 @@ pub fn main(init: process.Init) !void {
         const tooltip_line = try replacer.render(config.tooltip);
         try json.set("tooltip", tooltip_line);
 
-        // Set percentage for waybar's built-in styling
         try json.set("percentage", backlight.percentage);
 
         try json.write(stdout);
