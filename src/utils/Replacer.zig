@@ -129,47 +129,54 @@ pub fn add(this: *Replacer, from: []const u8, to: []const u8) !void {
     try this.replacements.append(this.allocator, .{ .from = from, .to = to, .owned = false });
 }
 
-/// Adds a string key-value pair. Both key and value are duplicated.
-pub fn addKey(this: *Replacer, key: []const u8, value: []const u8) !void {
-    const key_owned = try this.allocator.dupe(u8, key);
-    errdefer this.allocator.free(key_owned);
+/// Internal helper to handle StringHashMap insertion and old-value cleanup.
+fn putInternal(this: *Replacer, key: []const u8, value: Value) !void {
+    const gop = try this.values.getOrPut(key);
 
-    const val_owned = try this.allocator.dupe(u8, value);
-    errdefer this.allocator.free(val_owned);
+    if (gop.found_existing) {
+        if (gop.value_ptr.* == .string) {
+            this.allocator.free(gop.value_ptr.string);
+        }
 
-    if (try this.values.fetchPut(key_owned, .{ .string = val_owned })) |old| {
-        this.allocator.free(old.key);
+        gop.value_ptr.* = value;
+    } else {
+        const key_owned = this.allocator.dupe(u8, key) catch |err| {
+            _ = this.values.remove(key);
+            return err;
+        };
 
-        if (old.value == .string) this.allocator.free(old.value.string);
+        gop.key_ptr.* = key_owned;
+        gop.value_ptr.* = value;
     }
 }
 
+/// Adds a string key-value pair. Both key and value are duplicated.
+pub fn addKey(this: *Replacer, key: []const u8, value: []const u8) !void {
+    const val_owned = try this.allocator.dupe(u8, value);
+    errdefer this.allocator.free(val_owned);
+
+    try this.putInternal(key, .{ .string = val_owned });
+}
+
 /// Adds a key-value pair with automatic type detection.
-/// Supports integers, floats, booleans, and strings.
 pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
     // Integers
     if (@typeInfo(T) == .int or @typeInfo(T) == .comptime_int) {
-        const k = try this.allocator.dupe(u8, key);
-        errdefer this.allocator.free(k);
-        try this.values.put(k, .{ .integer = @intCast(value) });
+        try this.putInternal(key, .{ .integer = @intCast(value) });
         return;
     }
 
     // Floats
     if (@typeInfo(T) == .float or @typeInfo(T) == .comptime_float) {
-        const k = try this.allocator.dupe(u8, key);
-        errdefer this.allocator.free(k);
-        try this.values.put(k, .{ .float = @floatCast(value) });
+        try this.putInternal(key, .{ .float = @floatCast(value) });
         return;
     }
 
     // Bool
     if (T == bool) {
-        const k = try this.allocator.dupe(u8, key);
-        errdefer this.allocator.free(k);
-        try this.values.put(k, .{ .boolean = value });
+        try this.putInternal(key, .{ .boolean = value });
         return;
     }
 
@@ -180,7 +187,7 @@ pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
         return;
     }
 
-    // Fallback: format to string then store via addKey so ownership is correct
+    // Fallback: format to string then store
     const str = try fmt.allocPrint(this.allocator, "{any}", .{value});
     defer this.allocator.free(str);
     try this.addKey(key, str);
