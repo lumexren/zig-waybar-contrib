@@ -44,28 +44,48 @@ pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
 /// Caller owns the returned slice and must free it.
 fn resolveConfigDir(this: *Config) !?[]u8 {
     if (this.environ_map.get("XDG_CONFIG_HOME")) |dir| {
-        const new_dir = try this.allocator.alloc(u8, dir.len);
-        mem.copyForwards(u8, new_dir, dir);
-        return new_dir;
+        return try this.allocator.dupe(u8, dir);
     }
 
     const home = this.environ_map.get("HOME") orelse return null;
     return try path.join(this.allocator, &.{ home, ".config" });
 }
 
-/// Loads a typed config struct `T` for the given module.
-/// Returns `T{}` on missing file, parse failure, or missing config dir.
-pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
-    const config_dir = try this.resolveConfigDir() orelse return T{};
+/// Resolves the absolute path to the module's ZON configuration file.
+/// Caller owns the returned slice and must free it.
+fn resolveModulePath(this: *Config, module_name: []const u8) !?[]u8 {
+    const config_dir = try this.resolveConfigDir() orelse return null;
     defer this.allocator.free(config_dir);
 
     const config_file = try fmt.allocPrint(this.allocator, "{s}.zon", .{module_name});
     defer this.allocator.free(config_file);
 
-    const config_path = try path.join(this.allocator, &.{ config_dir, "zig-waybar-contrib", config_file });
+    return try path.join(this.allocator, &.{ config_dir, "zig-waybar-contrib", config_file });
+}
+
+/// Checks whether a configuration file exists for the given module.
+pub fn exists(this: *Config, module_name: []const u8) bool {
+    const config_path = this.resolveModulePath(module_name) catch return false;
     defer this.allocator.free(config_path);
 
-    var file = Dir.openFileAbsolute(this.io, config_path, .{ .mode = .read_only }) catch return T{};
+    var file = Dir.openFileAbsolute(this.io, config_path, .{ .mode = .read_only }) catch return false;
+    file.close(this.io);
+
+    return true;
+}
+
+/// Frees the allocated fields of a parsed configuration struct.
+pub fn free(this: *Config, config: anytype) void {
+    zon.parse.free(this.allocator, config);
+}
+
+/// Strictly loads a typed config struct `T`. Bubbles up all internal errors.
+/// Caller is responsible for calling `free()` on success if `T` contains allocated fields.
+pub fn loadExact(this: *Config, module_name: []const u8, comptime T: type) !T {
+    const config_path = try this.resolveModulePath(module_name) orelse return error.ConfigDirNotFound;
+    defer this.allocator.free(config_path);
+
+    var file = try Dir.openFileAbsolute(this.io, config_path, .{ .mode = .read_only });
     defer file.close(this.io);
 
     const size = try file.length(this.io);
@@ -75,5 +95,11 @@ pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
     var reader = file.reader(this.io, &.{});
     try reader.interface.readSliceAll(buffer);
 
-    return zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true }) catch T{};
+    return try zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true, .free_on_error = true });
+}
+
+/// Loads a typed config struct `T` for the given module.
+/// Returns `T{}` on missing file, parse failure, or missing config dir.
+pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
+    return this.loadExact(module_name, T) catch T{};
 }

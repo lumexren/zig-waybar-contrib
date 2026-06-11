@@ -21,7 +21,7 @@
 const JsonBuilder = @This();
 
 const std = @import("std");
-const ArrayList = std.ArrayList;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Io = std.Io;
 const debug = std.debug;
 const mem = std.mem;
@@ -29,7 +29,7 @@ const Allocator = mem.Allocator;
 const fmt = std.fmt;
 
 allocator: Allocator,
-fields: ArrayList(Field) = .empty,
+fields: ArrayListUnmanaged(Field) = .empty,
 counter: u64 = 0,
 
 /// Represents a JSON value supported by the builder.
@@ -75,6 +75,12 @@ pub inline fn init(allocator: Allocator) JsonBuilder {
 /// This function must be called exactly once for every initialized builder
 /// to avoid memory leaks.
 pub inline fn deinit(this: *JsonBuilder) void {
+    for (this.fields.items) |field| {
+        if (field.value == .string) {
+            this.allocator.free(field.value.string);
+        }
+    }
+
     this.fields.deinit(this.allocator);
     this.counter = 0;
 }
@@ -88,6 +94,12 @@ pub inline fn deinit(this: *JsonBuilder) void {
 /// After calling `clear()`, the builder can be used again as if
 /// freshly initialized, but without reallocating the backing array.
 pub inline fn clear(this: *JsonBuilder) void {
+    for (this.fields.items) |field| {
+        if (field.value == .string) {
+            this.allocator.free(field.value.string);
+        }
+    }
+    
     this.fields.clearRetainingCapacity();
     this.counter = 0;
 }
@@ -95,8 +107,8 @@ pub inline fn clear(this: *JsonBuilder) void {
 /// Sets a JSON field with a statically supported value type.
 ///
 /// Supported value types:
-/// - `[]const u8`, `[*:0]const u8` → JSON string
-/// - Integer types (`u8/i8` … `u64/i64`) → JSON number
+/// - `[]const u8`, string literals → JSON string
+/// - Integer types (`u8/i8` … `usize/isize`) → JSON number
 /// - `bool` → JSON boolean
 ///
 /// Unsupported types cause a compile-time error.
@@ -107,17 +119,13 @@ pub fn set(this: *JsonBuilder, key: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
     const v = switch (T) {
-        []const u8, []u8 => bk: {
-            const owned_str = try this.allocator.dupe(u8, value);
-            break :bk Value{ .string = owned_str };
-        },
-        *const [0:0]u8 => bk: {
-            const owned_str = try this.allocator.dupe(u8, value[0..]);
-            break :bk Value{ .string = owned_str };
-        },
         bool => Value{ .boolean = value },
-        u8, i8, u16, i16, u32, i32, u64, i64 => Value{ .number = @intCast(value) },
-        else => @compileError("Unsupported JSON value type"),
+        u8, i8, u16, i16, u32, i32, u64, i64, usize, isize => Value{ .number = @intCast(value) },
+        else => bk: {
+            const slice: []const u8 = value;
+            const owned_str = try this.allocator.dupe(u8, slice);
+            break :bk Value{ .string = owned_str };
+        },
     };
 
     try this.fields.append(this.allocator, .{ .key = key, .value = v });
@@ -172,10 +180,14 @@ pub fn appendFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8
                 .string => |old| {
                     const combined = try mem.concat(this.allocator, u8, &.{ old, part });
                     errdefer this.allocator.free(combined);
+
+                    this.allocator.free(old);
+                    this.allocator.free(part);
+
                     f.value = .{ .string = combined };
                     return;
                 },
-                else => debug.panic("appendFmt: key '{any}' exists but value '{any}' is not string", .{ f.key, @TypeOf(f.value) }),
+                else => debug.panic("appendFmt: key '{s}' exists but value '{any}' is not string", .{ f.key, @TypeOf(f.value) }),
             }
         }
     }
@@ -198,7 +210,9 @@ pub fn appendFmtNL(this: *JsonBuilder, key: []const u8, comptime value: []const 
 
     if (this.counter > 0) {
         try this.appendFmt(key, "\n" ++ value, args);
-    } else try this.appendFmt(key, value, args);
+    } else {
+        try this.appendFmt(key, value, args);
+    }
 
     this.counter += 1;
 }
