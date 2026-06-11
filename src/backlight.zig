@@ -24,8 +24,6 @@ const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const heap = std.heap;
-const Arenagpa = heap.Arenagpa;
 
 const Config = utils.Config;
 const Json = utils.Json;
