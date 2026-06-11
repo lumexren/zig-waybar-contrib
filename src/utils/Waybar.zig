@@ -18,152 +18,221 @@
 // along with this program. If not, see <https://gnu.org/licenses>.
 
 /// Manages communication with the Waybar status bar through real-time signals.
-/// Automatically handles waybar process discovery and reconnection.
+/// Handles process discovery, caching, and transparent periodic reconnection.
 const Waybar = @This();
 
 const std = @import("std");
 const Process = @import("Process.zig");
-const os = std.os;
-const linux = os.linux;
+
+const linux = std.os.linux;
 const Io = std.Io;
 
-/// I/O handle for filesystem and process operations.
+const waybar_comm = "waybar";
+
+/// I/O handle for all filesystem and process operations.
 io: Io,
-/// Cached waybar process handle, or null if not found/unavailable.
+/// Cached waybar process handle.  Null when waybar is not known to be running.
 process_handle: ?Process.Process,
-/// Configuration for signal number and reconnection behavior.
-config: Config,
-/// Counter for periodic rediscovery attempts.
+/// RT signal offset from SIGRTMIN (e.g. 1 → SIGRTMIN+1).
+signal_number: u8,
+/// update() calls to skip between /proc scans when waybar is not found.
+check_interval: u32,
+/// Rolling counter incremented on every call to rediscover().
 check_counter: u32,
 
-/// Errors returned by waybar operations.
+/// Errors that can be returned by Waybar operations.
 pub const WaybarError = error{
-    /// Signal number is outside the valid RT signal range (must be 1-31).
+    /// Signal offset is outside the kernel's valid RT range (must be ≥ 1).
     InvalidSignalNumber,
-    /// Waybar process is not running or cannot be found.
+    /// Explicit refresh found no running waybar process.
     WaybarNotFound,
-    /// Failed to send signal to the waybar process.
-    SignalFailed,
 };
 
-/// Configuration for Waybar operations.
+/// Init-time configuration.
 pub const Config = struct {
-    /// Real-time signal offset (SIGRTMIN + offset). Must be 1-31.
+    /// Real-time signal offset (SIGRTMIN + offset). Must be ≥ 1.
     signal_number: u8,
-    /// Failed update attempts before re-searching for the waybar process.
+    /// update() calls to skip before re-scanning /proc for waybar.
+    /// Raise this to reduce /proc overhead when waybar is rarely restarted.
     check_interval: u32 = 10,
 
-    /// Validate that the signal number is in the valid RT range.
+    /// Validate that signal_number is within the kernel's RT signal range.
     pub inline fn validate(this: @This()) WaybarError!void {
         if (!isValidSignal(this.signal_number)) return WaybarError.InvalidSignalNumber;
     }
 };
 
-/// Check if a signal number is valid (1-31 range, fits within RT signal range).
-pub fn isValidSignal(signal_number: u8) bool {
-    if (signal_number < 1) return false;
-    return (linux.sigrtmin() + signal_number) <= linux.sigrtmax();
-}
-
-/// Initialize and immediately search for the waybar process.
-/// Does not error if waybar is not running — use `isAvailable()` to check.
+/// Create a handle and immediately scan /proc for waybar.
+/// Does not fail if waybar is not running — check `isAvailable()` afterward.
 pub fn init(io: Io, config: Config) WaybarError!Waybar {
     try config.validate();
-    const handle = Process.findByName(io, "waybar") catch null;
-    return .{ .io = io, .config = config, .process_handle = handle, .check_counter = 0 };
+    const handle = Process.findByName(io, waybar_comm) catch null;
+    return .{
+        .io = io,
+        .process_handle = handle,
+        .signal_number = config.signal_number,
+        .check_interval = config.check_interval,
+        .check_counter = 0,
+    };
 }
 
-/// Initialize without searching for the waybar process.
-pub inline fn initLazy(io: Io, config: Config) WaybarError!Waybar {
+/// Create a handle without scanning for waybar.
+/// The first rediscovery cycle begins after `check_interval` update() calls.
+pub fn initLazy(io: Io, config: Config) WaybarError!Waybar {
     try config.validate();
-    return .{ .io = io, .config = config, .process_handle = null, .check_counter = 0 };
+    return .{
+        .io = io,
+        .process_handle = null,
+        .signal_number = config.signal_number,
+        .check_interval = config.check_interval,
+        .check_counter = 0,
+    };
 }
 
-/// Send update signal to waybar.
-/// If waybar is unavailable, periodically attempts rediscovery based on `check_interval`.
-/// Silently handles a dead process since the last check.
-pub fn update(this: *Waybar) !void {
-    if (this.process_handle) |handle| {
-        handle.sendRtSignal(this.config.signal_number) catch this.invalidateHandle();
+/// Send the configured RT signal to waybar.
+///
+/// When a live handle is cached the signal is sent immediately.
+/// When the handle has died it is dropped and the periodic rediscovery
+/// counter is incremented.  When no handle exists the counter is ticked
+/// and a /proc scan fires once it reaches `check_interval`.
+///
+/// Signal delivery errors (e.g. ESRCH when waybar just exited) are absorbed
+/// silently.  Use `tryUpdate` when you need to know whether the signal landed.
+pub fn update(this: *Waybar) void {
+    if (this.process_handle) |h| {
+        h.sendRtSignal(this.signal_number) catch this.invalidate();
         return;
     }
-
-    _ = this.tryRediscover();
+    _ = this.rediscover();
 }
 
-/// Like `update()`, but returns whether the signal was actually sent.
+/// Like `update()` but returns `true` when the signal was successfully sent.
 pub fn tryUpdate(this: *Waybar) bool {
-    if (this.process_handle) |handle| {
-        handle.sendRtSignal(this.config.signal_number) catch {
-            this.invalidateHandle();
+    if (this.process_handle) |h| {
+        h.sendRtSignal(this.signal_number) catch {
+            this.invalidate();
             return false;
         };
         return true;
     }
-
-    return this.tryRediscover();
+    return this.rediscover();
 }
 
-/// Send update signal, forcing an immediate rediscovery if waybar is not tracked.
-pub fn updateOrRefresh(this: *Waybar) !void {
-    if (this.process_handle) |handle| {
-        handle.sendRtSignal(this.config.signal_number) catch {
-            this.invalidateHandle();
-            try this.refresh();
-            const h = this.process_handle orelse return;
-            try h.sendRtSignal(this.config.signal_number);
+/// Signal waybar, performing an immediate /proc scan when no handle is cached
+/// instead of waiting for the rediscovery interval.
+///
+/// Returns `WaybarError.WaybarNotFound` if the forced scan finds no process.
+/// Signal delivery errors after a successful discovery are silently absorbed.
+pub fn updateOrRefresh(this: *Waybar) WaybarError!void {
+    if (this.process_handle) |h| {
+        h.sendRtSignal(this.signal_number) catch {
+            this.invalidate();
+            return this.forceRefresh();
         };
         return;
     }
-
-    try this.refresh();
-    const h = this.process_handle orelse return;
-    try h.sendRtSignal(this.config.signal_number);
+    return this.forceRefresh();
 }
 
-/// Force-search for the waybar process and reset the check counter.
-pub fn refresh(this: *Waybar) !void {
-    this.process_handle = try Process.findByName(this.io, "waybar");
-    this.check_counter = 0;
+/// Force an immediate /proc scan, update the cached handle, and send the signal.
+/// Returns `WaybarError.WaybarNotFound` if no waybar process is running.
+/// Signal delivery errors after discovery are absorbed (process may have just died again).
+pub fn refresh(this: *Waybar) WaybarError!void {
+    return this.forceRefresh();
 }
 
-/// Returns true if a cached waybar process handle exists.
-/// The process may have died since the last check.
+/// Returns true when a waybar process handle is cached.
+/// The process may have died since the last signal; use `tryUpdate` to confirm.
 pub inline fn isAvailable(this: *const Waybar) bool {
     return this.process_handle != null;
 }
 
-/// Returns the actual signal number (SIGRTMIN + signal_number).
+/// Returns the resolved kernel signal number (SIGRTMIN + signal_number).
 pub inline fn getActualSignal(this: *const Waybar) i32 {
-    return @intCast(linux.sigrtmin() + this.config.signal_number);
+    return linux.sigrtmin() + @as(i32, this.signal_number);
 }
 
-/// Update the signal number. Validates that the new value is in range.
-pub inline fn setSignalNumber(this: *Waybar, signal: u8) WaybarError!void {
-    if (!isValidSignal(signal)) return WaybarError.InvalidSignalNumber;
-    this.config.signal_number = signal;
+/// Change the signal offset at runtime. Validates the new value.
+pub inline fn setSignalNumber(this: *Waybar, sig: u8) WaybarError!void {
+    if (!isValidSignal(sig)) return WaybarError.InvalidSignalNumber;
+    this.signal_number = sig;
 }
 
-/// Force the next update call to attempt rediscovery.
+/// Make the next `update()` call trigger an immediate /proc scan.
 pub inline fn forceRediscovery(this: *Waybar) void {
-    this.check_counter = this.config.check_interval;
+    this.check_counter = this.check_interval;
 }
 
-/// Invalidate the cached process handle and reset the check counter.
-inline fn invalidateHandle(this: *Waybar) void {
+/// Returns true when `sig` is within the kernel's usable RT signal range.
+pub fn isValidSignal(sig: u8) bool {
+    return sig >= 1 and (linux.sigrtmin() + @as(i32, sig)) <= linux.sigrtmax();
+}
+
+/// Scan /proc for waybar, cache the result, and signal it.
+/// Clears check_counter regardless of outcome.
+fn forceRefresh(this: *Waybar) WaybarError!void {
+    this.check_counter = 0;
+    const found = Process.findByName(this.io, waybar_comm) catch null;
+    this.process_handle = found;
+    if (found) |h| h.sendRtSignal(this.signal_number) catch this.invalidate();
+}
+
+/// Tick the rediscovery counter; scan /proc once it reaches `check_interval`.
+/// Returns true when the signal was successfully sent after discovery.
+fn rediscover(this: *Waybar) bool {
+    this.check_counter += 1;
+    if (this.check_counter < this.check_interval) return false;
+
+    this.check_counter = 0;
+    const found = Process.findByName(this.io, waybar_comm) catch return false;
+    const h = found orelse return false;
+
+    this.process_handle = h;
+    h.sendRtSignal(this.signal_number) catch {
+        this.invalidate();
+        return false;
+    };
+    return true;
+}
+
+/// Drop the cached handle and reset the rediscovery counter.
+inline fn invalidate(this: *Waybar) void {
     this.process_handle = null;
     this.check_counter = 0;
 }
 
-/// Attempt periodic rediscovery. Returns true if the process was found and signaled.
-fn tryRediscover(this: *Waybar) bool {
-    this.check_counter += 1;
-    if (this.check_counter < this.config.check_interval) return false;
+// Tests
 
-    this.check_counter = 0;
-    const handle = Process.findByName(this.io, "waybar") catch return false;
+const testing = std.testing;
 
-    this.process_handle = handle;
-    handle.sendRtSignal(this.config.signal_number) catch return false;
-    return true;
+test "isValidSignal: zero is rejected" {
+    try testing.expect(!isValidSignal(0));
+}
+
+test "isValidSignal: one is accepted" {
+    try testing.expect(isValidSignal(1));
+}
+
+test "Config.validate: zero signal errors" {
+    const cfg: Config = .{ .signal_number = 0 };
+    try testing.expectError(WaybarError.InvalidSignalNumber, cfg.validate());
+}
+
+test "Config.validate: signal one passes" {
+    const cfg: Config = .{ .signal_number = 1 };
+    try cfg.validate();
+}
+
+test "all public symbols compile" {
+    _ = &init;
+    _ = &initLazy;
+    _ = &update;
+    _ = &tryUpdate;
+    _ = &updateOrRefresh;
+    _ = &refresh;
+    _ = &isAvailable;
+    _ = &getActualSignal;
+    _ = &setSignalNumber;
+    _ = &forceRediscovery;
+    _ = &isValidSignal;
 }

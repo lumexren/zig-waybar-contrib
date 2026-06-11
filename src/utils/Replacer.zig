@@ -185,7 +185,6 @@ pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
     // Strings (Slice or Array Ptr)
     const is_string = T == []const u8 or T == []u8 or (@typeInfo(T) == .pointer and @typeInfo(T).pointer.size != .slice);
     if (is_string) {
-        // Assume string-like
         const slice: []const u8 = value;
         try this.addKey(key, slice);
         return;
@@ -193,10 +192,8 @@ pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
 
     // Fallback: Format to string
     const str = try fmt.allocPrint(this.allocator, "{any}", .{value});
-    // addKey takes ownership of the string duplication, so we pass this temp string.
-    // However, addKey dupes it again. Ideally we optimized, but for safety lets rely on addKey behavior.
-    // Wait, addKey dupes, so we need to free `str` after.
     defer this.allocator.free(str);
+
     try this.addKey(key, str);
 }
 
@@ -281,12 +278,10 @@ fn formatBytes(w: anytype, bytes: i64, precision: usize) !void {
 
     if (bytes < 0) size = -size;
 
-    // Check if result is whole number after rounding
     const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
     const rounded = @round(size * multiplier) / multiplier;
-    const is_whole = @trunc(rounded) == rounded;
 
-    if (is_whole) {
+    if (@trunc(rounded) == rounded) {
         try w.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
     } else {
         try w.print("{d:.[1]}", .{ size, precision });
@@ -308,12 +303,10 @@ fn formatSpeed(w: anytype, bytes_per_sec: f64, precision: usize) !void {
 
     if (bytes_per_sec < 0) size = -size;
 
-    // Check if result is whole number after rounding
     const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
     const rounded = @round(size * multiplier) / multiplier;
-    const is_whole = @trunc(rounded) == rounded;
 
-    if (is_whole) {
+    if (@trunc(rounded) == rounded) {
         try w.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
     } else {
         try w.print("{d:.[1]}", .{ size, precision });
