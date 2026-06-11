@@ -70,6 +70,11 @@ jobs:
             git log "${PREVIOUS_TAG}..HEAD" --oneline --format="- %s (%h)" >> release_notes.md
           fi
 
+          if [[ -f .zigversion ]]; then
+            ZIG_VERSION=$(cat .zigversion | xargs)
+            echo -e "\n\n<sub>This release is based on $ZIG_VERSION</sub>" >> release_notes.md
+          fi
+
       - name: Package Builds
         id: package
         env:
