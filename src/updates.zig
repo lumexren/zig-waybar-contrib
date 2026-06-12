@@ -91,7 +91,7 @@ pub fn main(init: process.Init) !void {
 
         const total_updates: usize = if (updates) |u| u.len else 0;
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKey("err_icon", config.err_icon);
         try replacer.addKeyAny("total_updates", total_updates);

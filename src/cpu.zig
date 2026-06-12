@@ -84,7 +84,7 @@ pub fn main(init: process.Init) !void {
             if (core.frequency.max.value.raw > global_freq_max.value.raw) global_freq_max = core.frequency.max;
         }
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
 
         try replacer.addKeyAny("usage_percentage", @as(i64, @intFromFloat(@round(cpu.avg))));

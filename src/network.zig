@@ -78,7 +78,7 @@ pub fn main(init: process.Init) !void {
         const rates = sysinfo.NetworkStats.calculateRates(prev_stats, current_stats);
         prev_stats = current_stats;
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKey("interface", route.interface);
         try replacer.addKey("gateway", route.gateway);

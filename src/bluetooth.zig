@@ -122,7 +122,7 @@ pub fn main(init: process.Init) !void {
 
         const icon = if (adapter.powered) config.icon_on else config.icon_off;
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", icon);
         try replacer.addKey("adapter_name", adapter.name orelse "Unknown");
         try replacer.addKeyAny("adapter_powered", adapter.powered);

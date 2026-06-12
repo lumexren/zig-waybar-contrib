@@ -113,7 +113,7 @@ pub fn main(init: process.Init) !void {
         max_latency = @max(max_latency, latency);
         const avg_latency = @divTrunc(total_latency, ping_count);
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKey("target", config.target_domain);
         try replacer.addKey("ip", resolved.?);

@@ -76,7 +76,7 @@ pub fn main(init: process.Init) !void {
             continue;
         };
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKey("path", config.path);
         try replacer.addKeyAny("total", data.total);

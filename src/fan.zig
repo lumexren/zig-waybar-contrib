@@ -69,7 +69,7 @@ pub fn main(init: process.Init) !void {
 
         try sysinfo.scanHwmonFans(io, gpa, &fans, "/sys/class/hwmon");
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKeyAny("total_fans", fans.items.len);
 

@@ -130,7 +130,7 @@ pub fn main(init: process.Init) !void {
         else
             "N/A";
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", icon);
         try replacer.addKeyAny("percentage", percentage);
         try replacer.addKey("state", state_str);

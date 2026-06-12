@@ -82,7 +82,7 @@ pub fn main(init: process.Init) !void {
             }
         }
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKeyAny("total_usage", memory.physical.used + memory.swap.used);
 

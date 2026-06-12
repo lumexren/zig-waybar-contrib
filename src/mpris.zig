@@ -70,7 +70,7 @@ pub fn main(init: process.Init) !void {
         defer json.clear();
         defer replacer.clear();
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
 
         const player_info = mpris.getActivePlayer(gpa) catch |err| {
             switch (err) {

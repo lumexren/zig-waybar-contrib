@@ -70,7 +70,7 @@ pub fn main(init: process.Init) !void {
 
         const gpu_info: sysinfo.GPUInfo = try module.getInfo();
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKeyAny("usage_percentage", gpu_info.gpu_busy);
         try replacer.addKeyAny("temperature", gpu_info.temperature);

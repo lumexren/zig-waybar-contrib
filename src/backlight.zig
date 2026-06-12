@@ -76,7 +76,7 @@ pub fn main(init: process.Init) !void {
 
         defer @constCast(&backlight).deinit(gpa);
 
-        try Output.addCommonPlaceholders(&replacer);
+        try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKeyAny("percentage", backlight.percentage);
         try replacer.addKeyAny("brightness", backlight.brightness);

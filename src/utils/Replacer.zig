@@ -30,19 +30,6 @@ const math = std.math;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
-/// Memory allocator used for all internal allocations.
-allocator: Allocator,
-/// Typed values available for templating. Keys and string values are
-/// duplicated and owned by this allocator.
-values: StringHashMap(Value),
-/// Legacy byte-sequence replacement rules applied after template processing.
-replacements: ArrayList(Replacement) = .empty,
-/// List for tracking strings produced and returned by render().
-rendered_strings: ArrayList([]const u8) = .empty,
-/// When true, render() returns PlaceholderNotFound for missing keys.
-/// When false (default), unmatched placeholders are passed through unchanged.
-strict: bool = false,
-
 pub const ReplacerError = error{
     PlaceholderNotFound,
 };
@@ -64,6 +51,55 @@ const Replacement = struct {
     /// Whether the strings are owned and need to be freed.
     owned: bool,
 };
+
+/// Represents measurement sizing metrics for data values.
+pub const Units = enum {
+    binary,
+    decimal,
+
+    /// Returns the multiplication base factor for the selected system.
+    pub fn base(this: @This()) f64 {
+        return switch (this) {
+            .binary => 1024.0,
+            .decimal => 1000.0,
+        };
+    }
+
+    /// Returns the static byte unit suffixes (B to PiB/PB)
+    pub fn byteUnits(this: @This()) []const []const u8 {
+        const binary_units = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB", "PiB" };
+        const decimal_units = [_][]const u8{ "B", "KB", "MB", "GB", "TB", "PB" };
+
+        return switch (this) {
+            .binary => &binary_units,
+            .decimal => &decimal_units,
+        };
+    }
+
+    /// Returns the associated transfer speed suffixes array for the system (B/s to PiB/s / PB/s).
+    pub fn speedUnits(this: @This()) []const []const u8 {
+        const binary_units = [_][]const u8{ "B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s", "PiB/s" };
+        const decimal_units = [_][]const u8{ "B/s", "KB/s", "MB/s", "GB/s", "TB/s", "PB/s" };
+
+        return switch (this) {
+            .binary => &binary_units,
+            .decimal => &decimal_units,
+        };
+    }
+};
+
+/// Memory allocator used for all internal allocations.
+allocator: Allocator,
+/// Typed values available for templating. Keys and string values are
+/// duplicated and owned by this allocator.
+values: StringHashMap(Value),
+/// Legacy byte-sequence replacement rules applied after template processing.
+replacements: ArrayList(Replacement) = .empty,
+/// List for tracking strings produced and returned by render().
+rendered_strings: ArrayList([]const u8) = .empty,
+/// When true, render() returns PlaceholderNotFound for missing keys.
+/// When false (default), unmatched placeholders are passed through unchanged.
+strict: bool = false,
 
 pub inline fn init(allocator: Allocator) Replacer {
     return .{ .allocator = allocator, .values = .init(allocator) };
@@ -267,59 +303,58 @@ pub fn render(this: *Replacer, template: []const u8) ![]u8 {
     return out;
 }
 
-/// Formats a byte count with an appropriate unit suffix (B, KiB, MiB, …).
-fn formatBytes(w: anytype, bytes: i64, precision: usize) !void {
-    const units = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB" };
-    var size: f64 = @floatFromInt(if (bytes < 0) -bytes else bytes);
+/// Adds common placeholders that are available across all modules.
+///
+/// This includes:
+/// - `{newline}` `{nl}` → literal newline character
+/// - `{tab}` → literal tab character
+/// - `{dot}` → literal dot character
+/// - `{pipe}` → literal pipe character
+pub inline fn addCommonPlaceholders(this: *Replacer) !void {
+    try this.add("{newline}", "\n");
+    try this.add("{nl}", "\n");
+    try this.add("{tab}", "\t");
+    try this.add("{dot}", "·");
+    try this.add("{pipe}", "|");
+}
+
+/// Formats a static byte count using binary (1024-based) units by default.
+pub fn formatBytes(writer: *Writer, bytes: i64, precision: usize, system: Units) !void {
+    try formatValue(writer, @floatFromInt(bytes), precision, system.base(), system.byteUnits());
+}
+
+/// Formats a data transfer speed using a configurable unit system.
+pub fn formatSpeed(writer: *Writer, bytes_per_sec: f64, precision: usize, system: Units) !void {
+    try formatValue(writer, bytes_per_sec, precision, system.base(), system.speedUnits());
+}
+
+/// Shared internal formatting engine that handles scaling calculations, rounding, and terminal output.
+fn formatValue(writer: *Writer, value: f64, precision: usize, base: f64, units: []const []const u8) !void {
+    var size: f64 = @abs(value);
     var unit_idx: usize = 0;
 
-    while (size >= 1024.0 and unit_idx < units.len - 1) {
-        size /= 1024.0;
+    while (size >= base and unit_idx < units.len - 1) {
+        size /= base;
         unit_idx += 1;
     }
 
-    if (bytes < 0) size = -size;
+    if (value < 0) size = -size;
 
     const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
     const rounded = @round(size * multiplier) / multiplier;
 
     if (@trunc(rounded) == rounded) {
-        try w.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
+        try writer.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
     } else {
-        try w.print("{d:.[1]}", .{ size, precision });
-        try w.writeAll(units[unit_idx]);
+        try writer.print("{d:.[1]}", .{ size, precision });
+        try writer.writeAll(units[unit_idx]);
     }
 }
 
-/// Formats a byte-per-second value with appropriate unit suffix (B/s, KB/s, etc.).
-/// Handles negative values and configurable decimal precision.
-fn formatSpeed(w: anytype, bytes_per_sec: f64, precision: usize) !void {
-    const units = [_][]const u8{ "B/s", "KB/s", "MB/s", "GB/s", "TB/s" };
-    var size: f64 = if (bytes_per_sec < 0) -bytes_per_sec else bytes_per_sec;
-    var unit_idx: usize = 0;
-
-    while (size >= 1024.0 and unit_idx < units.len - 1) {
-        size /= 1024.0;
-        unit_idx += 1;
-    }
-
-    if (bytes_per_sec < 0) size = -size;
-
-    const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
-    const rounded = @round(size * multiplier) / multiplier;
-
-    if (@trunc(rounded) == rounded) {
-        try w.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
-    } else {
-        try w.print("{d:.[1]}", .{ size, precision });
-        try w.writeAll(units[unit_idx]);
-    }
-}
-
-/// Renders a Value to the output writer with optional format specifier.
+/// Renders a Value to the output arraylist via structural writers with optional formatting specifiers.
 /// Format specifiers:
 ///   - `.N` for integers: format as bytes with N decimal precision
-///   - `^N` for floats: format as speed with N decimal precision
+///   - `^N` for floats: format as speed with N decimal precision (defaults to decimal system rules)
 ///   - `N` for width: zero-padded integers
 ///   - bare number: decimal precision for floats
 fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: ?[]const u8) !void {
@@ -337,7 +372,7 @@ fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: 
 
             if (spec.len > 0 and spec[0] == '.') {
                 const precision = fmt.parseInt(usize, spec[1..], 10) catch 2;
-                try formatBytes(w, d, precision);
+                try formatBytes(w, d, precision, .binary);
             } else if (fmt.parseInt(usize, spec, 10)) |width| {
                 if (d >= 0) {
                     try w.print("{d:0>[1]}", .{ @as(u64, @intCast(d)), width });
@@ -354,7 +389,7 @@ fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: 
 
             if (spec.len > 0 and spec[0] == '^') {
                 const precision = fmt.parseInt(usize, spec[1..], 10) catch 1;
-                try formatSpeed(w, f, precision);
+                try formatSpeed(w, f, precision, .decimal);
             } else if (fmt.parseInt(usize, spec, 10)) |precision| {
                 const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
                 const rounded = @round(f * multiplier) / multiplier;
