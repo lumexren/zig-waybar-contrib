@@ -33,18 +33,18 @@ const ModuleConfig = struct {
 };
 
 const modules = [_]ModuleConfig{
-    .{ .name = "cpu", .path = "src/cpu.zig" },
-    .{ .name = "updates", .path = "src/updates.zig" },
-    .{ .name = "memory", .path = "src/memory.zig" },
-    .{ .name = "network", .path = "src/network.zig" },
-    .{ .name = "ping", .path = "src/ping.zig" },
-    .{ .name = "fan", .path = "src/fan.zig" },
-    .{ .name = "gpu", .path = "src/gpu.zig", .libc = true },
-    .{ .name = "disk", .path = "src/disk.zig", .libc = true },
-    .{ .name = "mpris", .path = "src/mpris.zig", .libc = true, .dbus = true },
-    .{ .name = "battery", .path = "src/battery.zig", .libc = true, .dbus = true },
-    .{ .name = "backlight", .path = "src/backlight.zig" },
-    .{ .name = "bluetooth", .path = "src/bluetooth.zig", .libc = true, .dbus = true },
+    .{ .name = "cpu", .path = "src/modules/cpu.zig" },
+    .{ .name = "updates", .path = "src/modules/updates.zig" },
+    .{ .name = "memory", .path = "src/modules/memory.zig" },
+    .{ .name = "network", .path = "src/modules/network.zig" },
+    .{ .name = "ping", .path = "src/modules/ping.zig" },
+    .{ .name = "fan", .path = "src/modules/fan.zig" },
+    .{ .name = "gpu", .path = "src/modules/gpu.zig", .libc = true },
+    .{ .name = "disk", .path = "src/modules/disk.zig", .libc = true },
+    .{ .name = "mpris", .path = "src/modules/mpris.zig", .libc = true, .dbus = true },
+    .{ .name = "battery", .path = "src/modules/battery.zig", .libc = true, .dbus = true },
+    .{ .name = "backlight", .path = "src/modules/backlight.zig" },
+    .{ .name = "bluetooth", .path = "src/modules/bluetooth.zig", .libc = true, .dbus = true },
 };
 
 pub fn build(b: *Build) void {
