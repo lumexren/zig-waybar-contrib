@@ -17,7 +17,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const sysinfo = @import("sysinfo").backlight;
+const Backlight = @import("sysinfo").Backlight;
+
+const plume = @import("plume");
+const Connection = plume.Connection;
 
 const std = @import("std");
 const utils = @import("utils");
@@ -57,31 +60,37 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    defer connection.close();
+
+    var backlight: Backlight = try .init(io, gpa, &connection);
+    defer backlight.deinit();
+
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const backlight = sysinfo.getDefaultBacklight(io, gpa) catch |err| {
+        var info = backlight.getDefaultBacklight() catch |err| {
             try json.set("text", @as([]const u8, "No backlight"));
             try json.set("tooltip", @as([]const u8, "No backlight detected"));
             try json.write(stdout);
             try stdout.flush();
             try waybar.updateOrRefresh();
 
-            if (err == sysinfo.BacklightError.NotFound) continue;
+            if (err == error.NotFound) continue;
             return err;
         };
 
-        defer @constCast(&backlight).deinit(gpa);
+        defer info.deinit(gpa);
 
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
-        try replacer.addKeyAny("percentage", backlight.percentage);
-        try replacer.addKeyAny("brightness", backlight.brightness);
-        try replacer.addKeyAny("max_brightness", backlight.max_brightness);
-        try replacer.addKey("name", backlight.name);
+        try replacer.addKeyAny("percentage", info.percentage);
+        try replacer.addKeyAny("brightness", info.brightness);
+        try replacer.addKeyAny("max_brightness", info.max_brightness);
+        try replacer.addKey("name", info.name);
 
         const text_line = try replacer.render(config.text);
         try json.set("text", text_line);
@@ -89,7 +98,7 @@ pub fn main(init: process.Init) !void {
         const tooltip_line = try replacer.render(config.tooltip);
         try json.set("tooltip", tooltip_line);
 
-        try json.set("percentage", backlight.percentage);
+        try json.set("percentage", info.percentage);
 
         try json.write(stdout);
         try stdout.flush();

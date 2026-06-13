@@ -65,6 +65,10 @@ pub fn build(b: *Build) void {
 
     const build_options = options.createModule();
 
+    const plume = b.dependency("plume", .{
+        .target = target,
+    });
+
     const bindings = b.addModule("bindings", .{
         .root_source_file = b.path("src/bindings/root.zig"),
         .target = target,
@@ -86,6 +90,7 @@ pub fn build(b: *Build) void {
             .{ .name = "bindings", .module = bindings },
             .{ .name = "utils", .module = utils_mod },
             .{ .name = "build_options", .module = build_options },
+            .{ .name = "plume", .module = plume.module("plume") },
         },
     });
 
@@ -107,6 +112,7 @@ pub fn build(b: *Build) void {
                 .{ .name = "sysinfo", .module = sysinfo_mod },
                 .{ .name = "utils", .module = utils_mod },
                 .{ .name = "build_options", .module = build_options },
+                .{ .name = "plume", .module = plume.module("plume") },
             },
         });
 

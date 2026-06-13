@@ -16,8 +16,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
+// SPDX-License-Identifier: GPL-3.0-only
 
-const dbus = @import("bindings").dbus;
+const Backlight = @This();
+
+const plume = @import("plume");
+const Connection = plume.Connection;
+const Proxy = plume.Proxy;
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
@@ -48,112 +53,126 @@ pub const BacklightInfo = struct {
     }
 };
 
-pub fn getBacklights(io: Io, allocator: Allocator) ![]BacklightInfo {
+io: Io,
+allocator: Allocator,
+connection: *Connection,
+proxy: Proxy,
+
+/// Initializes the Backlight module.
+/// Requires a Connection to the system bus to communicate with logind via D-Bus.
+pub inline fn init(io: Io, allocator: Allocator, connection: *Connection) !Backlight {
+    return .{
+        .io = io,
+        .allocator = allocator,
+        .connection = connection,
+        .proxy = .init(connection, "org.freedesktop.login1", "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session"),
+    };
+}
+
+/// Safely cleans up the Backlight module's state and D-Bus proxy.
+pub fn deinit(this: *Backlight) void {
+    this.* = undefined;
+}
+
+/// Returns a slice of discovered backlights. The caller owns the slice and the memory of its items.
+pub fn getBacklights(this: *Backlight) ![]BacklightInfo {
     var backlights: ArrayList(BacklightInfo) = .empty;
     errdefer {
-        for (backlights.items) |*b| b.deinit(allocator);
-        backlights.deinit(allocator);
+        for (backlights.items) |*b| b.deinit(this.allocator);
+        backlights.deinit(this.allocator);
     }
 
-    var dir = Dir.openDirAbsolute(io, BACKLIGHT_PATH, .{ .iterate = true }) catch
-        return backlights.toOwnedSlice(allocator);
-    defer dir.close(io);
+    var dir = Dir.openDirAbsolute(this.io, BACKLIGHT_PATH, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => return backlights.toOwnedSlice(this.allocator),
+        else => return err,
+    };
+    defer dir.close(this.io);
 
     var it = dir.iterate();
-    while (try it.next(io)) |entry| {
+    while (try it.next(this.io)) |entry| {
         if (entry.kind != .directory and entry.kind != .sym_link) continue;
 
-        const backlight = readBacklightInfo(io, allocator, dir, entry.name) catch continue;
-        try backlights.append(allocator, backlight);
+        const backlight = this.readBacklightInfo(dir, entry.name) catch continue;
+        try backlights.append(this.allocator, backlight);
     }
 
-    return backlights.toOwnedSlice(allocator);
+    return backlights.toOwnedSlice(this.allocator);
 }
 
-pub fn getBacklight(io: Io, allocator: Allocator, name: []const u8) !BacklightInfo {
-    var dir = try Dir.openDirAbsolute(io, BACKLIGHT_PATH, .{});
-    defer dir.close(io);
+pub fn getBacklight(this: *Backlight, name: []const u8) !BacklightInfo {
+    var dir = try Dir.openDirAbsolute(this.io, BACKLIGHT_PATH, .{});
+    defer dir.close(this.io);
 
-    return readBacklightInfo(io, allocator, dir, name);
+    return this.readBacklightInfo(dir, name);
 }
 
-pub fn getDefaultBacklight(io: Io, allocator: Allocator) !BacklightInfo {
-    const backlights = try getBacklights(io, allocator);
+pub fn getDefaultBacklight(this: *Backlight) !BacklightInfo {
+    const backlights = try this.getBacklights();
 
     if (backlights.len == 0) {
-        allocator.free(backlights);
+        this.allocator.free(backlights);
         return BacklightError.NotFound;
     }
 
     defer {
         if (backlights.len > 1) {
-            for (backlights[1..]) |*b| @constCast(b).deinit(allocator);
+            for (backlights[1..]) |*b| b.deinit(this.allocator);
         }
-
-        allocator.free(backlights);
+        this.allocator.free(backlights);
     }
 
     return backlights[0];
 }
 
-fn readBacklightInfo(io: Io, allocator: Allocator, parent_dir: Dir, name: []const u8) !BacklightInfo {
-    var dir = try parent_dir.openDir(io, name, .{});
-    defer dir.close(io);
+fn readBacklightInfo(this: *Backlight, parent_dir: Dir, name: []const u8) !BacklightInfo {
+    var dir = try parent_dir.openDir(this.io, name, .{});
+    defer dir.close(this.io);
 
-    const brightness = try readFileU32(io, dir, "brightness");
-    const max_brightness = try readFileU32(io, dir, "max_brightness");
+    const brightness = try readFileU32(this.io, dir, "brightness");
+    const max_brightness = try readFileU32(this.io, dir, "max_brightness");
 
     const percentage: u8 = if (max_brightness > 0)
-        @intCast(@min(brightness * 100 / max_brightness, 100))
+        @intCast(@min(@as(u64, brightness) * 100 / max_brightness, 100))
     else
         0;
 
     return .{
-        .name = try allocator.dupe(u8, name),
+        .name = try this.allocator.dupe(u8, name),
         .brightness = brightness,
         .max_brightness = max_brightness,
         .percentage = percentage,
     };
 }
 
-pub fn setBrightness(io: Io, name: []const u8, value: u32) !void {
-    var path_buf: [256]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "{s}/{s}/brightness", .{ BACKLIGHT_PATH, name });
-
-    var file = try Dir.openFileAbsolute(io, path, .{ .mode = .write_only });
-    defer file.close(io);
-
-    var buf: [16]u8 = undefined;
-    const data = try fmt.bufPrint(&buf, "{d}", .{value});
-    _ = try file.writeStreaming(io, &.{data});
+/// Sets the absolute brightness value via systemd logind D-Bus interface.
+pub fn setBrightness(this: *Backlight, name: []const u8, value: u32) !void {
+    _ = try this.proxy.call("SetBrightness", .{ "backlight", name, value });
 }
 
-pub fn setBrightnessPercent(io: Io, allocator: Allocator, name: []const u8, percent: u8) !void {
-    var dir = try Dir.openDirAbsolute(io, BACKLIGHT_PATH, .{});
-    defer dir.close(io);
-
-    const info = try readBacklightInfo(io, allocator, dir, name);
-    defer @constCast(&info).deinit(allocator);
+pub fn setBrightnessPercent(this: *Backlight, name: []const u8, percent: u8) !void {
+    var info = try this.getBacklight(name);
+    defer info.deinit(this.allocator);
 
     const clamped: u32 = @min(percent, 100);
-    const value = info.max_brightness * clamped / 100;
-    try setBrightness(io, name, value);
+    const value: u32 = @intCast(@as(u64, info.max_brightness) * clamped / 100);
+
+    try this.setBrightness(name, value);
 }
 
-pub fn increaseBrightness(io: Io, allocator: Allocator, name: []const u8, step: u8) !void {
-    const info = try getBacklight(io, allocator, name);
-    defer @constCast(&info).deinit(allocator);
+pub fn increaseBrightness(this: *Backlight, name: []const u8, step: u8) !void {
+    var info = try this.getBacklight(name);
+    defer info.deinit(this.allocator);
 
-    const new_percent = @min(info.percentage + step, 100);
-    try setBrightnessPercent(io, allocator, name, new_percent);
+    const new_percent = info.percentage +| step;
+    try this.setBrightnessPercent(name, @min(new_percent, 100));
 }
 
-pub fn decreaseBrightness(io: Io, allocator: Allocator, name: []const u8, step: u8) !void {
-    const info = try getBacklight(io, allocator, name);
-    defer @constCast(&info).deinit(allocator);
+pub fn decreaseBrightness(this: *Backlight, name: []const u8, step: u8) !void {
+    var info = try this.getBacklight(name);
+    defer info.deinit(this.allocator);
 
     const new_percent = info.percentage -| step;
-    try setBrightnessPercent(io, allocator, name, new_percent);
+    try this.setBrightnessPercent(name, new_percent);
 }
 
 fn readFileU32(io: Io, dir: Dir, filename: []const u8) !u32 {
@@ -182,33 +201,13 @@ test "BacklightInfo.deinit" {
     mutable.deinit(testing.allocator);
 }
 
-test "getBacklights - no crash on missing path" {
-    var threaded: Io.Threaded = .init_single_threaded;
-    const io = threaded.io();
-
-    const backlights = getBacklights(io, testing.allocator) catch |err| {
-        if (err == error.FileNotFound) return;
-        return err;
-    };
-    defer {
-        for (backlights) |*b| @constCast(b).deinit(testing.allocator);
-        testing.allocator.free(backlights);
-    }
-
-    // All backlights should have valid percentages
-    for (backlights) |b| {
-        try testing.expect(b.percentage <= 100);
-        try testing.expect(b.brightness <= b.max_brightness);
-    }
-}
-
 test "percentage calculation" {
     // 50/100 = 50%
-    try testing.expectEqual(@as(u8, 50), @as(u8, @intCast(@min(@as(u32, 50) * 100 / @as(u32, 100), 100))));
+    try testing.expectEqual(@as(u8, 50), @as(u8, @intCast(@min(@as(u64, 50) * 100 / @as(u64, 100), 100))));
 
     // 255/255 = 100%
-    try testing.expectEqual(@as(u8, 100), @as(u8, @intCast(@min(@as(u32, 255) * 100 / @as(u32, 255), 100))));
+    try testing.expectEqual(@as(u8, 100), @as(u8, @intCast(@min(@as(u64, 255) * 100 / @as(u64, 255), 100))));
 
     // 0/100 = 0%
-    try testing.expectEqual(@as(u8, 0), @as(u8, @intCast(@min(@as(u32, 0) * 100 / @as(u32, 100), 100))));
+    try testing.expectEqual(@as(u8, 0), @as(u8, @intCast(@min(@as(u64, 0) * 100 / @as(u64, 100), 100))));
 }

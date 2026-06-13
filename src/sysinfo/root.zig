@@ -26,5 +26,5 @@ pub const Updates = @import("updates.zig");
 pub const gpu = @import("gpu/gpu.zig").SMI;
 pub const mpris = @import("mpris.zig");
 pub const battery = @import("battery.zig");
-pub const backlight = @import("backlight.zig");
+pub const Backlight = @import("backlight.zig");
 pub const bluetooth = @import("bluetooth.zig");
