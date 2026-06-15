@@ -106,7 +106,6 @@ pub fn build(b: *Build) void {
             .target = target,
             .optimize = optimize,
             .link_libc = cfg.libc,
-            .link_libcpp = cfg.libc,
             .imports = &.{
                 .{ .name = "bindings", .module = bindings },
                 .{ .name = "sysinfo", .module = sysinfo_mod },
