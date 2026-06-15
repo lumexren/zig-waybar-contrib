@@ -347,15 +347,13 @@ pub fn readAll(io: Io, allocator: Allocator, file: File) ![]u8 {
 pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name: []const u8) !?[]u8 {
     const path_value = environ_map.get("PATH") orelse return null;
 
-    // fs.max_path_bytes on Linux is PATH_MAX (4096); putting this on the stack
-    // is intentional — it is a one-time frame allocation for the search loop.
-    var path_buf: [fs.max_path_bytes]u8 = undefined;
     var it = mem.splitScalar(u8, path_value, ':');
 
     while (it.next()) |dir| {
         if (dir.len == 0) continue;
 
-        const full_path = fmt.bufPrint(&path_buf, "{s}/{s}", .{ dir, exe_name }) catch continue;
+        const full_path = fmt.allocPrint(allocator, "{s}/{s}", .{ dir, exe_name }) catch continue;
+        defer allocator.free(full_path);
 
         if (Dir.accessAbsolute(io, full_path, .{ .execute = true })) {
             return try allocator.dupe(u8, full_path);
