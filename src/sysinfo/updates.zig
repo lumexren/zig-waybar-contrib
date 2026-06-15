@@ -16,7 +16,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
-
 const Updates = @This();
 
 const std = @import("std");
@@ -24,7 +23,7 @@ const uProcess = @import("utils").Process;
 const findExecutable = uProcess.findExecutable;
 
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Io = std.Io;
 const Dir = Io.Dir;
 const ascii = std.ascii;
@@ -37,18 +36,19 @@ const Child = process.Child;
 const Environ = process.Environ;
 const Map = Environ.Map;
 
-pub const MAX_PKG_NAME = 255;
-pub const MAX_VERSION_LENGTH = 50;
-
 const DEFAULT_PACMAN_DB = "/var/lib/pacman/";
-const WHITESPACE = &ascii.whitespace;
 
 pub const UpdatesError = error{
     CannotFetchUpdates,
     NoSupportedManager,
 };
 
-pub const Managers = enum {
+pub const UpdateInfo = struct {
+    pkg_name: []const u8,
+    new_version: []const u8,
+};
+
+pub const PackageManager = enum {
     apt,
     pacman,
     dnf,
@@ -58,49 +58,166 @@ pub const Managers = enum {
     pub fn name(this: @This()) []const u8 {
         return @tagName(this);
     }
-};
 
-pub const UpdateInfo = struct {
-    pkg_name: [MAX_PKG_NAME]u8,
-    new_version: [MAX_VERSION_LENGTH + 1]u8,
+    /// Populates a provided scratch buffer to avoid dynamic allocation for argv.
+    pub fn buildArgv(this: @This(), buffer: *[4][]const u8, pacman_db: ?[]const u8) []const []const u8 {
+        switch (this) {
+            .apt => {
+                buffer[0..3].* = .{ "apt", "list", "--upgradable" };
+                return buffer[0..3];
+            },
+            .dnf => {
+                buffer[0..4].* = .{ "dnf", "check-upgrade", "--refresh", "-yq" };
+                return buffer[0..4];
+            },
+            .pacman => {
+                if (pacman_db) |db| {
+                    buffer[0..4].* = .{ "pacman", "-Qu", "--dbpath", db };
+                    return buffer[0..4];
+                }
+                buffer[0..2].* = .{ "pacman", "-Qu" };
+                return buffer[0..2];
+            },
+            .zypper => {
+                buffer[0..3].* = .{ "zypper", "--non-interactive", "lu" };
+                return buffer[0..3];
+            },
+            .xbps => {
+                buffer[0..4].* = .{ "xbps-install", "--dry-run", "--sync", "--update" };
+                return buffer[0..4];
+            },
+        }
+    }
+
+    /// Parses a single line of package manager output, returning an UpdateInfo
+    /// containing slices that point directly to the original line buffer.
+    pub fn parseLine(this: @This(), line: []const u8) ?UpdateInfo {
+        const trimmed = mem.trim(u8, line, &ascii.whitespace);
+        if (trimmed.len == 0) return null;
+
+        var pkg_name: []const u8 = "";
+        var new_version: []const u8 = "";
+
+        switch (this) {
+            .apt => {
+                const slash_idx = mem.findScalar(u8, trimmed, '/') orelse return null;
+                pkg_name = trimmed[0..slash_idx];
+
+                var parts_iter = mem.splitScalar(u8, trimmed, ' ');
+                _ = parts_iter.next() orelse return null;
+                new_version = parts_iter.next() orelse return null;
+            },
+            .dnf => {
+                var parts = mem.tokenizeAny(u8, trimmed, " \t");
+                const pkg_name_full = parts.next() orelse return null;
+                new_version = parts.next() orelse return null;
+
+                const dot_idx = mem.findScalarLast(u8, pkg_name_full, '.') orelse pkg_name_full.len;
+                pkg_name = pkg_name_full[0..dot_idx];
+            },
+            .pacman => {
+                const arrow_idx = mem.indexOf(u8, trimmed, "->") orelse return null;
+                const left_part = mem.trim(u8, trimmed[0..arrow_idx], &ascii.whitespace);
+                new_version = mem.trim(u8, trimmed[arrow_idx + 2 ..], &ascii.whitespace);
+
+                const last_space = mem.findScalarLast(u8, left_part, ' ') orelse return null;
+                pkg_name = left_part[0..last_space];
+            },
+            .zypper => {
+                if (trimmed[0] == '-' or ascii.startsWithIgnoreCase(trimmed, "S |")) return null;
+
+                var parts_iter = mem.splitScalar(u8, trimmed, '|');
+                _ = parts_iter.next(); // S
+                _ = parts_iter.next(); // Repository
+                const name_raw = parts_iter.next() orelse return null;
+                _ = parts_iter.next() orelse return null; // Current Version
+                const available_raw = parts_iter.next() orelse return null;
+
+                pkg_name = mem.trim(u8, name_raw, &ascii.whitespace);
+                new_version = mem.trim(u8, available_raw, &ascii.whitespace);
+            },
+            .xbps => {
+                var it = mem.tokenizeAny(u8, trimmed, " \t");
+                const first = it.next() orelse return null;
+                const second = it.next() orelse return null;
+
+                if (!mem.eql(u8, second, "update")) return null;
+
+                const hyphen_idx = mem.findScalarLast(u8, first, '-') orelse return null;
+                const raw_name = first[0..hyphen_idx];
+                const old_version = mem.trim(u8, first[hyphen_idx + 1 ..], &ascii.whitespace);
+
+                pkg_name = mem.trim(u8, raw_name, &ascii.whitespace);
+
+                if (it.next()) |candidate| {
+                    new_version = if (ascii.isDigit(candidate[0])) candidate else old_version;
+                } else {
+                    new_version = old_version;
+                }
+            },
+        }
+
+        if (pkg_name.len == 0 or new_version.len == 0) return null;
+
+        return .{ .pkg_name = pkg_name, .new_version = new_version };
+    }
 };
 
 io: Io,
 environ_map: *Map,
 allocator: Allocator,
+manager: PackageManager,
+updates: ArrayListUnmanaged(UpdateInfo) = .empty,
+raw_output: ?[]u8 = null,
+count: usize = 0,
 
-pub inline fn init(io: Io, environ_map: *Map, allocator: Allocator) Updates {
-    return .{ .io = io, .environ_map = environ_map, .allocator = allocator };
+pub inline fn init(io: Io, environ_map: *Map, allocator: Allocator, manager: PackageManager) Updates {
+    return .{ .io = io, .environ_map = environ_map, .allocator = allocator, .manager = manager };
+}
+
+pub fn deinit(this: *Updates) void {
+    this.updates.deinit(this.allocator);
+    if (this.raw_output) |out| this.allocator.free(out);
+}
+
+pub fn clear(this: *Updates) void {
+    this.updates.clearRetainingCapacity();
 }
 
 /// Detects and returns the first available package manager.
-pub fn getManager(this: Updates) !Managers {
-    inline for (meta.tags(Managers)) |manager| {
-        if (try findExecutable(this.io, this.environ_map, this.allocator, manager.name())) |path| {
-            this.allocator.free(path);
+pub fn getManager(io: Io, environ_map: *Map, allocator: Allocator) !PackageManager {
+    inline for (meta.tags(PackageManager)) |manager| {
+        if (try findExecutable(io, environ_map, allocator, manager.name())) |path| {
+            allocator.free(path);
             return manager;
         }
     }
-
     return UpdatesError.NoSupportedManager;
 }
 
-/// Checks for updates and returns parsed update info, or null if none available.
-pub fn checkUpdates(this: Updates, manager: Managers) !?[]UpdateInfo {
-    const output = try this.fetchUpdates(manager);
-    defer this.allocator.free(output);
+/// Checks for updates
+pub fn check(this: *Updates) !void {
+    if (this.raw_output) |out| {
+        this.allocator.free(out);
+        this.raw_output = null;
+    }
 
-    if (output.len == 0) return null;
-    return try parseUpdates(this.allocator, manager, output);
+    const output = try this.fetchUpdates();
+    if (output.len == 0) {
+        this.allocator.free(output);
+        this.count = 0;
+        return;
+    }
+
+    this.raw_output = output;
+    try this.parseUpdates(output);
+    this.count = this.updates.items.len;
 }
 
-/// Parses raw command output into structured update information.
-pub fn parseUpdates(allocator: Allocator, manager: Managers, output: []const u8) ![]UpdateInfo {
-    var updates: ArrayList(UpdateInfo) = .empty;
-    errdefer updates.deinit(allocator);
-
+/// Parses raw command output and appends results.
+pub fn parseUpdates(this: *Updates, output: []const u8) !void {
     var lines = mem.splitScalar(u8, output, '\n');
-    var skip_count: usize = if (manager == .zypper) 2 else 0;
+    var skip_count: usize = if (this.manager == .zypper) 2 else 0;
 
     while (lines.next()) |line| {
         if (skip_count > 0) {
@@ -109,56 +226,41 @@ pub fn parseUpdates(allocator: Allocator, manager: Managers, output: []const u8)
         }
 
         if (line.len == 0) continue;
-        if (manager == .dnf and ascii.startsWithIgnoreCase(line, "Obsoleting packages")) break;
+        if (this.manager == .dnf and ascii.startsWithIgnoreCase(line, "Obsoleting packages")) break;
 
-        var tmp_info: UpdateInfo = undefined;
-        if (parseLine(manager, line, &tmp_info)) try updates.append(allocator, tmp_info);
+        if (this.manager.parseLine(line)) |info| {
+            try this.updates.append(this.allocator, info);
+        }
     }
-
-    return updates.toOwnedSlice(allocator);
 }
 
-fn fetchUpdates(this: Updates, manager: Managers) ![]u8 {
+fn fetchUpdates(this: Updates) ![]u8 {
     var pacman_db: ?[]u8 = null;
     defer if (pacman_db) |db| this.allocator.free(db);
-    if (manager == .pacman) pacman_db = try this.setupPacmanDatabase();
 
-    const argv: []const []const u8 = switch (manager) {
-        .apt => &.{ "apt", "list", "--upgradable" },
-        .dnf => &.{ "dnf", "check-upgrade", "--refresh", "-yq" },
-        .pacman => &.{ "pacman", "-Qu", "--dbpath", pacman_db.? },
-        .zypper => &.{ "zypper", "--non-interactive", "lu" },
-        .xbps => &.{ "xbps-install", "--dry-run", "--sync", "--update" },
-    };
+    if (this.manager == .pacman) pacman_db = try this.setupPacmanDatabase();
 
-    var child = try process.spawn(this.io, .{ .argv = argv, .stdout = .pipe, .stderr = .pipe });
+    var arg_buffer: [4][]const u8 = undefined;
+    const child_argv = this.manager.buildArgv(&arg_buffer, pacman_db);
+
+    var child = try process.spawn(this.io, .{ .argv = child_argv, .stdout = .pipe, .stderr = .pipe });
 
     const stdout = try uProcess.readAll(this.io, this.allocator, child.stdout.?);
     errdefer this.allocator.free(stdout);
 
     const term = try child.wait(this.io);
-    if (term != .exited) return &.{};
-
-    return filterOutput(this.allocator, manager, stdout);
-}
-
-fn filterOutput(allocator: Allocator, manager: Managers, raw: []u8) ![]u8 {
-    var result: ArrayList(u8) = .empty;
-    var iter = mem.splitScalar(u8, raw, '\n');
-
-    while (iter.next()) |line| {
-        if (line.len == 0) continue;
-        if (manager == .dnf and ascii.startsWithIgnoreCase(line, "Obsoleting packages")) break;
-
-        try result.appendSlice(allocator, line);
-        try result.append(allocator, '\n');
+    if (term != .exited) {
+        this.allocator.free(stdout);
+        return &.{};
     }
 
-    return result.toOwnedSlice(allocator);
+    return stdout;
 }
 
 fn setupPacmanDatabase(this: Updates) ![]u8 {
     const db_path = try this.getCheckupPath();
+    errdefer this.allocator.free(db_path);
+
     const pacman_db = try this.getPacmanDatabasePath();
     defer this.allocator.free(pacman_db);
 
@@ -167,8 +269,8 @@ fn setupPacmanDatabase(this: Updates) ![]u8 {
     try createLocalSymlink(this.io, this.allocator, db_path, pacman_db);
 
     const status = try uProcess.runCommand(this.io, &.{ "fakeroot", "pacman", "-Sy", "--disable-sandbox", "--dbpath", db_path, "--logfile", "/dev/null" });
-
     if (status != 0) return UpdatesError.CannotFetchUpdates;
+
     return db_path;
 }
 
@@ -195,8 +297,10 @@ fn getPacmanDatabasePath(this: Updates) ![]const u8 {
     defer this.allocator.free(stdout);
     _ = child.wait(this.io) catch {};
 
-    const trimmed = mem.trim(u8, stdout, WHITESPACE);
-    return try this.allocator.dupe(u8, if (trimmed.len == 0) DEFAULT_PACMAN_DB else trimmed);
+    const trimmed = mem.trim(u8, stdout, &ascii.whitespace);
+    if (trimmed.len == 0) return try this.allocator.dupe(u8, DEFAULT_PACMAN_DB);
+
+    return try this.allocator.dupe(u8, trimmed);
 }
 
 inline fn createDirectory(io: Io, path: []const u8) !void {
@@ -206,13 +310,14 @@ inline fn createDirectory(io: Io, path: []const u8) !void {
     };
 }
 
-inline fn deleteLockFile(io: Io, allocator: Allocator, db_path: []const u8) !void {
+fn deleteLockFile(io: Io, allocator: Allocator, db_path: []const u8) !void {
     const lock_path = try fmt.allocPrint(allocator, "{s}/db.lck", .{db_path});
     defer allocator.free(lock_path);
+
     Dir.deleteFileAbsolute(io, lock_path) catch {};
 }
 
-inline fn createLocalSymlink(io: Io, allocator: Allocator, db_path: []const u8, pacman_db: []const u8) !void {
+fn createLocalSymlink(io: Io, allocator: Allocator, db_path: []const u8, pacman_db: []const u8) !void {
     const local_path = try fmt.allocPrint(allocator, "{s}/local", .{db_path});
     defer allocator.free(local_path);
 
@@ -223,91 +328,6 @@ inline fn createLocalSymlink(io: Io, allocator: Allocator, db_path: []const u8, 
         error.PathAlreadyExists => {},
         else => return err,
     };
-}
-
-/// Parses a single line of package manager output into an UpdateInfo struct.
-inline fn parseLine(manager: Managers, line: []const u8, info: *UpdateInfo) bool {
-    const trimmed = mem.trim(u8, line, WHITESPACE);
-    if (trimmed.len == 0) return false;
-
-    var pkg_name: []const u8 = undefined;
-    var new_version: []const u8 = undefined;
-
-    switch (manager) {
-        .apt => {
-            const slash_idx = mem.findScalar(u8, trimmed, '/') orelse return false;
-            pkg_name = trimmed[0..slash_idx];
-
-            var parts_iter = mem.splitScalar(u8, trimmed, ' ');
-            _ = parts_iter.next() orelse return false;
-            new_version = parts_iter.next() orelse return false;
-        },
-
-        .dnf => {
-            var parts = mem.tokenizeAny(u8, trimmed, " \t");
-            const pkg_name_full = parts.next() orelse return false;
-            new_version = parts.next() orelse return false;
-
-            if (pkg_name_full.len == 0 or new_version.len == 0) return false;
-
-            const dot_idx = mem.findScalarLast(u8, pkg_name_full, '.') orelse pkg_name_full.len;
-            pkg_name = pkg_name_full[0..dot_idx];
-        },
-
-        .pacman => {
-            const arrow_idx = mem.find(u8, trimmed, "->") orelse return false;
-            const left_part = mem.trim(u8, trimmed[0..arrow_idx], WHITESPACE);
-            new_version = mem.trim(u8, trimmed[arrow_idx + 2 ..], WHITESPACE);
-            if (new_version.len == 0) return false;
-
-            const last_space = mem.findScalar(u8, left_part, ' ') orelse return false;
-            pkg_name = left_part[0..last_space];
-        },
-
-        .zypper => {
-            if (trimmed[0] == '-' or ascii.startsWithIgnoreCase(trimmed, "S |")) return false;
-
-            var parts_iter = mem.splitScalar(u8, trimmed, '|');
-            _ = parts_iter.next();
-            _ = parts_iter.next();
-            const name_raw = parts_iter.next() orelse return false;
-            _ = parts_iter.next() orelse return false;
-            const available_raw = parts_iter.next() orelse return false;
-
-            pkg_name = mem.trim(u8, name_raw, WHITESPACE);
-            new_version = mem.trim(u8, available_raw, WHITESPACE);
-        },
-
-        .xbps => {
-            var it = mem.tokenizeAny(u8, trimmed, " \t");
-            const first = it.next() orelse return false;
-            const second = it.next() orelse return false;
-
-            if (!mem.eql(u8, second, "update")) return false;
-
-            const hyphen_idx = mem.findScalarLast(u8, first, '-') orelse return false;
-            const raw_name = first[0..hyphen_idx];
-            const raw_version = first[hyphen_idx + 1 ..];
-
-            pkg_name = mem.trim(u8, raw_name, WHITESPACE);
-            const old_version = mem.trim(u8, raw_version, WHITESPACE);
-
-            if (it.next()) |candidate| {
-                new_version = if (ascii.isDigit(candidate[0])) candidate else old_version;
-            } else {
-                new_version = old_version;
-            }
-        },
-    }
-
-    if (pkg_name.len == 0 or new_version.len == 0) return false;
-    if (pkg_name.len >= info.pkg_name.len or new_version.len >= info.new_version.len) return false;
-
-    info.pkg_name[pkg_name.len] = 0;
-    @memcpy(info.pkg_name[0..pkg_name.len], pkg_name);
-    info.new_version[new_version.len] = 0;
-    @memcpy(info.new_version[0..new_version.len], new_version);
-    return true;
 }
 
 // Tests

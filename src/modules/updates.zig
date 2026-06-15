@@ -43,7 +43,7 @@ pub const ModuleConfig = struct {
     tooltip: []const u8 = "{package_name}: {new_version}",
 };
 
-fn getManager(name: []const u8) Updates.Managers {
+fn getManager(name: []const u8) Updates.PackageManager {
     if (mem.eql(u8, name, "apt")) return .apt;
     if (mem.eql(u8, name, "pacman")) return .pacman;
     if (mem.eql(u8, name, "dnf")) return .dnf;
@@ -65,14 +65,15 @@ pub fn main(init: process.Init) !void {
     const config = try cfg.load("updates", ModuleConfig);
     defer cfg.free(config);
 
-    var updates_tracker: Updates = .init(io, init.environ_map, gpa);
-
-    var manager: Updates.Managers = undefined;
-    if (config.manager) |mgr| {
-        manager = getManager(mgr);
+    var manager: Updates.PackageManager = undefined;
+    if (config.manager) |m| {
+        manager = getManager(m);
     } else {
-        manager = try updates_tracker.getManager();
+        manager = try Updates.getManager(io, init.environ_map, gpa);
     }
+
+    var updates: Updates = .init(io, init.environ_map, gpa, manager);
+    defer updates.deinit();
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -85,17 +86,15 @@ pub fn main(init: process.Init) !void {
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
+        defer updates.clear();
 
-        const updates = updates_tracker.checkUpdates(manager) catch null;
-        defer if (updates) |u| gpa.free(u);
-
-        const total_updates: usize = if (updates) |u| u.len else 0;
+        try updates.check();
 
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
         try replacer.addKey("err_icon", config.err_icon);
-        try replacer.addKeyAny("total_updates", total_updates);
-        try replacer.addKey("manager", manager.name());
+        try replacer.addKeyAny("total_updates", updates.count);
+        try replacer.addKey("manager", updates.manager.name());
 
         const text_line = try replacer.render(config.text);
         try json.set("text", text_line);
@@ -103,13 +102,10 @@ pub fn main(init: process.Init) !void {
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(gpa);
 
-        if (updates) |update_list| {
-            for (update_list) |update| {
-                const package_name = mem.sliceTo(&update.pkg_name, 0);
-                const new_version = mem.sliceTo(&update.new_version, 0);
-
-                try replacer.addKey("package_name", package_name);
-                try replacer.addKey("new_version", new_version);
+        if (updates.count > 0) {
+            for (updates.updates.items) |update| {
+                try replacer.addKey("package_name", update.pkg_name);
+                try replacer.addKey("new_version", update.new_version);
 
                 const line = try replacer.render(config.tooltip);
                 if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
