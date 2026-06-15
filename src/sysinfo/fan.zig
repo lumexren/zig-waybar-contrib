@@ -17,6 +17,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+const Fan = @This();
+
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Io = std.Io;
@@ -31,37 +33,62 @@ pub const FanInfo = struct {
     speed: i64,
 };
 
-pub fn scanHwmonFans(io: Io, allocator: Allocator, fans: *ArrayList(FanInfo), sysfs_root: []const u8) !void {
-    var hwmon_dir = try Dir.openDirAbsolute(io, sysfs_root, .{ .iterate = true });
-    defer hwmon_dir.close(io);
+pub const HWMON_PATH = "/sys/class/hwmon";
+
+io: Io,
+allocator: Allocator,
+fans: *ArrayList(FanInfo),
+
+pub inline fn init(io: Io, allocator: Allocator, fans: *ArrayList(FanInfo)) Fan {
+    return .{
+        .io = io,
+        .allocator = allocator,
+        .fans = fans,
+    };
+}
+
+pub fn deinit(this: Fan) void {
+    for (this.fans.items) |f| this.allocator.free(f.name);
+    this.fans.deinit(this.allocator);
+}
+
+pub fn clear(this: Fan) void {
+    this.fans.clearRetainingCapacity();
+}
+
+pub fn scan(this: Fan) !void {
+    var hwmon_dir = try Dir.openDirAbsolute(this.io, HWMON_PATH, .{ .iterate = true });
+    defer hwmon_dir.close(this.io);
 
     var it = hwmon_dir.iterate();
-    while (try it.next(io)) |entry| {
+    while (try it.next(this.io)) |entry| {
         if (entry.kind != .directory and entry.kind != .sym_link) continue;
         if (!mem.startsWith(u8, entry.name, "hwmon")) continue;
 
-        var device_dir = try hwmon_dir.openDir(io, entry.name, .{ .iterate = true });
-        defer device_dir.close(io);
+        var device_dir = try hwmon_dir.openDir(this.io, entry.name, .{ .iterate = true });
+        defer device_dir.close(this.io);
 
-        try scanDeviceFans(io, allocator, device_dir, fans);
+        try this.scanDevice(device_dir);
     }
 }
 
-pub fn scanDeviceFans(io: Io, allocator: Allocator, device_dir: Dir, fans: *ArrayList(FanInfo)) !void {
+pub fn scanDevice(this: Fan, device_dir: Dir) !void {
     var it = device_dir.iterate();
-    while (try it.next(io)) |entry| {
+    while (try it.next(this.io)) |entry| {
         if (entry.kind != .file and entry.kind != .sym_link) continue;
         if (!mem.startsWith(u8, entry.name, "fan") or !mem.endsWith(u8, entry.name, "_input")) continue;
 
-        const speed = readFanSpeed(io, device_dir, entry.name) catch continue;
+        const speed = readFanSpeed(this.io, device_dir, entry.name) catch continue;
         if (speed <= 0) continue;
 
-        const name = try readFanName(io, allocator, device_dir, entry.name);
-        try fans.append(allocator, .{ .name = name, .speed = speed });
+        const name = try readFanName(this.io, this.allocator, device_dir, entry.name);
+        errdefer this.allocator.free(name);
+
+        try this.fans.append(this.allocator, .{ .name = name, .speed = speed });
     }
 }
 
-pub fn readFanSpeed(io: Io, device_dir: Dir, input_name: []const u8) !i64 {
+fn readFanSpeed(io: Io, device_dir: Dir, input_name: []const u8) !i64 {
     var file = try device_dir.openFile(io, input_name, .{});
     defer file.close(io);
 
@@ -72,7 +99,7 @@ pub fn readFanSpeed(io: Io, device_dir: Dir, input_name: []const u8) !i64 {
     return fmt.parseInt(i64, trimmed, 10);
 }
 
-pub fn readFanName(io: Io, allocator: Allocator, device_dir: Dir, input_name: []const u8) ![]const u8 {
+fn readFanName(io: Io, allocator: Allocator, device_dir: Dir, input_name: []const u8) ![]const u8 {
     if (mem.endsWith(u8, input_name, "_input")) {
         const base = input_name[0 .. input_name.len - 6];
 
@@ -142,14 +169,6 @@ test "scanDeviceFans reproduction" {
     try tmp.dir.writeFile(io, .{ .sub_path = "fan1_input", .data = "2000\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "fan1_label", .data = "System Fan\n" });
 
-    // Attempt scan
-    const FanList = ArrayList(FanInfo);
-    var fans = FanList{};
-    defer {
-        for (fans.items) |*f| allocator.free(f.name);
-        fans.deinit(allocator);
-    }
-
     // We need to open tmp.dir as a Dir for scanDeviceFans
     // But scanDeviceFans takes `std.Io.Dir`.
     // Wait, `std.Io` is custom again?
@@ -173,12 +192,17 @@ test "scanDeviceFans reproduction" {
     var device_dir = try Dir.openDirAbsolute(io, path, .{ .iterate = true });
     defer device_dir.close(io);
 
-    try scanDeviceFans(io, allocator, device_dir, &fans);
+    var fan_list: ArrayList(FanInfo) = .empty;
+
+    const fan: Fan = .init(io, allocator, &fan_list);
+    defer fan.deinit();
+
+    try fan.scan();
 
     // Expect 1 fan found
-    try std.testing.expectEqual(@as(usize, 1), fans.items.len);
-    try std.testing.expectEqualStrings("System Fan", fans.items[0].name);
-    try std.testing.expectEqual(@as(i64, 2000), fans.items[0].speed);
+    try std.testing.expectEqual(@as(usize, 1), fan.fans.items.len);
+    try std.testing.expectEqualStrings("System Fan", fan.fans.items[0].name);
+    try std.testing.expectEqual(@as(i64, 2000), fan.fans.items[0].speed);
     // Wait, I want to assert the BUG exists first, or fix it and assert it works?
     // Best practice: write test that FAILS with bug.
     // So expectation should be `1`. It will fail.
@@ -197,14 +221,6 @@ test "scanDeviceFans fallback" {
     try tmp.dir.writeFile(io, .{ .sub_path = "fan2_input", .data = "1500\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "name", .data = "k10temp\n" });
 
-    // Attempt scan
-    const FanList = ArrayList(FanInfo);
-    var fans = FanList{};
-    defer {
-        for (fans.items) |*f| allocator.free(f.name);
-        fans.deinit(allocator);
-    }
-
     var buf: [4096]u8 = undefined;
     const len = try tmp.dir.realPathFile(io, ".", &buf);
     const path = buf[0..len];
@@ -212,11 +228,16 @@ test "scanDeviceFans fallback" {
     var device_dir = try Dir.openDirAbsolute(io, path, .{ .iterate = true });
     defer device_dir.close(io);
 
-    try scanDeviceFans(io, allocator, device_dir, &fans);
+    var fan_list: ArrayList(FanInfo) = .empty;
+
+    const fan: Fan = .init(io, allocator, &fan_list);
+    defer fan.deinit();
+
+    try fan.scanDevice(device_dir);
 
     // Expect 1 fan: "k10temp fan2"
-    try std.testing.expectEqualStrings("k10temp fan2", fans.items[0].name);
-    try std.testing.expectEqual(@as(i64, 1500), fans.items[0].speed);
+    try std.testing.expectEqualStrings("k10temp fan2", fan.fans.items[0].name);
+    try std.testing.expectEqual(@as(i64, 1500), fan.fans.items[0].speed);
 }
 
 test "scanHwmonFans" {
@@ -254,28 +275,21 @@ test "scanHwmonFans" {
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/fan1_input", .data = "2000\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/name", .data = "box\n" }); // Driver name
 
-    // Attempt scan
-    const FanList = ArrayList(FanInfo);
-    var fans = FanList{};
-    defer {
-        for (fans.items) |*f| allocator.free(f.name);
-        fans.deinit(allocator);
-    }
+    var fan_list: ArrayList(FanInfo) = .empty;
 
-    var buf: [4096]u8 = undefined;
-    const len = try tmp.dir.realPathFile(io, ".", &buf);
-    const path = buf[0..len];
+    const fan: Fan = .init(io, allocator, &fan_list);
+    defer fan.deinit();
 
-    try scanHwmonFans(io, allocator, &fans, path);
+    try fan.scan();
 
     // Expect 2 fans
     // Order depends on directory iteration order (hash map logic usually in fs), so we can't guarantee order.
-    try std.testing.expectEqual(@as(usize, 2), fans.items.len);
+    try std.testing.expectEqual(@as(usize, 2), fan.fans.items.len);
 
     var found_cpu = false;
     var found_box = false;
 
-    for (fans.items) |f| {
+    for (fan.fans.items) |f| {
         if (mem.eql(u8, f.name, "CPU Fan")) {
             try std.testing.expectEqual(@as(i64, 1000), f.speed);
             found_cpu = true;

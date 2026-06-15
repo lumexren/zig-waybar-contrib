@@ -20,7 +20,7 @@
 pub const CPU = @import("cpu.zig");
 pub const disk = @import("disk.zig");
 pub const Memory = @import("memory.zig");
-pub const fan = @import("fan.zig");
+pub const Fan = @import("fan.zig");
 pub const network = @import("network/network.zig");
 pub const Updates = @import("updates.zig");
 pub const gpu = @import("gpu/gpu.zig").SMI;

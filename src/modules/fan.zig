@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const sysinfo = @import("sysinfo").fan;
+const Fan = @import("sysinfo").Fan;
 
 const std = @import("std");
 const utils = @import("utils");
@@ -33,7 +33,7 @@ const Replacer = utils.Replacer;
 const Output = utils.Output;
 
 pub const ModuleConfig = struct {
-    update_interval: i64 = 5,
+    update_interval: i64 = 2,
     signal_number: u8 = 15,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {total_fans}",
@@ -58,16 +58,19 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var fans: ArrayList(Fan.FanInfo) = .empty;
+
+    var fan: Fan = .init(io, gpa, &fans);
+    defer fan.deinit();
+
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
+        defer fan.clear();
 
-        var fans: ArrayList(sysinfo.FanInfo) = .empty;
-        defer fans.deinit(gpa);
-
-        try sysinfo.scanHwmonFans(io, gpa, &fans, "/sys/class/hwmon");
+        try fan.scan();
 
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", config.icon);
@@ -79,9 +82,9 @@ pub fn main(init: process.Init) !void {
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(gpa);
 
-        for (fans.items) |fan| {
-            try replacer.addKey("name", fan.name);
-            try replacer.addKeyAny("speed", fan.speed);
+        for (fan.fans.items) |f| {
+            try replacer.addKey("name", f.name);
+            try replacer.addKeyAny("speed", f.speed);
 
             const line = try replacer.render(config.tooltip);
             if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
