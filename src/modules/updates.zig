@@ -37,7 +37,7 @@ pub const ModuleConfig = struct {
     update_interval: i64 = 200,
     signal_number: u8 = 21,
     icon: []const u8 = "",
-    err_icon: []const u8 = "",
+    error_icon: []const u8 = "",
     manager: ?[]const u8 = null,
     text: []const u8 = "{icon}  {total_updates}",
     tooltip: []const u8 = "{package_name}: {new_version}",
@@ -84,36 +84,50 @@ pub fn main(init: process.Init) !void {
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
-        defer json.clear();
-        defer replacer.clear();
-        defer updates.clear();
-
-        try updates.check();
-
-        try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", config.icon);
-        try replacer.addKey("err_icon", config.err_icon);
-        try replacer.addKeyAny("total_updates", updates.count);
-        try replacer.addKey("manager", updates.manager.name());
-
-        const text_line = try replacer.render(config.text);
-        try json.set("text", text_line);
-
-        var tooltip_text: ArrayList(u8) = .empty;
-        defer tooltip_text.deinit(gpa);
-
-        if (updates.count > 0) {
-            for (updates.updates.items) |update| {
-                try replacer.addKey("package_name", update.pkg_name);
-                try replacer.addKey("new_version", update.new_version);
-
-                const line = try replacer.render(config.tooltip);
-                if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
-                try tooltip_text.appendSlice(gpa, line);
-            }
+        defer {
+            json.clear();
+            replacer.clear();
+            updates.clear();
         }
 
-        try json.set("tooltip", tooltip_text.items);
+        try replacer.addCommonPlaceholders();
+
+        if (updates.check()) |_| {
+            try replacer.addKey("icon", config.icon);
+            try replacer.addKeyAny("total_updates", updates.count);
+            try replacer.addKey("manager", updates.manager.name());
+
+            if (updates.count > 0) {
+                var tooltip_text: ArrayList(u8) = .empty;
+                defer tooltip_text.deinit(replacer.allocator);
+
+                for (updates.updates.items) |update| {
+                    try replacer.addKey("package_name", update.pkg_name);
+                    try replacer.addKey("new_version", update.new_version);
+
+                    const line = try replacer.render(config.tooltip);
+                    defer replacer.free(line);
+
+                    if (tooltip_text.items.len > 0) try tooltip_text.append(replacer.allocator, '\n');
+                    try tooltip_text.appendSlice(replacer.allocator, line);
+                }
+
+                try json.set("tooltip", tooltip_text.items);
+            } else {
+                try json.set("tooltip", "");
+            }
+        } else |err| {
+            try replacer.addKey("icon", config.error_icon);
+            try replacer.addKey("manager", updates.manager.name());
+            try replacer.addKeyAny("total_updates", updates.count);
+
+            try json.set("tooltip", @errorName(err));
+        }
+
+        const text_line = try replacer.render(config.text);
+        defer replacer.free(text_line);
+
+        try json.set("text", text_line);
 
         try json.write(stdout);
         try stdout.flush();

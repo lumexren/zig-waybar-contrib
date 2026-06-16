@@ -559,7 +559,7 @@ Tracks available system package updates.
     // Module icon
     .icon = "",
     // Error icon
-    .err_icon = "",
+    .error_icon = "",
     // Custom text format (default shown)
     .text = "{icon}  {total_updates}",
     // Custom tooltip format (default shown)
@@ -574,7 +574,6 @@ The `text` and `tooltip` options support the following placeholders:
 | Placeholder       | Description                            |
 | :---------------- | :------------------------------------- |
 | `{icon}`          | Module icon                            |
-| `{err_icon}`      | Error icon                             |
 | `{total_updates}` | Total number of available updates      |
 | `{manager}`       | Name of the package manager being used |
 
@@ -605,8 +604,8 @@ The configuration system supports format specifiers for values to control their 
 
 | Specifier | Applies To | Description                                                             | Example                         |
 | :-------- | :--------- | :---------------------------------------------------------------------- | :------------------------------ |
+| `*N`      | Strings    | Repeats the string value exactly N times                                | `{dot*5}` → `·····`             |
 | `:N`      | Integers   | Zero-pads integers to width N                                           | `{usage:2}` → `05`              |
 | `:N`      | Floats     | Decimal precision N                                                     | `{usage:2}` → `12.34`           |
 | `:.N`     | Integers   | Formats bytes to human-readable string with N decimal precision         | `{vram_usage:.2}` → `1.50 GiB`  |
 | `:^N`     | Floats     | Formats network speed to human-readable string with N decimal precision | `{total_speed:^1}` → `2.5 MB/s` |
-| `*N`      | Strings    | Repeats the string value exactly N times                                | `{dot*5}` → `·····`             |
