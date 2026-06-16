@@ -601,11 +601,12 @@ These placeholders are available in all modules:
 
 ### **Replacer Formatters**
 
-The configuration system supports format specifiers for numeric values to control their display.
+The configuration system supports format specifiers for values to control their display.
 
-| Specifier | Applies To | Description                                                             | Example                           |
-| :-------- | :--------- | :---------------------------------------------------------------------- | :-------------------------------- |
-| `:N`      | Integers   | Zero-pads integers to width N                                           | `{usage:2}` → `05`                |
-| `:N`      | Floats     | Decimal precision N                                                     | `{usage:2}` → `12.34`             |
-| `:.N`     | Integers   | Formats bytes to human-readable string with N decimal precision         | `{vram_usage:.2}` → `1.50 GiB`    |
-| `:^N`     | Floats     | Formats network speed to human-readable string with N decimal precision | `{total_speed:^1}` → `2.5 MB/s`   |
+| Specifier | Applies To | Description                                                             | Example                         |
+| :-------- | :--------- | :---------------------------------------------------------------------- | :------------------------------ |
+| `:N`      | Integers   | Zero-pads integers to width N                                           | `{usage:2}` → `05`              |
+| `:N`      | Floats     | Decimal precision N                                                     | `{usage:2}` → `12.34`           |
+| `:.N`     | Integers   | Formats bytes to human-readable string with N decimal precision         | `{vram_usage:.2}` → `1.50 GiB`  |
+| `:^N`     | Floats     | Formats network speed to human-readable string with N decimal precision | `{total_speed:^1}` → `2.5 MB/s` |
+| `*N`      | Strings    | Repeats the string value exactly N times                                | `{dot*5}` → `·····`             |

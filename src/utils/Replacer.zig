@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-/// Applies replacements to a template, supporting typed values and formatting.
+/// Applies typed value substitution and byte-sequence replacements to templates.
 const Replacer = @This();
 
 const std = @import("std");
@@ -34,7 +34,7 @@ pub const ReplacerError = error{
     PlaceholderNotFound,
 };
 
-/// A value that can be formatted in a template.
+/// A typed value that can be substituted into a template placeholder.
 pub const Value = union(enum) {
     string: []const u8,
     integer: i64,
@@ -42,197 +42,118 @@ pub const Value = union(enum) {
     boolean: bool,
 };
 
-/// A legacy byte-sequence replacement rule.
-const Replacement = struct {
-    /// The substring to match.
-    from: []const u8,
-    /// The replacement substring.
-    to: []const u8,
-    /// Whether the strings are owned and need to be freed.
-    owned: bool,
-};
-
-/// Represents measurement sizing metrics for data values.
+/// Measurement unit system used for formatting byte counts and transfer speeds.
 pub const Units = enum {
     binary,
     decimal,
 
-    /// Returns the multiplication base factor for the selected system.
+    const DECIMAL_BASE: f64 = 1000.0;
+    const BINARY_BASE: f64 = 1024.0;
+
+    const DECIMAL_BYTE_UNITS = [_][]const u8{ "B", "KB", "MB", "GB", "TB", "PB" };
+    const DECIMAL_SPEED_UNITS = [_][]const u8{ "B/s", "KB/s", "MB/s", "GB/s", "TB/s", "PB/s" };
+
+    const BINARY_BYTE_UNITS = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB", "PiB" };
+    const BINARY_SPEED_UNITS = [_][]const u8{ "B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s", "PiB/s" };
+
     pub fn base(this: @This()) f64 {
         return switch (this) {
-            .binary => 1024.0,
-            .decimal => 1000.0,
+            .binary => BINARY_BASE,
+            .decimal => DECIMAL_BASE,
         };
     }
 
-    /// Returns the static byte unit suffixes (B to PiB/PB)
     pub fn byteUnits(this: @This()) []const []const u8 {
-        const binary_units = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB", "PiB" };
-        const decimal_units = [_][]const u8{ "B", "KB", "MB", "GB", "TB", "PB" };
-
         return switch (this) {
-            .binary => &binary_units,
-            .decimal => &decimal_units,
+            .binary => &BINARY_BYTE_UNITS,
+            .decimal => &DECIMAL_BYTE_UNITS,
         };
     }
 
-    /// Returns the associated transfer speed suffixes array for the system (B/s to PiB/s / PB/s).
     pub fn speedUnits(this: @This()) []const []const u8 {
-        const binary_units = [_][]const u8{ "B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s", "PiB/s" };
-        const decimal_units = [_][]const u8{ "B/s", "KB/s", "MB/s", "GB/s", "TB/s", "PB/s" };
-
         return switch (this) {
-            .binary => &binary_units,
-            .decimal => &decimal_units,
+            .binary => &BINARY_SPEED_UNITS,
+            .decimal => &DECIMAL_SPEED_UNITS,
         };
     }
 };
 
-/// Memory allocator used for all internal allocations.
 allocator: Allocator,
-/// Typed values available for templating. Keys and string values are
-/// duplicated and owned by this allocator.
 values: StringHashMap(Value),
-/// Legacy byte-sequence replacement rules applied after template processing.
-replacements: ArrayList(Replacement) = .empty,
-/// List for tracking strings produced and returned by render().
-rendered_strings: ArrayList([]const u8) = .empty,
-/// When true, render() returns PlaceholderNotFound for missing keys.
-/// When false (default), unmatched placeholders are passed through unchanged.
+/// When true, render() returns PlaceholderNotFound for any unresolved key.
+/// When false (default), unresolved placeholders are passed through unchanged.
 strict: bool = false,
 
-pub inline fn init(allocator: Allocator) Replacer {
+pub fn init(allocator: Allocator) Replacer {
     return .{ .allocator = allocator, .values = .init(allocator) };
 }
 
-/// Frees all owned memory and releases internal container buffers.
-/// Must be called when the Replacer is no longer needed.
+/// Releases all owned memory. Must be called exactly once when done.
 pub fn deinit(this: *Replacer) void {
-    var key_it = this.values.keyIterator();
-    while (key_it.next()) |key| this.allocator.free(key.*);
-
-    var val_it = this.values.valueIterator();
-    while (val_it.next()) |v| {
-        if (v.* == .string) this.allocator.free(v.string);
-    }
-
+    this.freeValues();
     this.values.deinit();
-
-    for (this.replacements.items) |r| {
-        if (r.owned) {
-            this.allocator.free(r.from);
-            this.allocator.free(r.to);
-        }
-    }
-    this.replacements.deinit(this.allocator);
-
-    for (this.rendered_strings.items) |str| this.allocator.free(str);
-    this.rendered_strings.deinit(this.allocator);
 }
 
-/// Frees all owned string allocations and clears entries while retaining
-/// container capacity for reuse.
+/// Frees all owned data and clears internal state while retaining capacity.
 pub fn clear(this: *Replacer) void {
-    var key_it = this.values.keyIterator();
-    while (key_it.next()) |key| this.allocator.free(key.*);
-
-    var val_it = this.values.valueIterator();
-    while (val_it.next()) |v| {
-        if (v.* == .string) this.allocator.free(v.string);
-    }
-
-    for (this.replacements.items) |r| {
-        if (r.owned) {
-            this.allocator.free(r.from);
-            this.allocator.free(r.to);
-        }
-    }
-    this.replacements.clearRetainingCapacity();
-
-    for (this.rendered_strings.items) |str| this.allocator.free(str);
-    this.rendered_strings.clearRetainingCapacity();
-
+    this.freeValues();
     this.values.clearRetainingCapacity();
+}
+
+pub fn free(this: *Replacer, memory: anytype) void {
+    this.allocator.free(memory);
 }
 
 pub inline fn setStrict(this: *Replacer, enabled: bool) void {
     this.strict = enabled;
 }
 
-/// Adds a legacy replacement rule using borrowed (non-owned) slices.
-/// The caller must ensure the slices outlive this Replacer.
-pub fn add(this: *Replacer, from: []const u8, to: []const u8) !void {
-    try this.replacements.append(this.allocator, .{ .from = from, .to = to, .owned = false });
-}
-
-/// Internal helper to handle StringHashMap insertion and old-value cleanup.
-fn putInternal(this: *Replacer, key: []const u8, value: Value) !void {
-    const gop = try this.values.getOrPut(key);
-
-    if (gop.found_existing) {
-        if (gop.value_ptr.* == .string) {
-            this.allocator.free(gop.value_ptr.string);
-        }
-
-        gop.value_ptr.* = value;
-    } else {
-        const key_owned = this.allocator.dupe(u8, key) catch |err| {
-            _ = this.values.remove(key);
-            return err;
-        };
-
-        gop.key_ptr.* = key_owned;
-        gop.value_ptr.* = value;
-    }
-}
-
-/// Adds a string key-value pair. Both key and value are duplicated.
+/// Associates `key` with a string value. Both are duplicated internally.
 pub fn addKey(this: *Replacer, key: []const u8, value: []const u8) !void {
     const val_owned = try this.allocator.dupe(u8, value);
-    errdefer this.allocator.free(val_owned);
-
-    try this.putInternal(key, .{ .string = val_owned });
+    errdefer this.free(val_owned);
+    try this.putValue(key, .{ .string = val_owned });
 }
 
-/// Adds a key-value pair with automatic type detection.
+/// Associates `key` with a typed value inferred from `value`'s comptime type.
 pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
+    const info = @typeInfo(T);
 
-    // Integers
-    if (@typeInfo(T) == .int or @typeInfo(T) == .comptime_int) {
-        try this.putInternal(key, .{ .integer = @intCast(value) });
-        return;
+    if (info == .int or info == .comptime_int) {
+        return this.putValue(key, .{ .integer = @intCast(value) });
     }
 
-    // Floats
-    if (@typeInfo(T) == .float or @typeInfo(T) == .comptime_float) {
-        try this.putInternal(key, .{ .float = @floatCast(value) });
-        return;
+    if (info == .float or info == .comptime_float) {
+        return this.putValue(key, .{ .float = @floatCast(value) });
     }
 
-    // Bool
     if (T == bool) {
-        try this.putInternal(key, .{ .boolean = value });
-        return;
+        return this.putValue(key, .{ .boolean = value });
     }
 
-    // Strings (Slice or Array Ptr)
-    const is_string = T == []const u8 or T == []u8 or (@typeInfo(T) == .pointer and @typeInfo(T).pointer.size != .slice);
-    if (is_string) {
-        try this.addKey(key, @as([]const u8, value));
-        return;
+    if (T == []const u8 or T == []u8) {
+        return this.addKey(key, value);
     }
 
-    // Fallback: format to string then store
+    if (info == .pointer and info.pointer.size == .many) {
+        return this.addKey(key, mem.span(value));
+    }
+
+    // Fallback: format to a temporary string.
     const str = try fmt.allocPrint(this.allocator, "{any}", .{value});
-    defer this.allocator.free(str);
-    try this.addKey(key, str);
+    defer this.free(str);
+    return this.addKey(key, str);
 }
 
-/// Renders the template, substituting `{key}` and `{key:fmt}` placeholders.
-/// The returned slice is allocated with this.allocator and must be freed by
-/// the caller (or reclaimed via arena teardown).
-pub fn render(this: *Replacer, template: []const u8) ![]u8 {
+/// Renders `template` into `writer`, substituting `{key}` and `{key:spec}` placeholders.
+///
+/// Format specifiers:
+///   - `{key:.N}` — integer formatted as bytes with N decimal places (binary units)
+///   - `{key:^N}` — float formatted as transfer speed with N decimal places (decimal units)
+///   - `{key*N}`  — string repeated N times
+///   - `{key:N}`  — zero-padded integer (width N) or rounded float (N decimal places)
+pub fn render(this: *const Replacer, template: []const u8) ![]u8 {
     var result: ArrayList(u8) = .empty;
     errdefer result.deinit(this.allocator);
 
@@ -246,160 +167,191 @@ pub fn render(this: *Replacer, template: []const u8) ![]u8 {
             continue;
         }
 
-        // Escaped {{
+        // Escaped `{{` → literal `{`.
         if (i + 1 < template.len and template[i + 1] == '{') {
             try result.append(this.allocator, '{');
             i += 2;
             continue;
         }
 
-        const remaining = template[i + 1 ..];
-        const end_offset = mem.findScalar(u8, remaining, '}') orelse {
+        const rest = template[i + 1 ..];
+        const close = mem.findScalar(u8, rest, '}') orelse {
             try result.append(this.allocator, c);
             i += 1;
             continue;
         };
 
-        const content = remaining[0..end_offset];
-        const full_len = end_offset + 2; // '{' + content + '}'
+        const content = rest[0..close];
+        const key, const spec = splitKeySpec(content);
 
-        var key_part = content;
-        var fmt_part: ?[]const u8 = null;
-
-        if (mem.findScalar(u8, content, ':')) |colon_idx| {
-            key_part = content[0..colon_idx];
-            fmt_part = content[colon_idx + 1 ..];
-        }
-
-        if (this.values.get(key_part)) |val| {
-            try renderValue(this.allocator, &result, val, fmt_part);
-            i += full_len;
+        if (this.values.get(key)) |val| {
+            try appendValue(this.allocator, &result, val, spec);
+            i += close + 2; // '{' + content + '}'
             continue;
         }
 
         if (this.strict) return ReplacerError.PlaceholderNotFound;
 
         try result.append(this.allocator, c);
-        i += 1;
+        i += close + 2;
     }
 
-    if (this.replacements.items.len == 0) {
-        const out = try result.toOwnedSlice(this.allocator);
-        errdefer this.allocator.free(out);
-        try this.rendered_strings.append(this.allocator, out);
-        return out;
-    }
-
-    // Legacy pass: apply string-replace rules, freeing each intermediate slice.
-    var out = try result.toOwnedSlice(this.allocator);
-    errdefer this.allocator.free(out);
-    for (this.replacements.items) |r| {
-        const replaced = try mem.replaceOwned(u8, this.allocator, out, r.from, r.to);
-        this.allocator.free(out);
-        out = replaced;
-    }
-
-    try this.rendered_strings.append(this.allocator, out);
-    return out;
+    return try result.toOwnedSlice(this.allocator);
 }
 
-/// Adds common placeholders that are available across all modules.
+/// Registers common escape-sequence placeholders available to all modules.
 ///
-/// This includes:
-/// - `{newline}` `{nl}` → literal newline character
-/// - `{tab}` → literal tab character
-/// - `{dot}` → literal dot character
-/// - `{pipe}` → literal pipe character
-pub inline fn addCommonPlaceholders(this: *Replacer) !void {
-    try this.add("{newline}", "\n");
-    try this.add("{nl}", "\n");
-    try this.add("{tab}", "\t");
-    try this.add("{dot}", "·");
-    try this.add("{pipe}", "|");
+/// Placeholders: `{newline}` `{nl}` `{tab}` `{dot}` `{pipe}`
+pub fn addCommonPlaceholders(this: *Replacer) !void {
+    try this.addKey("newline", "\n");
+    try this.addKey("nl", "\n");
+    try this.addKey("tab", "\t");
+    try this.addKey("dot", "·");
+    try this.addKey("pipe", "|");
 }
 
-/// Formats a static byte count using binary (1024-based) units by default.
+/// Writes `bytes` as a human-readable size string using the given unit system.
 pub fn formatBytes(writer: *Writer, bytes: i64, precision: usize, system: Units) !void {
-    try formatValue(writer, @floatFromInt(bytes), precision, system.base(), system.byteUnits());
+    try scaleAndWrite(writer, @floatFromInt(bytes), precision, system.base(), system.byteUnits());
 }
 
-/// Formats a data transfer speed using a configurable unit system.
+/// Writes `bytes_per_sec` as a human-readable speed string using the given unit system.
 pub fn formatSpeed(writer: *Writer, bytes_per_sec: f64, precision: usize, system: Units) !void {
-    try formatValue(writer, bytes_per_sec, precision, system.base(), system.speedUnits());
+    try scaleAndWrite(writer, bytes_per_sec, precision, system.base(), system.speedUnits());
 }
 
-/// Shared internal formatting engine that handles scaling calculations, rounding, and terminal output.
-fn formatValue(writer: *Writer, value: f64, precision: usize, base: f64, units: []const []const u8) !void {
-    var size: f64 = @abs(value);
-    var unit_idx: usize = 0;
+fn freeValues(this: *Replacer) void {
+    var it = this.values.iterator();
+    while (it.next()) |e| {
+      this.free(e.key_ptr.*);
+      if (e.value_ptr.* == .string) this.free(e.value_ptr.string);
+    }
+}
 
-    while (size >= base and unit_idx < units.len - 1) {
-        size /= base;
-        unit_idx += 1;
+/// Inserts or replaces a value, freeing any previously-owned string.
+fn putValue(this: *Replacer, key: []const u8, value: Value) !void {
+    const gop = try this.values.getOrPut(key);
+
+    if (gop.found_existing) {
+        if (gop.value_ptr.* == .string) this.free(gop.value_ptr.string);
+        gop.value_ptr.* = value;
+        return;
     }
 
-    if (value < 0) size = -size;
+    gop.key_ptr.* = this.allocator.dupe(u8, key) catch |err| {
+        _ = this.values.remove(key);
+        return err;
+    };
 
-    const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
-    const rounded = @round(size * multiplier) / multiplier;
+    gop.value_ptr.* = value;
+}
+
+/// Splits `{key:spec}` content into `(key, spec)`. Spec is null when absent.
+/// The `*` prefix for repeat specifiers is part of the spec string itself.
+fn splitKeySpec(content: []const u8) struct { []const u8, ?[]const u8 } {
+    if (mem.findScalar(u8, content, ':')) |colon| {
+        return .{ content[0..colon], content[colon + 1 ..] };
+    }
+
+    if (mem.findScalar(u8, content, '*')) |star| {
+        return .{ content[0..star], content[star..] };
+    }
+
+    return .{ content, null };
+}
+
+/// Scales `value` down through `units` by repeatedly dividing by `base`,
+/// then writes the result with the appropriate suffix.
+fn scaleAndWrite(writer: *Writer, value: f64, precision: usize, base: f64, units: []const []const u8) !void {
+    const negative = value < 0;
+    var size: f64 = @abs(value);
+    var idx: usize = 0;
+
+    while (size >= base and idx < units.len - 1) {
+        size /= base;
+        idx += 1;
+    }
+
+    if (negative) size = -size;
+
+    const rounded = roundTo(size, precision);
 
     if (@trunc(rounded) == rounded) {
-        try writer.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[unit_idx] });
+        try writer.print("{d}{s}", .{ @as(i64, @intFromFloat(rounded)), units[idx] });
     } else {
         try writer.print("{d:.[1]}", .{ size, precision });
-        try writer.writeAll(units[unit_idx]);
+        try writer.writeAll(units[idx]);
     }
 }
 
-/// Renders a Value to the output arraylist via structural writers with optional formatting specifiers.
-/// Format specifiers:
-///   - `.N` for integers: format as bytes with N decimal precision
-///   - `^N` for floats: format as speed with N decimal precision (defaults to decimal system rules)
-///   - `N` for width: zero-padded integers
-///   - bare number: decimal precision for floats
-fn renderValue(allocator: Allocator, out: *ArrayList(u8), val: Value, fmt_spec: ?[]const u8) !void {
-    var aw: Writer.Allocating = .fromArrayList(allocator, out);
-    defer out.* = aw.toArrayList();
+/// Rounds `v` to `precision` decimal places.
+inline fn roundTo(v: f64, precision: usize) f64 {
+    const m = math.pow(f64, 10.0, @floatFromInt(precision));
+    return @round(v * m) / m;
+}
 
-    const w = &aw.writer;
+/// Appends the formatted representation of `val` to `buffer`.
+fn appendValue(allocator: Allocator, buffer: *ArrayList(u8), val: Value, spec: ?[]const u8) !void {
+    var aw: Writer.Allocating = .fromArrayList(allocator, buffer);
+    defer buffer.* = aw.toArrayList();
+
+    const writer = &aw.writer;
+
     switch (val) {
-        .string => |s| try w.writeAll(s),
-        .integer => |d| {
-            const spec = fmt_spec orelse {
-                try w.print("{d}", .{d});
-                return;
-            };
-
-            if (spec.len > 0 and spec[0] == '.') {
-                const precision = fmt.parseInt(usize, spec[1..], 10) catch 2;
-                try formatBytes(w, d, precision, .binary);
-            } else if (fmt.parseInt(usize, spec, 10)) |width| {
-                if (d >= 0) {
-                    try w.print("{d:0>[1]}", .{ @as(u64, @intCast(d)), width });
-                } else {
-                    try w.print("{d:0>[1]}", .{ d, width });
-                }
-            } else |_| try w.print("{d}", .{d});
-        },
-        .float => |f| {
-            const spec = fmt_spec orelse {
-                try w.print("{d}", .{f});
-                return;
-            };
-
-            if (spec.len > 0 and spec[0] == '^') {
-                const precision = fmt.parseInt(usize, spec[1..], 10) catch 1;
-                try formatSpeed(w, f, precision, .decimal);
-            } else if (fmt.parseInt(usize, spec, 10)) |precision| {
-                const multiplier = math.pow(f64, 10.0, @floatFromInt(precision));
-                const rounded = @round(f * multiplier) / multiplier;
-                if (@trunc(rounded) == rounded) {
-                    try w.print("{d}", .{@as(i64, @intFromFloat(rounded))});
-                } else {
-                    try w.print("{d:.[1]}", .{ f, precision });
-                }
-            } else |_| try w.print("{d}", .{f});
-        },
-        .boolean => |b| try w.print("{}", .{b}),
+        .string => |s| try appendString(writer, s, spec),
+        .integer => |d| try appendInteger(writer, d, spec),
+        .float => |f| try appendFloat(writer, f, spec),
+        .boolean => |b| try writer.print("{}", .{b}),
     }
+}
+
+fn appendString(writer: *Writer, s: []const u8, spec: ?[]const u8) !void {
+    const sp = spec orelse return writer.writeAll(s);
+
+    if (sp.len > 0 and sp[0] == '*') {
+        const count = fmt.parseInt(usize, sp[1..], 10) catch 1;
+        for (0..count) |_| try writer.writeAll(s);
+        return;
+    }
+
+    try writer.writeAll(s);
+}
+
+fn appendInteger(writer: *Writer, d: i64, spec: ?[]const u8) !void {
+    const sp = spec orelse return writer.print("{d}", .{d});
+
+    if (sp.len > 0 and sp[0] == '.') {
+        const precision = fmt.parseInt(usize, sp[1..], 10) catch 2;
+        return formatBytes(writer, d, precision, .binary);
+    }
+
+    if (fmt.parseInt(usize, sp, 10)) |width| {
+        if (d >= 0) {
+            return writer.print("{d:0>[1]}", .{ @as(u64, @intCast(d)), width });
+        }
+
+        return writer.print("{d:0>[1]}", .{ d, width });
+    } else |_| {}
+
+    try writer.print("{d}", .{d});
+}
+
+fn appendFloat(writer: *Writer, f: f64, spec: ?[]const u8) !void {
+    const sp = spec orelse return writer.print("{d}", .{f});
+
+    if (sp.len > 0 and sp[0] == '^') {
+        const precision = fmt.parseInt(usize, sp[1..], 10) catch 1;
+        return formatSpeed(writer, f, precision, .decimal);
+    }
+
+    if (fmt.parseInt(usize, sp, 10)) |precision| {
+        const rounded = roundTo(f, precision);
+        if (@trunc(rounded) == rounded) {
+            return writer.print("{d}", .{@as(i64, @intFromFloat(rounded))});
+        }
+
+        return writer.print("{d:.[1]}", .{ f, precision });
+    } else |_| {}
+
+    try writer.print("{d}", .{f});
 }
