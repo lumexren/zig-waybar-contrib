@@ -6,7 +6,7 @@
     .dependencies = .{
         .plume = .{
             .url = "https://codeberg.org/erffy/plume/archive/0.17.x.zip",
-            .hash = "plume-1.0.0-K6ts5BZAAwCmJFx3oEx1IxiZGnNuEfremKF-FWqREEKH",
+            .hash = "plume-1.0.0-K6ts5FJQAwAIlYaMRhBcxAcTAZdfgmerHvS8SVwrl3rJ",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
