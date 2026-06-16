@@ -77,18 +77,22 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("total_fans", fans.items.len);
 
         const text_line = try replacer.render(config.text);
+        defer replacer.free(text_line);
+
         try json.set("text", text_line);
 
         var tooltip_text: ArrayList(u8) = .empty;
-        defer tooltip_text.deinit(gpa);
+        defer tooltip_text.deinit(replacer.allocator);
 
         for (fan.fans.items) |f| {
             try replacer.addKey("name", f.name);
             try replacer.addKeyAny("speed", f.speed);
 
             const line = try replacer.render(config.tooltip);
-            if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
-            try tooltip_text.appendSlice(gpa, line);
+            defer replacer.free(line);
+
+            if (tooltip_text.items.len > 0) try tooltip_text.append(replacer.allocator, '\n');
+            try tooltip_text.appendSlice(replacer.allocator, line);
         }
 
         try json.set("tooltip", tooltip_text.items);

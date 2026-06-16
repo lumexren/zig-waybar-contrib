@@ -90,7 +90,7 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("inodes_percentage_used", data.inodes_percentage_used);
 
         const text_line = try replacer.render(config.text);
-        try json.set("text", text_line);
+        defer replacer.free(text_line);
 
         if (config.show_all_mounts) {
             const filesystems = sysinfo.fetchMountedFilesystems(gpa) catch {
@@ -103,7 +103,7 @@ pub fn main(init: process.Init) !void {
             defer sysinfo.freeMountedFilesystems(gpa, filesystems);
 
             var tooltip_text: ArrayList(u8) = .empty;
-            defer tooltip_text.deinit(gpa);
+            defer tooltip_text.deinit(replacer.allocator);
 
             for (filesystems) |fs| {
                 try replacer.addKey("device", fs.device);
@@ -116,13 +116,17 @@ pub fn main(init: process.Init) !void {
                 try replacer.addKeyAny("percentage_free", fs.disk_info.percentage_free);
 
                 const line = try replacer.render(config.mount_tooltip);
-                if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
-                try tooltip_text.appendSlice(gpa, line);
+                defer replacer.free(line);
+
+                if (tooltip_text.items.len > 0) try tooltip_text.append(replacer.allocator, '\n');
+                try tooltip_text.appendSlice(replacer.allocator, line);
             }
 
             try json.set("tooltip", tooltip_text.items);
         } else {
             const tooltip_line = try replacer.render(config.tooltip);
+            defer replacer.free(tooltip_line);
+
             try json.set("tooltip", tooltip_line);
         }
 

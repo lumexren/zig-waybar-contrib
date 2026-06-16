@@ -150,14 +150,18 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("can_seek", player_info.can_seek);
 
         var text_line = try replacer.render(config.text);
+        defer replacer.free(text_line);
+
         if (config.text_max_length != 0 and text_line.len > config.text_max_length)
             text_line = text_line[0..config.text_max_length];
-        try json.set("text", text_line);
 
         const tooltip_line = try replacer.render(config.tooltip);
-        try json.set("tooltip", tooltip_line);
+        defer replacer.free(tooltip_line);
 
-        // Set CSS class based on status
+        try json.set("text", text_line);
+        try json.set("tooltip", tooltip_line);
+        try json.set("text", text_line);
+        try json.set("tooltip", tooltip_line);
         try json.set("class", status_str);
 
         try json.write(stdout);

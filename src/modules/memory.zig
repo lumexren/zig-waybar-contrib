@@ -87,9 +87,12 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("total_usage", memory.physical.used + memory.swap.used);
 
         const text_line = try replacer.render(config.text);
-        try json.set("text", text_line);
+        defer replacer.free(text_line);
 
         const tooltip_line = try replacer.render(config.tooltip);
+        defer replacer.free(tooltip_line);
+
+        try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
 
         try json.write(stdout);

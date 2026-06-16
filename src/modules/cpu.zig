@@ -99,9 +99,6 @@ pub fn main(init: process.Init) !void {
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(gpa);
 
-        const text_line = try replacer.render(config.text);
-        try json.set("text", text_line);
-
         for (cpu.cores, 0..) |core, i| {
             const usage_i: i64 = @intFromFloat(@round(core.usage));
             const freq_current = core.frequency.current;
@@ -122,7 +119,14 @@ pub fn main(init: process.Init) !void {
             try tooltip_text.appendSlice(gpa, line);
         }
 
-        try json.set("tooltip", tooltip_text.items);
+        const text_line = try replacer.render(config.text);
+        defer replacer.free(text_line);
+
+        const tooltip_line = try replacer.render(config.tooltip);
+        defer replacer.free(tooltip_line);
+
+        try json.set("text", text_line);
+        try json.set("tooltip", tooltip_line);
 
         try json.write(stdout);
         try stdout.flush();
