@@ -31,7 +31,6 @@ const Config = utils.Config;
 const Json = utils.Json;
 const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
-const Output = utils.Output;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 200,

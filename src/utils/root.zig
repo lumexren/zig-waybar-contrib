@@ -22,4 +22,3 @@ pub const Json = @import("Json.zig");
 pub const Waybar = @import("Waybar.zig");
 pub const Replacer = @import("Replacer.zig");
 pub const Process = @import("Process.zig");
-pub const Output = @import("Output.zig");
