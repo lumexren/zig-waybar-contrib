@@ -160,8 +160,6 @@ pub fn main(init: process.Init) !void {
 
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
-        try json.set("text", text_line);
-        try json.set("tooltip", tooltip_line);
         try json.set("class", status_str);
 
         try json.write(stdout);
