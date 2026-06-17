@@ -72,7 +72,7 @@ pub fn main(init: process.Init) !void {
     const stdout = &stdout_writer.interface;
 
     var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("battery", ModuleConfig);
+    const config: ModuleConfig = try cfg.load("battery", ModuleConfig);
     defer cfg.free(config);
 
     var json: Json = .init(gpa);
@@ -144,11 +144,13 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("energy_rate", battery.energy_rate);
 
         const text_line = try replacer.render(config.text);
-        try json.set("text", text_line);
+        defer replacer.free(text_line);
 
         const tooltip_line = try replacer.render(config.tooltip);
-        try json.set("tooltip", tooltip_line);
+        defer replacer.render(tooltip_line);
 
+        try json.set("text", text_line);
+        try json.set("tooltip", tooltip_line);
         try json.set("percentage", percentage);
 
         try json.write(stdout);
