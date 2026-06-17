@@ -142,6 +142,8 @@ Displays per-core CPU usage and frequency information.
     .update_interval = 1,
     // Module icon
     .icon = "",
+    // Start core index from 1 instead of 0
+    .one_indexed = false,
     // Custom text format (default shown)
     .text = "{icon}  {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
     // Custom tooltip format (default shown)
@@ -150,7 +152,6 @@ Displays per-core CPU usage and frequency information.
 ```
 
 **Customization:**
-
 The `text` and `tooltip` options support the following placeholders:
 
 | Placeholder            | Description                            |
@@ -166,6 +167,7 @@ The `text` and `tooltip` options support the following placeholders:
 | `{core_count}`         | Total number of CPU cores              |
 
 **Tooltip:**
+
 | Placeholder                 | Description                          |
 | :-------------------------- | :----------------------------------- |
 | `{core_index}`              | Index of the current core            |
@@ -555,7 +557,7 @@ Tracks available system package updates.
     // Check interval in seconds
     .update_interval = 200,
     // Package manager override (optional)
-    // .manager = "pacman", 
+    // .manager = "pacman",
     // Module icon
     .icon = "",
     // Error icon

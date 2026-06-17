@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const sysinfo = @import("sysinfo").CPU;
+const CPU = @import("sysinfo").CPU;
 
 const std = @import("std");
 const utils = @import("utils");
@@ -38,7 +38,8 @@ const Output = utils.Output;
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
     signal_number: u8 = 13,
-    icon: []const u8 = "",
+    one_indexed: bool = false,
+    icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
     tooltip: []const u8 = "Core {core_index}: {core_usage_percentage}% {dot} {core_frequency:2}{core_frequency_unit}",
 };
@@ -52,7 +53,7 @@ pub fn main(init: process.Init) !void {
     const stdout = &stdout_writer.interface;
 
     var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("cpu", ModuleConfig);
+    const config: ModuleConfig = try cfg.load("cpu", ModuleConfig);
     defer cfg.free(config);
 
     var json: Json = .init(gpa);
@@ -61,7 +62,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var cpu: sysinfo = .init(io, gpa);
+    var cpu: CPU = .init(io, gpa);
     defer cpu.deinit();
 
     var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
@@ -72,10 +73,10 @@ pub fn main(init: process.Init) !void {
 
         try cpu.update();
 
-        var max_frequency: sysinfo.Frequency = .{};
-        var min_frequency: sysinfo.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
-        var global_freq_min: sysinfo.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
-        var global_freq_max: sysinfo.Frequency = .{};
+        var max_frequency: CPU.Frequency = .{};
+        var min_frequency: CPU.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
+        var global_freq_min: CPU.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
+        var global_freq_max: CPU.Frequency = .{};
 
         for (cpu.cores) |core| {
             if (core.frequency.current.value.raw > max_frequency.value.raw) max_frequency = core.frequency.current;
@@ -100,13 +101,12 @@ pub fn main(init: process.Init) !void {
         defer tooltip_text.deinit(gpa);
 
         for (cpu.cores, 0..) |core, i| {
-            const usage_i: i64 = @intFromFloat(@round(core.usage));
             const freq_current = core.frequency.current;
             const freq_min = core.frequency.min;
             const freq_max = core.frequency.max;
 
-            try replacer.addKeyAny("core_index", i);
-            try replacer.addKeyAny("core_usage_percentage", usage_i);
+            try replacer.addKeyAny("core_index", if (config.one_indexed) i + 1 else i);
+            try replacer.addKeyAny("core_usage_percentage", @as(i64, @intFromFloat(@round(core.usage))));
             try replacer.addKeyAny("core_frequency", if (freq_current.value.fraction) freq_current.value.raw else @as(f64, @floatFromInt(freq_current.value.rounded)));
             try replacer.addKeyAny("core_frequency_unit", freq_current.unit);
             try replacer.addKeyAny("core_frequency_min", if (freq_min.value.fraction) freq_min.value.raw else @as(f64, @floatFromInt(freq_min.value.rounded)));
@@ -115,6 +115,8 @@ pub fn main(init: process.Init) !void {
             try replacer.addKeyAny("core_frequency_max_unit", freq_max.unit);
 
             const line = try replacer.render(config.tooltip);
+            defer replacer.free(line);
+
             if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
             try tooltip_text.appendSlice(gpa, line);
         }
@@ -122,11 +124,8 @@ pub fn main(init: process.Init) !void {
         const text_line = try replacer.render(config.text);
         defer replacer.free(text_line);
 
-        const tooltip_line = try replacer.render(config.tooltip);
-        defer replacer.free(tooltip_line);
-
         try json.set("text", text_line);
-        try json.set("tooltip", tooltip_line);
+        try json.set("tooltip", tooltip_text.items);
 
         try json.write(stdout);
         try stdout.flush();
