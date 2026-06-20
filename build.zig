@@ -106,6 +106,7 @@ pub fn build(b: *Build) void {
             .target = target,
             .optimize = optimize,
             .link_libc = cfg.libc,
+            .strip = true,
             .imports = &.{
                 .{ .name = "bindings", .module = bindings },
                 .{ .name = "sysinfo", .module = sysinfo_mod },
@@ -117,8 +118,18 @@ pub fn build(b: *Build) void {
 
         if (cfg.dbus) mod.linkSystemLibrary("dbus-1", .{ .needed = true });
 
-        const exe = b.addExecutable(.{ .name = cfg.name, .root_module = mod, .version = Version });
-        exe.lto = if (optimize == .ReleaseSmall) .thin else if (optimize == .ReleaseFast) .full else .none;
+        const exe = b.addExecutable(.{
+            .name = cfg.name,
+            .root_module = mod,
+            .version = Version,
+        });
+
+        exe.lto = switch (optimize) {
+            .Debug, .ReleaseSafe => .none,
+            .ReleaseSmall => .thin,
+            .ReleaseFast => .full,
+        };
+
         b.installArtifact(exe);
     }
 }
