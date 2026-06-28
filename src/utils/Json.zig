@@ -18,7 +18,7 @@
 // along with this program. If not, see <https://gnu.org/licenses>.
 
 /// An incremental JSON object builder with explicit memory management.
-const JsonBuilder = @This();
+const Json = @This();
 
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
@@ -62,7 +62,7 @@ pub const Field = struct {
 /// and will release them when `deinit` is called.
 ///
 /// The returned builder starts with no fields and a reset internal state.
-pub inline fn init(allocator: Allocator) JsonBuilder {
+pub inline fn init(allocator: Allocator) Json {
     return .{ .allocator = allocator };
 }
 
@@ -74,7 +74,7 @@ pub inline fn init(allocator: Allocator) JsonBuilder {
 ///
 /// This function must be called exactly once for every initialized builder
 /// to avoid memory leaks.
-pub inline fn deinit(this: *JsonBuilder) void {
+pub inline fn deinit(this: *Json) void {
     for (this.fields.items) |field| {
         if (field.value == .string) {
             this.allocator.free(field.value.string);
@@ -93,7 +93,7 @@ pub inline fn deinit(this: *JsonBuilder) void {
 ///
 /// After calling `clear()`, the builder can be used again as if
 /// freshly initialized, but without reallocating the backing array.
-pub inline fn clear(this: *JsonBuilder) void {
+pub inline fn clear(this: *Json) void {
     for (this.fields.items) |field| {
         if (field.value == .string) {
             this.allocator.free(field.value.string);
@@ -115,7 +115,7 @@ pub inline fn clear(this: *JsonBuilder) void {
 ///
 /// This function does not perform key deduplication; setting the same key
 /// multiple times will result in multiple entries in the output.
-pub fn set(this: *JsonBuilder, key: []const u8, value: anytype) !void {
+pub fn set(this: *Json, key: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
     const v = switch (T) {
@@ -139,7 +139,7 @@ pub fn set(this: *JsonBuilder, key: []const u8, value: anytype) !void {
 /// This function does not check for existing keys; if the same key
 /// is set multiple times, all entries will be written to the output.
 /// Use this intentionally or ensure uniqueness at the call site.
-pub fn setFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8, args: anytype) !void {
+pub fn setFmt(this: *Json, key: []const u8, comptime value: []const u8, args: anytype) !void {
     const str = try fmt.allocPrint(this.allocator, value, args);
     errdefer this.allocator.free(str);
 
@@ -153,7 +153,7 @@ pub fn setFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8, a
 ///
 /// This is useful for conditionally setting or appending values
 /// without duplicating keys unintentionally.
-pub fn has(this: *JsonBuilder, key: []const u8) bool {
+pub fn has(this: *Json, key: []const u8) bool {
     for (this.fields.items) |f| {
         if (mem.eql(u8, f.key, key)) return true;
     }
@@ -170,7 +170,7 @@ pub fn has(this: *JsonBuilder, key: []const u8) bool {
 ///
 /// Panics if the key exists but the associated value is not a string,
 /// as appending is only valid for string fields.
-pub fn appendFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8, args: anytype) !void {
+pub fn appendFmt(this: *Json, key: []const u8, comptime value: []const u8, args: anytype) !void {
     const part = try fmt.allocPrint(this.allocator, value, args);
     errdefer this.allocator.free(part);
 
@@ -205,7 +205,7 @@ pub fn appendFmt(this: *JsonBuilder, key: []const u8, comptime value: []const u8
 /// Waybar tooltips, without having to manually track newline placement.
 ///
 /// The internal `counter` is incremented after each call.
-pub fn appendFmtNL(this: *JsonBuilder, key: []const u8, comptime value: []const u8, args: anytype) !void {
+pub fn appendFmtNL(this: *Json, key: []const u8, comptime value: []const u8, args: anytype) !void {
     if (!this.has(key)) try this.set(key, "");
 
     if (this.counter > 0) {
@@ -224,7 +224,7 @@ pub fn appendFmtNL(this: *JsonBuilder, key: []const u8, comptime value: []const 
 ///
 /// The output is compact (no extra whitespace) and ends with a newline,
 /// making it suitable for streaming output (e.g. Waybar modules).
-pub fn write(this: *JsonBuilder, writer: *Io.Writer) !void {
+pub fn write(this: *Json, writer: *Io.Writer) !void {
     try writer.writeAll("{");
 
     for (this.fields.items, 0..) |field, i| {
