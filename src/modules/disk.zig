@@ -50,9 +50,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("disk", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("disk", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -60,13 +60,13 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const data = sysinfo.fetchDiskInfo(config.path) catch {
+        const disk_info = sysinfo.fetchDiskInfo(data.path) catch {
             try json.set("text", @as([]const u8, "Disk: Error"));
             try json.set("tooltip", @as([]const u8, "Failed to read disk info"));
             try json.write(stdout);
@@ -76,22 +76,22 @@ pub fn main(init: process.Init) !void {
         };
 
         try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", config.icon);
-        try replacer.addKey("path", config.path);
-        try replacer.addKeyAny("total", data.total);
-        try replacer.addKeyAny("used", data.used);
-        try replacer.addKeyAny("free", data.free);
-        try replacer.addKeyAny("percentage_used", data.percentage_used);
-        try replacer.addKeyAny("percentage_free", data.percentage_free);
-        try replacer.addKeyAny("inodes_total", data.inodes_total);
-        try replacer.addKeyAny("inodes_used", data.inodes_used);
-        try replacer.addKeyAny("inodes_free", data.inodes_free);
-        try replacer.addKeyAny("inodes_percentage_used", data.inodes_percentage_used);
+        try replacer.addKey("icon", data.icon);
+        try replacer.addKey("path", data.path);
+        try replacer.addKeyAny("total", disk_info.total);
+        try replacer.addKeyAny("used", disk_info.used);
+        try replacer.addKeyAny("free", disk_info.free);
+        try replacer.addKeyAny("percentage_used", disk_info.percentage_used);
+        try replacer.addKeyAny("percentage_free", disk_info.percentage_free);
+        try replacer.addKeyAny("inodes_total", disk_info.inodes_total);
+        try replacer.addKeyAny("inodes_used", disk_info.inodes_used);
+        try replacer.addKeyAny("inodes_free", disk_info.inodes_free);
+        try replacer.addKeyAny("inodes_percentage_used", disk_info.inodes_percentage_used);
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
-        if (config.show_all_mounts) {
+        if (data.show_all_mounts) {
             const filesystems = sysinfo.fetchMountedFilesystems(gpa) catch {
                 try json.set("tooltip", @as([]const u8, "Failed to read mounted filesystems"));
                 try json.write(stdout);
@@ -114,7 +114,7 @@ pub fn main(init: process.Init) !void {
                 try replacer.addKeyAny("percentage_used", fs.disk_info.percentage_used);
                 try replacer.addKeyAny("percentage_free", fs.disk_info.percentage_free);
 
-                const line = try replacer.render(config.mount_tooltip);
+                const line = try replacer.render(data.mount_tooltip);
                 defer replacer.free(line);
 
                 if (tooltip_text.items.len > 0) try tooltip_text.append(replacer.allocator, '\n');
@@ -123,7 +123,7 @@ pub fn main(init: process.Init) !void {
 
             try json.set("tooltip", tooltip_text.items);
         } else {
-            const tooltip_line = try replacer.render(config.tooltip);
+            const tooltip_line = try replacer.render(data.tooltip);
             defer replacer.free(tooltip_line);
 
             try json.set("tooltip", tooltip_line);

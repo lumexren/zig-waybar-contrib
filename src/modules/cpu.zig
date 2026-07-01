@@ -38,7 +38,7 @@ pub const ModuleConfig = struct {
     update_interval: i64 = 1,
     signal_number: u8 = 13,
     one_indexed: bool = false,
-    icon: []const u8 = "",
+    icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
     tooltip: []const u8 = "Core {core_index}: {core_usage_percentage}% {dot} {core_frequency:2}{core_frequency_unit}",
 };
@@ -51,9 +51,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config: ModuleConfig = try cfg.load("cpu", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("cpu", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -64,9 +64,9 @@ pub fn main(init: process.Init) !void {
     var cpu: CPU = .init(io, gpa);
     defer cpu.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -85,7 +85,7 @@ pub fn main(init: process.Init) !void {
         }
 
         try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", config.icon);
+        try replacer.addKey("icon", data.icon);
 
         try replacer.addKeyAny("usage_percentage", @as(i64, @intFromFloat(@round(cpu.avg))));
         try replacer.addKeyAny("frequency", if (max_frequency.value.fraction) max_frequency.value.raw else @as(f64, @floatFromInt(max_frequency.value.rounded)));
@@ -104,7 +104,7 @@ pub fn main(init: process.Init) !void {
             const freq_min = core.frequency.min;
             const freq_max = core.frequency.max;
 
-            try replacer.addKeyAny("core_index", if (config.one_indexed) i + 1 else i);
+            try replacer.addKeyAny("core_index", if (data.one_indexed) i + 1 else i);
             try replacer.addKeyAny("core_usage_percentage", @as(i64, @intFromFloat(@round(core.usage))));
             try replacer.addKeyAny("core_frequency", if (freq_current.value.fraction) freq_current.value.raw else @as(f64, @floatFromInt(freq_current.value.rounded)));
             try replacer.addKeyAny("core_frequency_unit", freq_current.unit);
@@ -113,14 +113,14 @@ pub fn main(init: process.Init) !void {
             try replacer.addKeyAny("core_frequency_max", if (freq_max.value.fraction) freq_max.value.raw else @as(f64, @floatFromInt(freq_max.value.rounded)));
             try replacer.addKeyAny("core_frequency_max_unit", freq_max.unit);
 
-            const line = try replacer.render(config.tooltip);
+            const line = try replacer.render(data.tooltip);
             defer replacer.free(line);
 
             if (tooltip_text.items.len > 0) try tooltip_text.append(gpa, '\n');
             try tooltip_text.appendSlice(gpa, line);
         }
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
         try json.set("text", text_line);

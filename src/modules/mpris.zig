@@ -53,9 +53,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("mpris", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("mpris", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -63,9 +63,9 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -74,8 +74,8 @@ pub fn main(init: process.Init) !void {
         const player_info = mpris.getActivePlayer(gpa) catch |err| {
             switch (err) {
                 mpris.MprisError.NoPlayers, mpris.MprisError.ConnectionFailed => {
-                    try replacer.addKey("icon", config.icon);
-                    try json.set("text", config.no_player_text);
+                    try replacer.addKey("icon", data.icon);
+                    try json.set("text", data.no_player_text);
                     try json.set("tooltip", @as([]const u8, "No MPRIS player available"));
                     try json.set("class", @as([]const u8, "no-player"));
 
@@ -95,9 +95,9 @@ pub fn main(init: process.Init) !void {
 
         // Status icon
         const status_icon = switch (player_info.status) {
-            .playing => config.icon_playing,
-            .paused => config.icon_paused,
-            .stopped => config.icon_stopped,
+            .playing => data.icon_playing,
+            .paused => data.icon_paused,
+            .stopped => data.icon_stopped,
         };
 
         try replacer.addKey("icon", status_icon);
@@ -148,13 +148,13 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("can_pause", player_info.can_pause);
         try replacer.addKeyAny("can_seek", player_info.can_seek);
 
-        var text_line = try replacer.render(config.text);
+        var text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
-        if (config.text_max_length != 0 and text_line.len > config.text_max_length)
-            text_line = text_line[0..config.text_max_length];
+        if (data.text_max_length != 0 and text_line.len > data.text_max_length)
+            text_line = text_line[0..data.text_max_length];
 
-        const tooltip_line = try replacer.render(config.tooltip);
+        const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);
 
         try json.set("text", text_line);

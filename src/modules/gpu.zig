@@ -47,9 +47,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("gpu", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("gpu", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -57,20 +57,20 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     var module: sysinfo = .init(gpa);
     try module.initialize();
     defer module.shutdown();
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
         const gpu_info: sysinfo.GPUInfo = try module.getInfo();
 
         try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", config.icon);
+        try replacer.addKey("icon", data.icon);
         try replacer.addKeyAny("usage_percentage", gpu_info.gpu_busy);
         try replacer.addKeyAny("temperature", gpu_info.temperature);
         try replacer.addKeyAny("pwm_percentage", gpu_info.pwm);
@@ -78,10 +78,10 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("vram_usage", gpu_info.memory_info.used);
         try replacer.addKeyAny("vram_free", gpu_info.memory_info.free);
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
-        const tooltip_line = try replacer.render(config.tooltip);
+        const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);
 
         try json.set("text", text_line);

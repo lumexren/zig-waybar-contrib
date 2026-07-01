@@ -49,9 +49,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("bluetooth", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("bluetooth", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -59,14 +59,14 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
         const adapters = sysinfo.getAdapters(gpa) catch |err| {
-            try json.set("text", config.icon_off);
+            try json.set("text", data.icon_off);
             try json.set("tooltip", @as([]const u8, "Bluetooth unavailable"));
             try json.write(stdout);
             try stdout.flush();
@@ -82,7 +82,7 @@ pub fn main(init: process.Init) !void {
         }
 
         if (adapters.len == 0) {
-            try json.set("text", config.icon_off);
+            try json.set("text", data.icon_off);
             try json.set("tooltip", @as([]const u8, "No Bluetooth adapter"));
             try json.write(stdout);
             try stdout.flush();
@@ -114,12 +114,12 @@ pub fn main(init: process.Init) !void {
             try replacer.addKeyAny("device_connected", device.connected);
             try replacer.addKeyAny("device_battery", device.battery orelse @as(u8, 0));
 
-            const line = try replacer.render(config.device_format);
+            const line = try replacer.render(data.device_format);
             if (device_list.items.len > 0) try device_list.appendSlice(gpa, "\n");
             try device_list.appendSlice(gpa, line);
         }
 
-        const icon = if (adapter.powered) config.icon_on else config.icon_off;
+        const icon = if (adapter.powered) data.icon_on else data.icon_off;
 
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", icon);
@@ -129,10 +129,10 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("device_count", connected_count);
         try replacer.addKey("devices", if (device_list.items.len > 0) device_list.items else "No connected devices");
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
-        const tooltip_line = try replacer.render(config.tooltip);
+        const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);
 
         try json.set("text", text_line);

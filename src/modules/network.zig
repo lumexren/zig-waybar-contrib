@@ -47,9 +47,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("network", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("network", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -57,7 +57,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     const route = try sysinfo.getDefaultRoute(io, gpa);
     const local_ip = try sysinfo.getLocalIP(gpa, route.interface);
@@ -65,7 +65,7 @@ pub fn main(init: process.Init) !void {
     const initial_time = Clock.now(.boot, io);
     var prev_stats = try sysinfo.getNetworkStats(io, route.interface, initial_time.toSeconds());
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -78,7 +78,7 @@ pub fn main(init: process.Init) !void {
         prev_stats = current_stats;
 
         try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", config.icon);
+        try replacer.addKey("icon", data.icon);
         try replacer.addKey("interface", route.interface);
         try replacer.addKey("gateway", route.gateway);
         try replacer.addKey("local_ip", local_ip);
@@ -86,10 +86,10 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("upload_speed", rates.upload);
         try replacer.addKeyAny("total_speed", rates.total);
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
-        const tooltip_line = try replacer.render(config.tooltip);
+        const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);
 
         try json.set("text", text_line);

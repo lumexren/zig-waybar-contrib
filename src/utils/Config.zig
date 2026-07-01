@@ -37,7 +37,11 @@ environ_map: *Map,
 allocator: Allocator,
 
 pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
-    return .{ .io = io, .environ_map = environ_map, .allocator = allocator };
+    return .{
+        .io = io,
+        .environ_map = environ_map,
+        .allocator = allocator,
+    };
 }
 
 /// Resolves XDG_CONFIG_HOME or falls back to $HOME/.config.
@@ -79,8 +83,13 @@ pub fn free(this: *Config, config: anytype) void {
     zon.parse.free(this.allocator, config);
 }
 
-/// Strictly loads a typed config struct `T`. Bubbles up all internal errors.
+/// Strictly loads a typed config struct `T`. Falls back to `T{}` on any error.
 /// Caller is responsible for calling `free()` on success if `T` contains allocated fields.
+pub fn load(this: *Config, module_name: []const u8, comptime T: type) T {
+    return this.loadExact(module_name, T) catch T{};
+}
+
+/// Strictly loads a typed config struct `T`. Bubbles up all internal errors.
 pub fn loadExact(this: *Config, module_name: []const u8, comptime T: type) !T {
     const config_path = try this.resolveModulePath(module_name) orelse return error.ConfigDirNotFound;
     defer this.allocator.free(config_path);
@@ -96,10 +105,4 @@ pub fn loadExact(this: *Config, module_name: []const u8, comptime T: type) !T {
     try reader.interface.readSliceAll(buffer);
 
     return try zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true, .free_on_error = true });
-}
-
-/// Loads a typed config struct `T` for the given module.
-/// Returns `T{}` on missing file, parse failure, or missing config dir.
-pub fn load(this: *Config, module_name: []const u8, comptime T: type) !T {
-    return this.loadExact(module_name, T) catch T{};
 }

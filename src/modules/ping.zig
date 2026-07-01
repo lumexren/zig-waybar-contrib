@@ -61,9 +61,9 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("ping", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("ping", ModuleConfig);
+    defer config.free(data);
 
     var json: Json = .init(gpa);
     defer json.deinit();
@@ -71,9 +71,9 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
-    var resolved = try sysinfolib.resolveIP(gpa, io, config.target_domain);
+    var resolved = try sysinfolib.resolveIP(gpa, io, data.target_domain);
     var last_update_ts: i64 = 0;
 
     const local_addr: IpAddress = try .parseIp4("0.0.0.0", 0);
@@ -87,21 +87,21 @@ pub fn main(init: process.Init) !void {
     var total_latency: i64 = 0;
     var ping_count: i64 = 0;
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
         const current = Clock.now(.boot, io);
         const now_s = current.toSeconds();
 
-        if (resolved == null or (now_s - last_update_ts) >= config.target_domain_ip_update_interval) {
-            resolved = try sysinfolib.resolveIP(gpa, io, config.target_domain);
+        if (resolved == null or (now_s - last_update_ts) >= data.target_domain_ip_update_interval) {
+            resolved = try sysinfolib.resolveIP(gpa, io, data.target_domain);
             last_update_ts = now_s;
 
             target_addr = try .parseIp4(resolved.?, 80);
         }
 
-        const seconds_until_ip_update = config.target_domain_ip_update_interval - (now_s - last_update_ts);
+        const seconds_until_ip_update = data.target_domain_ip_update_interval - (now_s - last_update_ts);
 
         var ping_buffer: [64]u8 = undefined;
         const latency = ping(io, socket, &target_addr, &ping_buffer) catch continue;
@@ -113,8 +113,8 @@ pub fn main(init: process.Init) !void {
         const avg_latency = @divTrunc(total_latency, ping_count);
 
         try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", config.icon);
-        try replacer.addKey("target", config.target_domain);
+        try replacer.addKey("icon", data.icon);
+        try replacer.addKey("target", data.target_domain);
         try replacer.addKey("ip", resolved.?);
         try replacer.addKeyAny("next_ip_update", seconds_until_ip_update);
         try replacer.addKeyAny("latency", latency);
@@ -122,10 +122,10 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("avg_latency", avg_latency);
         try replacer.addKeyAny("max_latency", max_latency);
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
-        const tooltip_line = try replacer.render(config.tooltip);
+        const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);
 
         try json.set("text", text_line);

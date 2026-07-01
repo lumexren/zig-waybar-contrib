@@ -60,12 +60,12 @@ pub fn main(init: process.Init) !void {
     var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    var cfg: Config = .init(io, init.environ_map, gpa);
-    const config = try cfg.load("updates", ModuleConfig);
-    defer cfg.free(config);
+    var config: Config = .init(io, init.environ_map, gpa);
+    const data: ModuleConfig = config.load("updates", ModuleConfig);
+    defer config.free(data);
 
     var manager: Updates.PackageManager = undefined;
-    if (config.manager) |m| {
+    if (data.manager) |m| {
         manager = getManager(m);
     } else {
         manager = try Updates.getManager(io, init.environ_map, gpa);
@@ -80,9 +80,9 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = config.signal_number });
+    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
-    while (true) : (try io.sleep(.fromSeconds(config.update_interval), .boot)) {
+    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer {
             json.clear();
             replacer.clear();
@@ -92,7 +92,7 @@ pub fn main(init: process.Init) !void {
         try replacer.addCommonPlaceholders();
 
         if (updates.check()) |_| {
-            try replacer.addKey("icon", config.icon);
+            try replacer.addKey("icon", data.icon);
             try replacer.addKeyAny("total_updates", updates.count);
             try replacer.addKey("manager", updates.manager.name());
 
@@ -104,7 +104,7 @@ pub fn main(init: process.Init) !void {
                     try replacer.addKey("package_name", update.pkg_name);
                     try replacer.addKey("new_version", update.new_version);
 
-                    const line = try replacer.render(config.tooltip);
+                    const line = try replacer.render(data.tooltip);
                     defer replacer.free(line);
 
                     if (tooltip_text.items.len > 0) try tooltip_text.append(replacer.allocator, '\n');
@@ -116,14 +116,14 @@ pub fn main(init: process.Init) !void {
                 try json.set("tooltip", "");
             }
         } else |err| {
-            try replacer.addKey("icon", config.error_icon);
+            try replacer.addKey("icon", data.error_icon);
             try replacer.addKey("manager", updates.manager.name());
             try replacer.addKeyAny("total_updates", updates.count);
 
             try json.set("tooltip", @errorName(err));
         }
 
-        const text_line = try replacer.render(config.text);
+        const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
 
         try json.set("text", text_line);
