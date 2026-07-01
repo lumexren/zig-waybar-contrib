@@ -34,10 +34,13 @@ jobs:
         with:
           version: master
 
-      - name: Build
+      - name: Build debug
         run: |
           zig build
           mv zig-out/bin zig-out-debug
+
+      - name: Build release
+        run: |
           zig build -Drelease
           mv zig-out/bin zig-out-release
 
@@ -52,11 +55,11 @@ jobs:
         with:
           name: ${{ github.event.repository.name }}-debug-${{ steps.version.outputs.version }}-${{ github.run_id }}
           path: zig-out-debug/*
-          retention-days: 7
+          retention-days: 14
 
       - name: Upload Release Binaries
         uses: actions/upload-artifact@v3
         with:
           name: ${{ github.event.repository.name }}-release-${{ steps.version.outputs.version }}-${{ github.run_id }}
           path: zig-out-release/*
-          retention-days: 7
+          retention-days: 14

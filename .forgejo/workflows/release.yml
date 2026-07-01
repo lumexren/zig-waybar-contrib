@@ -29,10 +29,13 @@ jobs:
         with:
           version: master
 
-      - name: Build
+      - name: Build debug
         run: |
           zig build
           mv zig-out/bin zig-out-debug
+
+      - name: Build release
+        run: |
           zig build -Drelease
           mv zig-out/bin zig-out-release
 
@@ -72,7 +75,8 @@ jobs:
 
           if [[ -f .zigversion ]]; then
             ZIG_VERSION=$(cat .zigversion | xargs)
-            echo -e "\n\n<sub>This release is based on $ZIG_VERSION</sub>" >> release_notes.md
+            ZIG_COMPILER_VERSION=$(zig version)
+            echo -e "\n\n<sub>This release is based on $ZIG_VERSION</sub>\n<sub>Compiled with $ZIG_COMPILER_VERSION</sub>" >> release_notes.md
           fi
 
       - name: Package Builds
