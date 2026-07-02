@@ -602,12 +602,25 @@ These placeholders are available in all modules:
 
 ### **Replacer Formatters**
 
-The configuration system supports format specifiers for values to control their display.
+The configuration system supports format specifiers, raw literals, and multi-variable chaining to control exactly how values are displayed.
 
-| Specifier | Applies To | Description                                                             | Example                         |
-| :-------- | :--------- | :---------------------------------------------------------------------- | :------------------------------ |
-| `*N`      | Strings    | Repeats the string value exactly N times                                | `{dot*5}` → `·····`             |
-| `:N`      | Integers   | Zero-pads integers to width N                                           | `{usage:2}` → `05`              |
-| `:N`      | Floats     | Decimal precision N                                                     | `{usage:2}` → `12.34`           |
-| `:.N`     | Integers   | Formats bytes to human-readable string with N decimal precision         | `{vram_usage:.2}` → `1.50 GiB`  |
-| `:^N`     | Floats     | Formats network speed to human-readable string with N decimal precision | `{total_speed:^1}` → `2.5 MB/s` |
+| Specifier | Applies To | Description | Example |
+| :--- | :--- | :--- | :--- |
+| `*N` | Strings | Repeats the string value exactly N times | `{dot*5}` → `·····` |
+| `N` | Integers | Zero-pads integers to width N | `{usage:2}` → `05` |
+| `N` | Floats | Decimal precision N | `{usage:2}` → `12.34` |
+| `.N` | Integers | Formats bytes to human-readable string with N decimal precision (Binary) | `{vram_usage:.2}` → `1.50 GiB` |
+| `^N` | Floats | Formats network speed to human-readable string with N decimal precision (Decimal) | `{total_speed:^1}` → `2.5 MB/s` |
+| `'X'` | Literals | Appends the raw string text `X` directly to the output sequence | `{usage:'%'}` → `0%` |
+
+---
+
+### **Advanced Variable Chaining**
+
+Instead of writing multiple standalone placeholders back-to-back, you can chain multiple global keys, formatters, and raw text literals together inside a single wrapper block separated by colons (`:`). The engine evaluates and joins them sequentially from left to right.
+
+* **Global Value Chaining:** Fetch and append other global variables without closing the tag.
+  * `{frequency:frequency_unit}` → `4200MHz`
+* **Literal Suffixing:** Seamlessly attach units or structural symbols using single quotes.
+  * `{frequency:2:'Hz'}` → `4200Hz`
+  * `{cpu_brand:' | ':cpu_usage:'%'}` → `AMD | 85%`
