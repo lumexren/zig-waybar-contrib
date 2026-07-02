@@ -40,7 +40,7 @@ pub const ModuleConfig = struct {
     icon_charging: []const u8 = "",
     icon_full: []const u8 = "",
     text: []const u8 = "{icon}  {percentage}%",
-    tooltip: []const u8 = "Battery: {state}{nl}Time remaining: {time_remaining}{nl}Model: {model}",
+    tooltip: []const u8 = "Battery: {state:nl}Time remaining: {time_remaining:nl}Model: {model}",
 };
 
 fn formatTime(seconds: i64) struct { hours: i64, minutes: i64 } {

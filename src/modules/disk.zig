@@ -37,9 +37,9 @@ pub const ModuleConfig = struct {
     path: []const u8 = "/",
     show_all_mounts: bool = false,
     icon: []const u8 = "",
-    text: []const u8 = "{icon}  {percentage_used}% {dot} {used:.2}",
-    tooltip: []const u8 = "Total {dot} {total:.2}{nl}Free {dot} {free:.2}{nl}Used {dot} {used:.2}",
-    mount_tooltip: []const u8 = "{mount_point}: {percentage_used}% ({free:.2} free)",
+    text: []const u8 = "{icon}  {percentage_used:'%'} {dot} {used:.2}",
+    tooltip: []const u8 = "Total {dot} {total:.2:nl}Free {dot} {free:.2:nl}Used {dot} {used:.2}",
+    mount_tooltip: []const u8 = "{mount_point}: {percentage_used:'%'} ({free:.2} free)",
 };
 
 pub fn main(init: process.Init) !void {
