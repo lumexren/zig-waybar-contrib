@@ -41,7 +41,7 @@ pub const ModuleConfig = struct {
     icon_stopped: []const u8 = "",
     text: []const u8 = "{icon}  {title} {dot} {artist}",
     text_max_length: u16 = 256,
-    tooltip: []const u8 = "{player_name}: {status}{nl}{title} - {artist}{nl}Album: {album}{nl}{position} / {length}",
+    tooltip: []const u8 = "{player_name}: {status:nl:title} - {artist:nl}Album: {album:nl:position} / {length}",
     no_player_text: []const u8 = "No player",
 };
 

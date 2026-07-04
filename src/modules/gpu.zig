@@ -35,8 +35,8 @@ pub const ModuleConfig = struct {
     update_interval: i64 = 1,
     signal_number: u8 = 16,
     icon: []const u8 = "",
-    text: []const u8 = "{icon}  {usage_percentage}% {dot} {temperature}°C",
-    tooltip: []const u8 = "PWM {dot} {pwm_percentage}%{nl}VRAM Total {dot} {vram_total:.0}{nl}VRAM Free {dot} {vram_free:.2}{nl}VRAM Usage {dot} {vram_usage:.2}",
+    text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {temperature:'°C'}",
+    tooltip: []const u8 = "PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2}",
 };
 
 pub fn main(init: process.Init) !void {

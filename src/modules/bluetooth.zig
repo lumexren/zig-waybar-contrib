@@ -37,7 +37,7 @@ pub const ModuleConfig = struct {
     icon_on: []const u8 = "",
     icon_off: []const u8 = "",
     text: []const u8 = "{icon}  {device_count}",
-    tooltip: []const u8 = "Adapter: {adapter_name}{nl}Power: {adapter_powered}{nl}Connected: {device_count} devices{nl}{devices}",
+    tooltip: []const u8 = "Adapter: {adapter_name:nl}Power: {adapter_powered:nl}Connected: {device_count} devices{nl:devices}",
     device_format: []const u8 = "{device_alias}",
 };
 

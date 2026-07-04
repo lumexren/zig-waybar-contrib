@@ -26,6 +26,7 @@ const StringHashMap = std.StringHashMap;
 const Io = std.Io;
 const Writer = Io.Writer;
 const fmt = std.fmt;
+const ascii = std.ascii;
 const math = std.math;
 const mem = std.mem;
 const Allocator = mem.Allocator;
@@ -146,13 +147,17 @@ pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
     return this.addKey(key, str);
 }
 
-/// Renders `template` into `writer`, substituting `{key}` and `{key:spec}` placeholders.
+/// Renders `template` into `writer`, substituting `{key}`, `{key:spec}`, and chained sequences.
 ///
 /// Format specifiers:
 ///   - `{key:.N}` — integer formatted as bytes with N decimal places (binary units)
 ///   - `{key:^N}` — float formatted as transfer speed with N decimal places (decimal units)
 ///   - `{key*N}`  — string repeated N times
 ///   - `{key:N}`  — zero-padded integer (width N) or rounded float (N decimal places)
+///
+/// Variable Chaining & Literals:
+///   - `{key:anotherkey:yet_another}` — evaluates and joins multiple global placeholders sequentially.
+///   - `{key:spec:'string_literal'}` — appends a literal raw string immediately after evaluation.
 pub fn render(this: *const Replacer, template: []const u8) ![]u8 {
     var result: ArrayList(u8) = .empty;
     errdefer result.deinit(this.allocator);
@@ -182,10 +187,66 @@ pub fn render(this: *const Replacer, template: []const u8) ![]u8 {
         };
 
         const content = rest[0..close];
-        const key, const spec = splitKeySpec(content);
+        
+        var parts = mem.splitScalar(u8, content, ':');
+        var current_key: ?[]const u8 = null;
+        var current_spec: ?[]const u8 = null;
+        var is_first = true;
+        var first_key_found = false;
 
-        if (this.values.get(key)) |val| {
-            try appendValue(this.allocator, &result, val, spec);
+        while (parts.next()) |token| {
+            if (is_first) {
+                current_key = token;
+                is_first = false;
+
+                if (mem.findScalar(u8, token, '*')) |star| {
+                    if (star > 0) {
+                        current_key = token[0..star];
+                        current_spec = token[star..];
+                    }
+                }
+
+                if (this.values.get(current_key.?)) |_| {
+                    first_key_found = true;
+                } else {
+                    break;
+                }
+            } else {
+                if (isFormatSpec(token)) {
+                    current_spec = token;
+                } else if (token.len >= 2 and token[0] == '\'' and token[token.len - 1] == '\'') {
+                    if (current_key) |k| {
+                        if (this.values.get(k)) |val| {
+                            try appendValue(this.allocator, &result, val, current_spec);
+                        } else if (this.strict) {
+                            return ReplacerError.PlaceholderNotFound;
+                        }
+                    }
+                    try result.appendSlice(this.allocator, token[1 .. token.len - 1]);
+                    current_key = null;
+                    current_spec = null;
+                } else {
+                    if (current_key) |k| {
+                        if (this.values.get(k)) |val| {
+                            try appendValue(this.allocator, &result, val, current_spec);
+                        } else if (this.strict) {
+                            return ReplacerError.PlaceholderNotFound;
+                        }
+                    }
+                    current_key = token;
+                    current_spec = null;
+                }
+            }
+        }
+
+        if (first_key_found) {
+            if (current_key) |k| {
+                if (this.values.get(k)) |val| {
+                    try appendValue(this.allocator, &result, val, current_spec);
+                } else if (this.strict) {
+                    return ReplacerError.PlaceholderNotFound;
+                }
+            }
             i += close + 2; // '{' + content + '}'
             continue;
         }
@@ -223,8 +284,8 @@ pub fn formatSpeed(writer: *Writer, bytes_per_sec: f64, precision: usize, system
 fn freeValues(this: *Replacer) void {
     var it = this.values.iterator();
     while (it.next()) |e| {
-      this.free(e.key_ptr.*);
-      if (e.value_ptr.* == .string) this.free(e.value_ptr.string);
+        this.free(e.key_ptr.*);
+        if (e.value_ptr.* == .string) this.free(e.value_ptr.string);
     }
 }
 
@@ -246,18 +307,16 @@ fn putValue(this: *Replacer, key: []const u8, value: Value) !void {
     gop.value_ptr.* = value;
 }
 
-/// Splits `{key:spec}` content into `(key, spec)`. Spec is null when absent.
-/// The `*` prefix for repeat specifiers is part of the spec string itself.
-fn splitKeySpec(content: []const u8) struct { []const u8, ?[]const u8 } {
-    if (mem.findScalar(u8, content, ':')) |colon| {
-        return .{ content[0..colon], content[colon + 1 ..] };
+/// Returns true if `s` matches a known format-spec token (`.N`, `^N`, `*N`, or a bare width `N`).
+fn isFormatSpec(s: []const u8) bool {
+    if (s.len == 0) return false;
+    if (s[0] == '.' or s[0] == '^' or s[0] == '*') return true;
+
+    for (s) |c| {
+        if (!ascii.isDigit(c)) return false;
     }
 
-    if (mem.findScalar(u8, content, '*')) |star| {
-        return .{ content[0..star], content[star..] };
-    }
-
-    return .{ content, null };
+    return true;
 }
 
 /// Scales `value` down through `units` by repeatedly dividing by `base`,
