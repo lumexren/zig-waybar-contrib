@@ -25,16 +25,6 @@
 - **Zero Dependencies**: Statically linked binaries that run anywhere without runtime interpreters.
 - **Deeply Configurable**: Simple, type-safe configuration using Zig Object Notation.
 
-### Support
-
-If you find these projects useful and want to support my work, you can do so on [GitHub Sponsors](https://github.com/sponsors/erffy).<br>
-Every bit of support helps me continue improving and maintaining these projects — thank you! ❤️
-
-### Community
-
-Join our Discord server for updates, support and discussion:<br>
-[![Discord](https://img.shields.io/badge/discord-gray?style=for-the-badge&logo=discord)](https://discord.gg/tb8MvnnSfZ)
-
 ### Modules
 
 | Module      | Description                            |
@@ -128,7 +118,7 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 
 *Star ⭐ this repo if you find it useful!*<br>
 *Support the project on [GitHub Sponsors](https://github.com/sponsors/erffy)* 💖<br>
-*Join our [Discord](https://discord.gg/tb8MvnnSfZ) for support and updates!*
+*Join our [Fluxer](https://fluxer.gg/xnTFlhV0) for support and updates!*
 
 This project is licensed under the **GNU General Public License v3.0**. See [LICENSE](./LICENSE) for details.
 
