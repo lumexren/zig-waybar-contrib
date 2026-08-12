@@ -505,7 +505,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Measures network latency to a configurable host using ICMP.
 
-- **Signal:** `20`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/ping.zon`):**
@@ -517,6 +516,8 @@ Measures network latency to a configurable host using ICMP.
     .target_domain = "google.com",
     // Interval to refresh the resolved IP address (seconds)
     .target_domain_ip_update_interval = 200,
+    // Packet timeout in seconds
+    .timeout = 3,
     // Module icon
     .icon = "",
     // Custom text format (default shown)
