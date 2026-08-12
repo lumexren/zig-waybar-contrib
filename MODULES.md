@@ -4,7 +4,6 @@
 
 Controls backlight brightness.
 
-- **Signal:** `10`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/backlight.zon`):**
@@ -39,7 +38,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors battery status and percentage.
 
-- **Signal:** `11`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/battery.zon`):**
@@ -82,7 +80,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors bluetooth adapter state and connected devices.
 
-- **Signal:** `12`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/bluetooth.zon`):**
@@ -132,7 +129,6 @@ The `device_format` string is used to format each entry in the `{devices}` list.
 
 Displays per-core CPU usage and frequency information.
 
-- **Signal:** `13`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/cpu.zon`):**
@@ -185,7 +181,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors disk usage and space statistics.
 
-- **Signal:** `14`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/disk.zon`):**
@@ -239,7 +234,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors fan speeds.
 
-- **Signal:** `15`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/fan.zon`):**
@@ -283,7 +277,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors GPU usage, temperature, and VRAM statistics.
 
-- **Signal:** `16`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/gpu.zon`):**
@@ -320,7 +313,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Reports RAM usage and memory statistics.
 
-- **Signal:** `17`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/memory.zon`):**
@@ -409,7 +401,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Displays media player information using the MPRIS2 standard.
 
-- **Signal:** `18`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/mpris.zon`):**
@@ -468,7 +459,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Monitors network traffic and speed.
 
-- **Signal:** `19`
 - **Platforms:** Any Linux
 
 **Configuration (`~/.config/zig-waybar-contrib/network.zon`):**
@@ -548,7 +538,6 @@ The `text` and `tooltip` options support the following placeholders:
 
 Tracks available system package updates.
 
-- **Signal:** `21`
 - **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux
 - **Managers:** pacman, apt, dnf, zypper, xbps
 
