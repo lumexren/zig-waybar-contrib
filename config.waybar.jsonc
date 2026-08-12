@@ -1,75 +1,63 @@
 {
   "custom/backlight": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-backlight",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 10
+    "exec": "/usr/bin/waybar-module-backlight",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/battery": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-battery",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 11
+    "exec": "/usr/bin/waybar-module-battery",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/bluetooth": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-bluetooth",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 12
+    "exec": "/usr/bin/waybar-module-bluetooth",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/cpu": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-cpu",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 13
+    "exec": "/usr/bin/waybar-module-cpu",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/disk": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-disk",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 14
+    "exec": "/usr/bin/waybar-module-disk",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/fan": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-fan",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 15
+    "exec": "/usr/bin/waybar-module-fan",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/gpu": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-gpu",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 16
+    "exec": "/usr/bin/waybar-module-gpu",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/memory": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-memory",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 17
+    "exec": "/usr/bin/waybar-module-memory",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/mpris": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-mpris",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 18
+    "exec": "/usr/bin/waybar-module-mpris",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/network": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-network",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 19
+    "exec": "/usr/bin/waybar-module-network",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/ping": {
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-ping",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 20
+    "exec": "/usr/bin/waybar-module-ping",
+    "restart-interval": 10,
+    "return-type": "json"
   },
   "custom/updates": {
     "escape": true,
-    "exec": "{{EXECUTABLE_PATH}}/waybar-module-updates",
-    "restart-interval": 60,
-    "return-type": "json",
-    "signal": 21
+    "exec": "/usr/bin/waybar-module-updates",
+    "restart-interval": 10,
+    "return-type": "json"
   }
 }

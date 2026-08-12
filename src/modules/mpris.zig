@@ -29,12 +29,10 @@ const fmt = std.fmt;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 18,
     icon: []const u8 = "",
     icon_playing: []const u8 = "",
     icon_paused: []const u8 = "",
@@ -63,8 +61,6 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
-
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
@@ -82,7 +78,6 @@ pub fn main(init: process.Init) !void {
                     try json.write(stdout);
                     try stdout.flush();
 
-                    try waybar.updateOrRefresh();
                     continue;
                 },
                 else => return err,
@@ -163,7 +158,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }

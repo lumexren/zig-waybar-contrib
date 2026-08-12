@@ -2,11 +2,11 @@
     .name = .zig_waybar_contrib,
     .version = "1.0.0",
     .fingerprint = 0xf0b38d05ded55151,
-    .minimum_zig_version = "0.17.0-dev.902+7255f3e72",
+    .minimum_zig_version = "0.17.0-dev.1683+5ceec001b",
     .dependencies = .{
         .plume = .{
-            .url = "https://codeberg.org/erffy/plume/archive/0.17.x.zip",
-            .hash = "plume-1.0.0-K6ts5FJQAwAIlYaMRhBcxAcTAZdfgmerHvS8SVwrl3rJ",
+            .url = "https://codeberg.org/erffy/plume/archive/1.0.0.tar.gz",
+            .hash = "plume-1.0.0-K6ts5BuxAwDSH6aIAppnqIwkhSfUZe_2YU1PZnHcD1xy",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },

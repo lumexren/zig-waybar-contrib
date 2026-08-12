@@ -31,12 +31,10 @@ const math = std.math;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 13,
     one_indexed: bool = false,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {frequency:2:frequency_unit}",
@@ -63,8 +61,6 @@ pub fn main(init: process.Init) !void {
 
     var cpu: CPU = .init(io, gpa);
     defer cpu.deinit();
-
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
@@ -128,7 +124,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }

@@ -23,6 +23,7 @@ const sysinfolib = sysinfo.lib;
 const std = @import("std");
 const utils = @import("utils");
 const math = std.math;
+const mem = std.mem;
 const process = std.process;
 const Io = std.Io;
 const net = Io.net;
@@ -33,16 +34,19 @@ const File = Io.File;
 const Clock = Io.Clock;
 const Duration = Io.Duration;
 
+const assert = std.debug.assert;
+
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
+
+const PING_IDENTIFIER: u16 = 0xC0DE;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 20,
     target_domain: []const u8 = "google.com",
     target_domain_ip_update_interval: i64 = 200,
+    timeout: i64 = 3,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {latency}ms",
     tooltip: []const u8 = "Min: {min_latency:'ms'} {dot} Avg: {avg_latency:'ms'} {dot} Max: {max_latency:'ms':nl}Domain: {target:nl}IP: {ip} {dot} {next_ip_update:'s'}",
@@ -71,16 +75,14 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
-
     var resolved = try sysinfolib.resolveIP(gpa, io, data.target_domain);
-    var last_update_ts: i64 = 0;
+    var last_update_ts: i64 = Clock.now(.boot, io).toSeconds();
 
-    const local_addr: IpAddress = try .parseIp4("0.0.0.0", 0);
+    const local_addr: IpAddress = try IpAddress.parseIp4("0.0.0.0", 0);
     const socket = try local_addr.bind(io, .{ .mode = .dgram, .protocol = .icmp });
     defer socket.close(io);
 
-    var target_addr: IpAddress = try .parseIp4(resolved.?, 80);
+    var target_addr: ?IpAddress = if (resolved) |ip_str| IpAddress.parseIp4(ip_str, 80) catch null else null;
 
     var min_latency: i64 = math.maxInt(i64);
     var max_latency: i64 = 0;
@@ -95,16 +97,25 @@ pub fn main(init: process.Init) !void {
         const now_s = current.toSeconds();
 
         if (resolved == null or (now_s - last_update_ts) >= data.target_domain_ip_update_interval) {
-            resolved = try sysinfolib.resolveIP(gpa, io, data.target_domain);
-            last_update_ts = now_s;
+            if (try sysinfolib.resolveIP(gpa, io, data.target_domain)) |res| {
+                resolved = res;
+                last_update_ts = now_s;
 
-            target_addr = try .parseIp4(resolved.?, 80);
+                if (resolved) |ip_str| {
+                    target_addr = IpAddress.parseIp4(ip_str, 80) catch null;
+                }
+            } else {
+                // DNS resolution failed, retain former IP
+            }
         }
+
+        const target = target_addr orelse continue;
 
         const seconds_until_ip_update = data.target_domain_ip_update_interval - (now_s - last_update_ts);
 
-        var ping_buffer: [64]u8 = undefined;
-        const latency = ping(io, socket, &target_addr, &ping_buffer) catch continue;
+        var ping_buffer: [64]u8 = @splat(0);
+        var ping_target = target;
+        const latency = ping(io, socket, &ping_target, &ping_buffer, data.timeout) catch continue;
 
         ping_count += 1;
         total_latency += latency;
@@ -115,7 +126,7 @@ pub fn main(init: process.Init) !void {
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", data.icon);
         try replacer.addKey("target", data.target_domain);
-        try replacer.addKey("ip", resolved.?);
+        try replacer.addKey("ip", resolved orelse "unresolved");
         try replacer.addKeyAny("next_ip_update", seconds_until_ip_update);
         try replacer.addKeyAny("latency", latency);
         try replacer.addKeyAny("min_latency", min_latency);
@@ -133,18 +144,27 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }
 
-pub fn ping(io: Io, socket: Socket, target_addr: *IpAddress, buffer: []u8) !i64 {
+var next_sequence: u16 = 0;
+
+pub fn ping(io: Io, socket: Socket, target_addr: *IpAddress, buffer: []u8, timeout: i64) !i64 {
+    next_sequence +%= 1;
+    const sequence = next_sequence;
+
     sysinfolib.createIcmpPacket(buffer);
+    stampIcmpEcho(buffer, PING_IDENTIFIER, sequence);
 
     const raw_start = Clock.now(.boot, io);
+    _ = socket.send(io, target_addr, buffer) catch return PingError.NetworkError;
 
-    _ = try socket.send(io, target_addr, buffer);
-    _ = try socket.receive(io, buffer);
+    while (true) {
+        const to: Io.Timeout = .{ .duration = .{ .clock = .boot, .raw = .fromSeconds(timeout) } };
+        const n = socket.receiveTimeout(io, buffer, to) catch return PingError.Timeout;
+
+        if (isMatchingEchoReply(n.data, sequence)) break;
+    }
 
     const raw_end = Clock.now(.boot, io);
 
@@ -152,4 +172,32 @@ pub fn ping(io: Io, socket: Socket, target_addr: *IpAddress, buffer: []u8) !i64 
     const end = raw_end.toMilliseconds();
 
     return @intCast(@max(0, end - start));
+}
+
+fn stampIcmpEcho(buffer: []u8, identifier: u16, sequence: u16) void {
+    assert(buffer.len >= 8);
+
+    mem.writeInt(u16, buffer[2..4][0..2], 0, .big); // checksum, filled below
+    mem.writeInt(u16, buffer[4..6][0..2], identifier, .big);
+    mem.writeInt(u16, buffer[6..8][0..2], sequence, .big);
+    mem.writeInt(u16, buffer[2..4][0..2], icmpChecksum(buffer), .big);
+}
+
+fn isMatchingEchoReply(reply: []const u8, sequence: u16) bool {    
+    if (reply.len < 8) return false;
+    if (reply[0] != 0) return false;
+
+    const reply_seq = mem.readInt(u16, reply[6..8][0..2], .big);
+    return reply_seq == sequence;
+}
+
+fn icmpChecksum(data: []const u8) u16 {
+    var sum: u32 = 0;
+    var i: usize = 0;
+
+    while (i + 1 < data.len) : (i += 2) sum += (@as(u32, data[i]) << 8) | data[i + 1];
+    if (i < data.len) sum += @as(u32, data[i]) << 8;
+    while (sum >> 16 != 0) sum = (sum & 0xFFFF) + (sum >> 16);
+
+    return @truncate(~sum);
 }

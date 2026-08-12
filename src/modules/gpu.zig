@@ -28,12 +28,10 @@ const ArrayList = std.ArrayList;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 16,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {temperature:'°C'}",
     tooltip: []const u8 = "PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2}",
@@ -56,8 +54,6 @@ pub fn main(init: process.Init) !void {
 
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
-
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     var module: sysinfo = .init(gpa);
     try module.initialize();
@@ -89,7 +85,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }

@@ -28,12 +28,10 @@ const Clock = Io.Clock;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 19,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {total_speed:^1}",
     tooltip: []const u8 = "Interface {dot} {interface:nl}Gateway {dot} {gateway:nl}Local IP {dot} {local_ip:nl:nl}Download {dot} {download_speed:^1:nl}Upload {dot} {upload_speed:^1}",
@@ -56,8 +54,6 @@ pub fn main(init: process.Init) !void {
 
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
-
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     const route = try sysinfo.getDefaultRoute(io, gpa);
     const local_ip = try sysinfo.getLocalIP(gpa, route.interface);
@@ -97,7 +93,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }

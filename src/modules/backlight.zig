@@ -30,12 +30,10 @@ const process = std.process;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 10,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {percentage:'%'}",
     tooltip: []const u8 = "Brightness: {percentage:'%':nl}Device: {name}",
@@ -65,8 +63,6 @@ pub fn main(init: process.Init) !void {
     var backlight: Backlight = try .init(io, gpa, &connection);
     defer backlight.deinit();
 
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
-
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
@@ -76,7 +72,6 @@ pub fn main(init: process.Init) !void {
             try json.set("tooltip", @as([]const u8, "No backlight detected"));
             try json.write(stdout);
             try stdout.flush();
-            try waybar.updateOrRefresh();
 
             if (err == error.NotFound) continue;
             return err;
@@ -103,7 +98,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }

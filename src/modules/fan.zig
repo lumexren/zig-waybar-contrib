@@ -28,12 +28,10 @@ const ArrayList = std.ArrayList;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 2,
-    signal_number: u8 = 15,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {total_fans}",
     tooltip: []const u8 = "{name}: {speed} RPM",
@@ -61,8 +59,6 @@ pub fn main(init: process.Init) !void {
 
     var fan: Fan = .init(io, gpa, &fans);
     defer fan.deinit();
-
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
@@ -98,7 +94,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }
