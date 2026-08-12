@@ -35,7 +35,6 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 13,
     one_indexed: bool = false,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {frequency:2:frequency_unit}",

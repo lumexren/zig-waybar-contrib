@@ -32,7 +32,6 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 2,
-    signal_number: u8 = 15,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {total_fans}",
     tooltip: []const u8 = "{name}: {speed} RPM",

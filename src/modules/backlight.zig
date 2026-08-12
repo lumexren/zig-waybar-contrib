@@ -34,7 +34,6 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 10,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {percentage:'%'}",
     tooltip: []const u8 = "Brightness: {percentage:'%':nl}Device: {name}",

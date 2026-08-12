@@ -34,7 +34,6 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
-    signal_number: u8 = 11,
     icon: []const u8 = "",
     icon_charging: []const u8 = "",
     icon_full: []const u8 = "",
