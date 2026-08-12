@@ -67,7 +67,6 @@ pub fn main(init: process.Init) !void {
             try json.set("tooltip", @as([]const u8, "Failed to read disk info"));
             try json.write(stdout);
             try stdout.flush();
-            try waybar.updateOrRefresh();
             continue;
         };
 
