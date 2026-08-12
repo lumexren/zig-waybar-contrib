@@ -33,7 +33,6 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    signal_number: u8 = 17,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {percentage:'%'} {dot} {total_usage:.2}",
     tooltip: []const u8 = "Physical Memory{nl}Total {dot} {physical_total:.2:nl}Used {dot} {physical_used:.2:nl}Free {dot} {physical_free:.2:nl}Available {dot} {physical_available:.2:nl}Shared {dot} {physical_shared:.2:nl}Buffers {dot} {physical_buffers:.2:nl}Cached {dot} {physical_cached:.2:nl:nl}Swap Memory{nl}Total {dot} {swap_total:.2:nl}Used {dot} {swap_used:.2:nl}Free {dot} {swap_free:.2:nl}Cached {dot} {swap_cached:.2}",
@@ -59,8 +58,6 @@ pub fn main(init: process.Init) !void {
 
     var memory: sysinfo = .init(io);
     defer memory.deinit();
-
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
@@ -97,7 +94,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }
