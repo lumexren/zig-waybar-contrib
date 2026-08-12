@@ -28,7 +28,6 @@ const ArrayList = std.ArrayList;
 
 const Config = utils.Config;
 const Json = utils.Json;
-const Waybar = utils.Waybar;
 const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
@@ -61,8 +60,6 @@ pub fn main(init: process.Init) !void {
 
     var fan: Fan = .init(io, gpa, &fans);
     defer fan.deinit();
-
-    var waybar: Waybar = try .init(io, .{ .signal_number = data.signal_number });
 
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
@@ -98,7 +95,5 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
-
-        try waybar.updateOrRefresh();
     }
 }
