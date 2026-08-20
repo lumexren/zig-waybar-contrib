@@ -13,9 +13,16 @@
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://gnu.org/licenses>.
 
 /// Stateful tracker for Memory allocation metrics.
 const Memory = @This();
+
+pub const MemoryError = @import("MemoryError.zig").MemoryError;
+pub const PhysicalMemoryInfo = @import("PhysicalMemoryInfo.zig");
+pub const SwapMemoryInfo = @import("SwapMemoryInfo.zig");
 
 const std = @import("std");
 const StaticStringMap = std.StaticStringMap;
@@ -27,93 +34,6 @@ const Dir = Io.Dir;
 const KB: u64 = 1024;
 const MEMINFO_PATH = "/proc/meminfo";
 const MEMINFO_BUFFER_SIZE: usize = 16384;
-
-pub const MemoryError = error{
-    InvalidData,
-};
-
-pub const PhysicalMemoryInfo = struct {
-    // Basic
-    total: u64 = 0,
-    free: u64 = 0,
-    available: u64 = 0,
-    used: u64 = 0,
-    buffers: u64 = 0,
-    cached: u64 = 0,
-    shared: u64 = 0,
-
-    // Activity
-    active: u64 = 0,
-    inactive: u64 = 0,
-    active_anon: u64 = 0,
-    inactive_anon: u64 = 0,
-    active_file: u64 = 0,
-    inactive_file: u64 = 0,
-
-    // Anonymous / file-backed
-    anon_pages: u64 = 0,
-    mapped: u64 = 0,
-
-    // Slab
-    slab: u64 = 0,
-    slab_reclaimable: u64 = 0,
-    slab_unreclaimable: u64 = 0,
-    kernel_reclaimable: u64 = 0,
-
-    // Kernel / low-level
-    kernel_stack: u64 = 0,
-    page_tables: u64 = 0,
-    sec_page_tables: u64 = 0,
-    percpu: u64 = 0,
-
-    // Writeback / state
-    dirty: u64 = 0,
-    writeback: u64 = 0,
-    writeback_tmp: u64 = 0,
-    unevictable: u64 = 0,
-    mlocked: u64 = 0,
-
-    // Huge / special pages
-    anon_huge_pages: u64 = 0,
-    file_huge_pages: u64 = 0,
-    file_pmd_mapped: u64 = 0,
-    shmem_huge_pages: u64 = 0,
-    shmem_pmd_mapped: u64 = 0,
-    hugetlb: u64 = 0,
-    hugepages_size: u64 = 0,
-
-    // Direct map
-    direct_map_4k: u64 = 0,
-    direct_map_2m: u64 = 0,
-    direct_map_1g: u64 = 0,
-
-    // Misc
-    vmalloc_total: u64 = 0,
-    vmalloc_used: u64 = 0,
-    vmalloc_chunk: u64 = 0,
-    hardware_corrupted: u64 = 0,
-    bounce: u64 = 0,
-    nfs_unstable: u64 = 0,
-    cma_total: u64 = 0,
-    cma_free: u64 = 0,
-    unaccepted: u64 = 0,
-    balloon: u64 = 0,
-};
-
-pub const SwapMemoryInfo = struct {
-    total: u64 = 0,
-    free: u64 = 0,
-    used: u64 = 0,
-    cached: u64 = 0,
-
-    // Zswap
-    zswap: u64 = 0,
-    zswapped: u64 = 0,
-
-    // Commit
-    commit_limit: u64 = 0,
-    committed_as: u64 = 0,
-};
 
 const Field = enum {
     MemTotal,
@@ -295,7 +215,6 @@ pub fn update(this: *Memory) !void {
         }
     }
 
-    // Fallback logic for older Linux kernels lacking MemAvailable
     if (this.physical.available == 0 and this.physical.total != 0) {
         this.physical.available = @min(this.physical.free + this.physical.buffers + this.physical.cached, this.physical.total);
     }
@@ -314,7 +233,6 @@ pub fn update(this: *Memory) !void {
     }
 }
 
-/// Helper to parse raw entries (e.g., "12345 kB" -> byte representations).
 inline fn parseValue(s: []const u8) !u64 {
     var it = mem.tokenizeAny(u8, s, " \t");
     const num = it.next() orelse return MemoryError.InvalidData;

@@ -17,6 +17,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+pub const MprisError = @import("MprisError.zig").MprisError;
+pub const PlaybackStatus = @import("PlaybackStatus.zig").PlaybackStatus;
+pub const LoopStatus = @import("LoopStatus.zig").LoopStatus;
+pub const Metadata = @import("Metadata.zig");
+pub const PlayerInfo = @import("PlayerInfo.zig");
+
 const dbus = @import("bindings").dbus;
 
 const std = @import("std");
@@ -24,78 +30,6 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const meta = std.meta;
 const mem = std.mem;
 const Allocator = mem.Allocator;
-
-pub const MprisError = error{
-    ConnectionFailed,
-    CallFailed,
-    NoPlayers,
-    InvalidResponse,
-    PlayerNotFound,
-    OutOfMemory,
-};
-
-pub const PlaybackStatus = enum {
-    playing,
-    paused,
-    stopped,
-
-    pub fn toString(this: @This()) [:0]const u8 {
-        return @tagName(this);
-    }
-};
-
-pub const LoopStatus = enum {
-    none,
-    track,
-    playlist,
-
-    pub fn toString(this: @This()) [:0]const u8 {
-        return @tagName(this);
-    }
-};
-
-pub const Metadata = struct {
-    track_id: ?[]const u8 = null,
-    title: ?[]const u8 = null,
-    artist: ?[]const u8 = null,
-    album: ?[]const u8 = null,
-    art_url: ?[]const u8 = null,
-    length_us: ?i64 = null,
-
-    pub fn deinit(this: *@This(), allocator: Allocator) void {
-        if (this.track_id) |v| allocator.free(v);
-        if (this.title) |v| allocator.free(v);
-        if (this.artist) |v| allocator.free(v);
-        if (this.album) |v| allocator.free(v);
-        if (this.art_url) |v| allocator.free(v);
-        this.* = .{};
-    }
-};
-
-pub const PlayerInfo = struct {
-    name: []const u8,
-    identity: ?[]const u8 = null,
-    status: PlaybackStatus = .stopped,
-    loop_status: LoopStatus = .none,
-    shuffle: bool = false,
-    volume: f64 = 1.0,
-    position_us: i64 = 0,
-    metadata: Metadata = .{},
-
-    can_control: bool = false,
-    can_go_next: bool = false,
-    can_go_previous: bool = false,
-    can_play: bool = false,
-    can_pause: bool = false,
-    can_seek: bool = false,
-
-    pub fn deinit(this: *@This(), allocator: Allocator) void {
-        allocator.free(this.name);
-        if (this.identity) |v| allocator.free(v);
-        this.metadata.deinit(allocator);
-        this.* = undefined;
-    }
-};
 
 pub const MPRIS_PREFIX = "org.mpris.MediaPlayer2.";
 pub const MPRIS_PATH: [:0]const u8 = "/org/mpris/MediaPlayer2";
@@ -184,12 +118,10 @@ pub fn getPlayerInfo(allocator: Allocator, bus_name: []const u8) !PlayerInfo {
         } else if (mem.eql(u8, status_str, "Stopped")) {
             info.status = .stopped;
         } else if (meta.stringToEnum(PlaybackStatus, status_str)) |status| {
-            // Fallback to strict match if not one of the standard PascalCase ones
             info.status = status;
         }
     }
 
-    // Get LoopStatus
     if (getStringProperty(allocator, conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "LoopStatus")) |status_str| {
         defer allocator.free(status_str);
         if (mem.eql(u8, status_str, "None")) {
@@ -203,7 +135,6 @@ pub fn getPlayerInfo(allocator: Allocator, bus_name: []const u8) !PlayerInfo {
         }
     }
 
-    // Get boolean properties
     info.shuffle = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "Shuffle");
     info.can_control = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanControl");
     info.can_go_next = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanGoNext");
@@ -212,17 +143,14 @@ pub fn getPlayerInfo(allocator: Allocator, bus_name: []const u8) !PlayerInfo {
     info.can_pause = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanPause");
     info.can_seek = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanSeek");
 
-    // Get numeric properties
     info.volume = getDoubleProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "Volume");
     info.position_us = getInt64Property(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "Position");
 
-    // Get metadata
     info.metadata = getMetadataProperty(allocator, conn, bus_name_z);
 
     return info;
 }
 
-/// Get the first available player's info.
 pub fn getActivePlayer(allocator: Allocator) !PlayerInfo {
     const players = try listPlayers(allocator);
     defer {
@@ -395,8 +323,6 @@ fn getInt64Property(conn: *dbus.Connection, dest: []const u8, iface: [*:0]const 
     return value;
 }
 
-/// Get metadata property from MPRIS player.
-/// The Metadata property is a dictionary (a{sv}) containing track information.
 fn getMetadataProperty(allocator: Allocator, conn: *dbus.Connection, dest: []const u8) Metadata {
     var err: dbus.Error = .{};
     dbus.dbus_error_init(&err);
@@ -562,14 +488,12 @@ test "PlayerInfo.deinit" {
     };
 
     info.deinit(allocator);
-    // No assertions needed - test passes if no memory leaks detected
 }
 
 test "listPlayers - integration" {
     const allocator = testing.allocator;
 
     const players = listPlayers(allocator) catch |err| {
-        // Skip if D-Bus session bus not available
         switch (err) {
             MprisError.ConnectionFailed, MprisError.CallFailed => return,
             else => return err,
@@ -580,7 +504,6 @@ test "listPlayers - integration" {
         allocator.free(players);
     }
 
-    // Verify all player names have MPRIS prefix
     for (players) |player| {
         try testing.expect(mem.startsWith(u8, player, MPRIS_PREFIX));
     }
@@ -590,7 +513,6 @@ test "getActivePlayer - integration" {
     const allocator = testing.allocator;
 
     var info = getActivePlayer(allocator) catch |err| {
-        // Skip if D-Bus not available or no players running
         switch (err) {
             MprisError.ConnectionFailed, MprisError.CallFailed, MprisError.NoPlayers => return,
             else => return err,
@@ -598,13 +520,8 @@ test "getActivePlayer - integration" {
     };
     defer info.deinit(allocator);
 
-    // Verify name is non-empty
     try testing.expect(info.name.len > 0);
-
-    // Verify volume is reasonable
     try testing.expect(info.volume >= 0.0);
-    try testing.expect(info.volume <= 2.0); // Some players allow > 100%
-
-    // Verify position is non-negative
+    try testing.expect(info.volume <= 2.0);
     try testing.expect(info.position_us >= 0);
 }

@@ -17,6 +17,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+pub const DiskError = @import("DiskError.zig").DiskError;
+pub const SizeUnit = @import("SizeUnit.zig").SizeUnit;
+pub const DiskInfo = @import("DiskInfo.zig");
+pub const formatBytes = @import("DiskInfo.zig").formatBytes;
+pub const MountedFilesystem = @import("MountedFilesystem.zig");
+
 const stfs = @import("bindings").statvfs;
 
 const std = @import("std");
@@ -34,131 +40,18 @@ const Dir = Io.Dir;
 const MOUNTS_PATH = "/proc/mounts";
 const MOUNTS_BUFFER_SIZE = 16 * 1024;
 
-/// Binary unit multipliers (IEC standard: 1024-based)
-const KiB: f64 = 1024.0;
-const MiB: f64 = KiB * 1024.0;
-const GiB: f64 = MiB * 1024.0;
-const TiB: f64 = GiB * 1024.0;
-
-/// Decimal unit multipliers (SI standard: 1000-based)
-const kB: f64 = 1000.0;
-const MB: f64 = kB * 1000.0;
-const GB: f64 = MB * 1000.0;
-const TB: f64 = GB * 1000.0;
-
-// Error Types
-pub const DiskError = error{
-    StatvfsFailed,
-    PathTooLong,
-};
-
-/// Size units for disk space formatting.
-/// Supports both SI (decimal, 1000-based) and IEC (binary, 1024-based) units.
-pub const SizeUnit = enum {
-    B, // Bytes
-    kB, // Kilobytes (SI: 1000)
-    KiB, // Kibibytes (IEC: 1024)
-    MB, // Megabytes (SI)
-    MiB, // Mebibytes (IEC)
-    GB, // Gigabytes (SI)
-    GiB, // Gibibytes (IEC)
-    TB, // Terabytes (SI)
-    TiB, // Tebibytes (IEC)
-
-    /// Returns the divisor for converting bytes to this unit.
-    pub fn divisor(this: @This()) f64 {
-        return switch (this) {
-            .B => 1.0,
-            .kB => kB,
-            .KiB => KiB,
-            .MB => MB,
-            .MiB => MiB,
-            .GB => GB,
-            .GiB => GiB,
-            .TB => TB,
-            .TiB => TiB,
-        };
-    }
-
-    /// Returns the string suffix for this unit.
-    pub fn suffix(this: @This()) []const u8 {
-        return @tagName(this);
-    }
-};
-
-/// Disk usage information for a filesystem.
-pub const DiskInfo = struct {
-    path: []const u8 = "/",
-
-    // Space (in bytes)
-    total: u64 = 0,
-    free: u64 = 0, // Available for unprivileged users (f_bavail)
-    used: u64 = 0,
-
-    // Percentages (0-100)
-    percentage_used: u8 = 0,
-    percentage_free: u8 = 0,
-
-    // Block sizes
-    block_size: u64 = 0,
-    fragment_size: u64 = 0,
-
-    // Inodes
-    inodes_total: u64 = 0,
-    inodes_free: u64 = 0,
-    inodes_used: u64 = 0,
-    inodes_percentage_used: u8 = 0,
-
-    pub fn totalInUnit(this: @This(), unit: SizeUnit) f64 {
-        return toUnit(this.total, unit);
-    }
-
-    pub fn freeInUnit(this: @This(), unit: SizeUnit) f64 {
-        return toUnit(this.free, unit);
-    }
-
-    pub fn usedInUnit(this: @This(), unit: SizeUnit) f64 {
-        return toUnit(this.used, unit);
-    }
-
-    pub fn formatTotal(this: @This(), buf: []u8) ![]const u8 {
-        return formatBytes(this.total, buf);
-    }
-
-    pub fn formatFree(this: @This(), buf: []u8) ![]const u8 {
-        return formatBytes(this.free, buf);
-    }
-
-    pub fn formatUsed(this: @This(), buf: []u8) ![]const u8 {
-        return formatBytes(this.used, buf);
-    }
-};
-
-/// Information about a mounted filesystem.
-pub const MountedFilesystem = struct {
-    device: []const u8, // e.g., "/dev/sda1"
-    mount_point: []const u8, // e.g., "/home"
-    fs_type: []const u8, // e.g., "ext4"
-    disk_info: DiskInfo,
-};
-
 /// Filesystem types to ignore (virtual/pseudo filesystems).
 const ignored_fs_types: StaticStringMap(void) = .initComptime(.{
-    // Control groups
     .{ "cgroup", {} },
     .{ "cgroup2", {} },
-    // Debug/trace
     .{ "debugfs", {} },
     .{ "tracefs", {} },
-    // Device filesystems
     .{ "devfs", {} },
     .{ "devpts", {} },
     .{ "devtmpfs", {} },
-    // Memory-based
     .{ "ramfs", {} },
     .{ "tmpfs", {} },
     .{ "hugetlbfs", {} },
-    // Kernel interfaces
     .{ "bpf", {} },
     .{ "configfs", {} },
     .{ "efivarfs", {} },
@@ -167,12 +60,10 @@ const ignored_fs_types: StaticStringMap(void) = .initComptime(.{
     .{ "pstore", {} },
     .{ "securityfs", {} },
     .{ "sysfs", {} },
-    // FUSE/overlay
     .{ "autofs", {} },
     .{ "fuse.portal", {} },
     .{ "fusectl", {} },
     .{ "overlay", {} },
-    // Misc
     .{ "binfmt_misc", {} },
     .{ "nsfs", {} },
     .{ "rpc_pipefs", {} },
@@ -184,24 +75,10 @@ pub fn isIgnoredFsType(fs_type: []const u8) bool {
     return ignored_fs_types.has(fs_type);
 }
 
-/// Converts bytes to a float in the specified unit.
-fn toUnit(bytes: u64, unit: SizeUnit) f64 {
-    return @as(f64, @floatFromInt(bytes)) / unit.divisor();
-}
-
 /// Calculates percentage safely, returning 0 if total is 0.
 fn calcPercentage(part: u64, total: u64) u8 {
     if (total == 0) return 0;
     return @intCast((part * 100) / total);
-}
-
-/// Formats bytes into a human-readable string with auto-selected IEC unit.
-pub fn formatBytes(bytes: u64, buf: []u8) ![]const u8 {
-    const value: f64 = @floatFromInt(bytes);
-
-    const unit: SizeUnit = if (value >= TiB) .TiB else if (value >= GiB) .GiB else if (value >= MiB) .MiB else if (value >= KiB) .KiB else .B;
-
-    return fmt.bufPrint(buf, "{d:.1} {s}", .{ value / unit.divisor(), unit.suffix() });
 }
 
 /// Fetches disk usage information for the specified path.
@@ -250,9 +127,6 @@ pub fn fetchRootDiskInfo() DiskError!DiskInfo {
 }
 
 /// Fetches information about all mounted real filesystems.
-/// Reads from /proc/mounts and filters out virtual filesystems.
-///
-/// Caller must free returned slice with `freeMountedFilesystems`.
 pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
@@ -330,13 +204,14 @@ pub fn freeMountedFilesystems(allocator: Allocator, filesystems: []const Mounted
 const testing = std.testing;
 
 test "SizeUnit.divisor" {
+    const SizeUnitMod = @import("SizeUnit.zig");
     try testing.expectEqual(@as(f64, 1.0), SizeUnit.B.divisor());
-    try testing.expectEqual(KiB, SizeUnit.KiB.divisor());
-    try testing.expectEqual(MiB, SizeUnit.MiB.divisor());
-    try testing.expectEqual(GiB, SizeUnit.GiB.divisor());
-    try testing.expectEqual(TiB, SizeUnit.TiB.divisor());
-    try testing.expectEqual(kB, SizeUnit.kB.divisor());
-    try testing.expectEqual(MB, SizeUnit.MB.divisor());
+    try testing.expectEqual(SizeUnitMod.KiB, SizeUnit.KiB.divisor());
+    try testing.expectEqual(SizeUnitMod.MiB, SizeUnit.MiB.divisor());
+    try testing.expectEqual(SizeUnitMod.GiB, SizeUnit.GiB.divisor());
+    try testing.expectEqual(SizeUnitMod.TiB, SizeUnit.TiB.divisor());
+    try testing.expectEqual(SizeUnitMod.kB, SizeUnit.kB.divisor());
+    try testing.expectEqual(SizeUnitMod.MB, SizeUnit.MB.divisor());
 }
 
 test "SizeUnit.suffix" {
@@ -366,13 +241,11 @@ test "DiskInfo unit conversion" {
 }
 
 test "isIgnoredFsType" {
-    // Virtual filesystems - should be ignored
     try testing.expect(isIgnoredFsType("tmpfs"));
     try testing.expect(isIgnoredFsType("sysfs"));
     try testing.expect(isIgnoredFsType("proc"));
     try testing.expect(isIgnoredFsType("cgroup2"));
 
-    // Real filesystems - should NOT be ignored
     try testing.expect(!isIgnoredFsType("ext4"));
     try testing.expect(!isIgnoredFsType("btrfs"));
     try testing.expect(!isIgnoredFsType("xfs"));

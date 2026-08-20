@@ -16,9 +16,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
-// SPDX-License-Identifier: GPL-3.0-only
 
 const Backlight = @This();
+
+pub const BacklightInfo = @import("BacklightInfo.zig");
+pub const BacklightError = @import("BacklightError.zig").BacklightError;
 
 const plume = @import("plume");
 const Connection = plume.Connection;
@@ -34,24 +36,6 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 
 const BACKLIGHT_PATH = "/sys/class/backlight";
-
-pub const BacklightError = error{
-    NotFound,
-    InvalidData,
-    PermissionDenied,
-};
-
-pub const BacklightInfo = struct {
-    name: []const u8,
-    brightness: u32,
-    max_brightness: u32,
-    percentage: u8,
-
-    pub fn deinit(this: *@This(), allocator: Allocator) void {
-        allocator.free(this.name);
-        this.* = undefined;
-    }
-};
 
 io: Io,
 allocator: Allocator,
@@ -202,12 +186,7 @@ test "BacklightInfo.deinit" {
 }
 
 test "percentage calculation" {
-    // 50/100 = 50%
     try testing.expectEqual(@as(u8, 50), @as(u8, @intCast(@min(@as(u64, 50) * 100 / @as(u64, 100), 100))));
-
-    // 255/255 = 100%
     try testing.expectEqual(@as(u8, 100), @as(u8, @intCast(@min(@as(u64, 255) * 100 / @as(u64, 255), 100))));
-
-    // 0/100 = 0%
     try testing.expectEqual(@as(u8, 0), @as(u8, @intCast(@min(@as(u64, 0) * 100 / @as(u64, 100), 100))));
 }

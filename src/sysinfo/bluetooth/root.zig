@@ -17,60 +17,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+const Bluetooth = @This();
+
+pub const BluetoothError = @import("BluetoothError.zig").BluetoothError;
+pub const AdapterInfo = @import("AdapterInfo.zig");
+pub const DeviceInfo = @import("DeviceInfo.zig");
+
 const dbus = @import("bindings").dbus;
 
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const mem = std.mem;
 const Allocator = mem.Allocator;
-
-pub const BluetoothError = error{
-    ConnectionFailed,
-    CallFailed,
-    NoAdapter,
-    InvalidResponse,
-    OutOfMemory,
-};
-
-/// Bluetooth adapter information
-pub const AdapterInfo = struct {
-    path: []const u8,
-    name: ?[]const u8 = null,
-    address: ?[]const u8 = null,
-    powered: bool = false,
-    discoverable: bool = false,
-    discovering: bool = false,
-
-    pub fn deinit(this: *@This(), allocator: Allocator) void {
-        allocator.free(this.path);
-        if (this.name) |n| allocator.free(n);
-        if (this.address) |a| allocator.free(a);
-        this.* = undefined;
-    }
-};
-
-/// Bluetooth device information
-pub const DeviceInfo = struct {
-    path: []const u8,
-    address: ?[]const u8 = null,
-    name: ?[]const u8 = null,
-    alias: ?[]const u8 = null,
-    paired: bool = false,
-    connected: bool = false,
-    trusted: bool = false,
-    blocked: bool = false,
-    battery: ?u8 = null,
-    icon: ?[]const u8 = null,
-
-    pub fn deinit(this: *@This(), allocator: Allocator) void {
-        allocator.free(this.path);
-        if (this.address) |a| allocator.free(a);
-        if (this.name) |n| allocator.free(n);
-        if (this.alias) |a| allocator.free(a);
-        if (this.icon) |i| allocator.free(i);
-        this.* = undefined;
-    }
-};
 
 const BLUEZ_SERVICE = "org.bluez";
 const BLUEZ_PATH = "/";

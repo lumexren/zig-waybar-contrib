@@ -16,7 +16,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
+
 const Updates = @This();
+
+pub const UpdatesError = @import("UpdatesError.zig").UpdatesError;
+pub const UpdateInfo = @import("UpdateInfo.zig");
+pub const PackageManager = @import("PackageManager.zig").PackageManager;
 
 const std = @import("std");
 const uProcess = @import("utils").Process;
@@ -37,131 +42,6 @@ const Environ = process.Environ;
 const Map = Environ.Map;
 
 const DEFAULT_PACMAN_DB = "/var/lib/pacman/";
-
-pub const UpdatesError = error{
-    CannotFetchUpdates,
-    NoSupportedManager,
-};
-
-pub const UpdateInfo = struct {
-    pkg_name: []const u8,
-    new_version: []const u8,
-};
-
-pub const PackageManager = enum {
-    apt,
-    pacman,
-    dnf,
-    zypper,
-    xbps,
-
-    pub fn name(this: @This()) []const u8 {
-        return @tagName(this);
-    }
-
-    /// Populates a provided scratch buffer to avoid dynamic allocation for argv.
-    pub fn buildArgv(this: @This(), buffer: *[4][]const u8, pacman_db: ?[]const u8) []const []const u8 {
-        switch (this) {
-            .apt => {
-                buffer[0..3].* = .{ "apt", "list", "--upgradable" };
-                return buffer[0..3];
-            },
-            .dnf => {
-                buffer[0..4].* = .{ "dnf", "check-upgrade", "--refresh", "-yq" };
-                return buffer[0..4];
-            },
-            .pacman => {
-                if (pacman_db) |db| {
-                    buffer[0..4].* = .{ "pacman", "-Qu", "--dbpath", db };
-                    return buffer[0..4];
-                }
-                buffer[0..2].* = .{ "pacman", "-Qu" };
-                return buffer[0..2];
-            },
-            .zypper => {
-                buffer[0..3].* = .{ "zypper", "--non-interactive", "lu" };
-                return buffer[0..3];
-            },
-            .xbps => {
-                buffer[0..4].* = .{ "xbps-install", "--dry-run", "--sync", "--update" };
-                return buffer[0..4];
-            },
-        }
-    }
-
-    /// Parses a single line of package manager output, returning an UpdateInfo
-    /// containing slices that point directly to the original line buffer.
-    pub fn parseLine(this: @This(), line: []const u8) ?UpdateInfo {
-        const trimmed = mem.trim(u8, line, &ascii.whitespace);
-        if (trimmed.len == 0) return null;
-
-        var pkg_name: []const u8 = "";
-        var new_version: []const u8 = "";
-
-        switch (this) {
-            .apt => {
-                const slash_idx = mem.findScalar(u8, trimmed, '/') orelse return null;
-                pkg_name = trimmed[0..slash_idx];
-
-                var parts_iter = mem.splitScalar(u8, trimmed, ' ');
-                _ = parts_iter.next() orelse return null;
-                new_version = parts_iter.next() orelse return null;
-            },
-            .dnf => {
-                var parts = mem.tokenizeAny(u8, trimmed, " \t");
-                const pkg_name_full = parts.next() orelse return null;
-                new_version = parts.next() orelse return null;
-
-                const dot_idx = mem.findScalarLast(u8, pkg_name_full, '.') orelse pkg_name_full.len;
-                pkg_name = pkg_name_full[0..dot_idx];
-            },
-            .pacman => {
-                const arrow_idx = mem.indexOf(u8, trimmed, "->") orelse return null;
-                const left_part = mem.trim(u8, trimmed[0..arrow_idx], &ascii.whitespace);
-                new_version = mem.trim(u8, trimmed[arrow_idx + 2 ..], &ascii.whitespace);
-
-                const last_space = mem.findScalarLast(u8, left_part, ' ') orelse return null;
-                pkg_name = left_part[0..last_space];
-            },
-            .zypper => {
-                if (trimmed[0] == '-' or ascii.startsWithIgnoreCase(trimmed, "S |")) return null;
-
-                var parts_iter = mem.splitScalar(u8, trimmed, '|');
-                _ = parts_iter.next(); // S
-                _ = parts_iter.next(); // Repository
-                const name_raw = parts_iter.next() orelse return null;
-                _ = parts_iter.next() orelse return null; // Current Version
-                const available_raw = parts_iter.next() orelse return null;
-
-                pkg_name = mem.trim(u8, name_raw, &ascii.whitespace);
-                new_version = mem.trim(u8, available_raw, &ascii.whitespace);
-            },
-            .xbps => {
-                var it = mem.tokenizeAny(u8, trimmed, " \t");
-                const first = it.next() orelse return null;
-                const second = it.next() orelse return null;
-
-                if (!mem.eql(u8, second, "update")) return null;
-
-                const hyphen_idx = mem.findScalarLast(u8, first, '-') orelse return null;
-                const raw_name = first[0..hyphen_idx];
-                const old_version = mem.trim(u8, first[hyphen_idx + 1 ..], &ascii.whitespace);
-
-                pkg_name = mem.trim(u8, raw_name, &ascii.whitespace);
-
-                if (it.next()) |candidate| {
-                    new_version = if (ascii.isDigit(candidate[0])) candidate else old_version;
-                } else {
-                    new_version = old_version;
-                }
-            },
-        }
-
-        if (pkg_name.len == 0 or new_version.len == 0) return null;
-
-        return .{ .pkg_name = pkg_name, .new_version = new_version };
-    }
-};
 
 io: Io,
 environ_map: *Map,
@@ -330,6 +210,28 @@ fn createLocalSymlink(io: Io, allocator: Allocator, db_path: []const u8, pacman_
     };
 }
 
+// Helper test function
+fn testParseUpdates(allocator: Allocator, manager: PackageManager, output: []const u8) ![]UpdateInfo {
+    var list: ArrayListUnmanaged(UpdateInfo) = .empty;
+    var lines = mem.splitScalar(u8, output, '\n');
+    var skip_count: usize = if (manager == .zypper) 2 else 0;
+
+    while (lines.next()) |line| {
+        if (skip_count > 0) {
+            skip_count -= 1;
+            continue;
+        }
+
+        if (line.len == 0) continue;
+        if (manager == .dnf and ascii.startsWithIgnoreCase(line, "Obsoleting packages")) break;
+
+        if (manager.parseLine(line)) |info| {
+            try list.append(allocator, info);
+        }
+    }
+    return list.toOwnedSlice(allocator);
+}
+
 // Tests
 
 const testing = std.testing;
@@ -355,14 +257,14 @@ test "parseUpdates apt" {
         \\
     ;
 
-    const updates = try parseUpdates(testing.allocator, .apt, output);
+    const updates = try testParseUpdates(testing.allocator, .apt, output);
     defer testing.allocator.free(updates);
 
     try testing.expectEqual(@as(usize, 15), updates.len);
-    try testing.expectEqualStrings("libacl1", mem.sliceTo(&updates[0].pkg_name, 0));
-    try testing.expectEqualStrings("2.3.2-2+b2", mem.sliceTo(&updates[0].new_version, 0));
-    try testing.expectEqualStrings("libssl3t64", mem.sliceTo(&updates[11].pkg_name, 0));
-    try testing.expectEqualStrings("3.5.4-1+b1", mem.sliceTo(&updates[11].new_version, 0));
+    try testing.expectEqualStrings("libacl1", updates[0].pkg_name);
+    try testing.expectEqualStrings("2.3.2-2+b2", updates[0].new_version);
+    try testing.expectEqualStrings("libssl3t64", updates[11].pkg_name);
+    try testing.expectEqualStrings("3.5.4-1+b1", updates[11].new_version);
 }
 
 test "parseUpdates dnf" {
@@ -382,12 +284,12 @@ test "parseUpdates dnf" {
         \\
     ;
 
-    const updates = try parseUpdates(testing.allocator, .dnf, output);
+    const updates = try testParseUpdates(testing.allocator, .dnf, output);
     defer testing.allocator.free(updates);
 
     try testing.expectEqual(@as(usize, 11), updates.len);
-    try testing.expectEqualStrings("coreutils", mem.sliceTo(&updates[0].pkg_name, 0));
-    try testing.expectEqualStrings("9.7-7.fc43", mem.sliceTo(&updates[0].new_version, 0));
+    try testing.expectEqualStrings("coreutils", updates[0].pkg_name);
+    try testing.expectEqualStrings("9.7-7.fc43", updates[0].new_version);
 }
 
 test "parseUpdates pacman" {
@@ -422,12 +324,12 @@ test "parseUpdates pacman" {
         \\vulkan-radeon 1:25.3.3-5 -> 1:25.3.3-6
     ;
 
-    const updates = try parseUpdates(testing.allocator, .pacman, output);
+    const updates = try testParseUpdates(testing.allocator, .pacman, output);
     defer testing.allocator.free(updates);
 
     try testing.expectEqual(@as(usize, 28), updates.len);
-    try testing.expectEqualStrings("mesa", mem.sliceTo(&updates[16].pkg_name, 0));
-    try testing.expectEqualStrings("1:25.3.3-6", mem.sliceTo(&updates[16].new_version, 0));
+    try testing.expectEqualStrings("mesa", updates[16].pkg_name);
+    try testing.expectEqualStrings("1:25.3.3-6", updates[16].new_version);
 }
 
 test "parseUpdates zypper" {
@@ -449,12 +351,12 @@ test "parseUpdates zypper" {
         \\v  | update-slowroll                  | kernel-macros                     | 6.18.3-1.0.6.1.sr20251204               | 6.18.5-1.0.2.1.sr20260101               | noarch
     ;
 
-    const updates = try parseUpdates(testing.allocator, .zypper, output);
+    const updates = try testParseUpdates(testing.allocator, .zypper, output);
     defer testing.allocator.free(updates);
 
     try testing.expectEqual(@as(usize, 12), updates.len);
-    try testing.expectEqualStrings("code", mem.sliceTo(&updates[4].pkg_name, 0));
-    try testing.expectEqualStrings("1.108.1-1768404278.el8", mem.sliceTo(&updates[4].new_version, 0));
+    try testing.expectEqualStrings("code", updates[4].pkg_name);
+    try testing.expectEqualStrings("1.108.1-1768404278.el8", updates[4].new_version);
 }
 
 test "parseUpdates xbps" {
@@ -468,12 +370,12 @@ test "parseUpdates xbps" {
         \\dash-0.5.12_2 update x86_64-musl https://repo-default.voidlinux.org/current/musl 194963 87212
     ;
 
-    const updates = try parseUpdates(testing.allocator, .xbps, output);
+    const updates = try testParseUpdates(testing.allocator, .xbps, output);
     defer testing.allocator.free(updates);
 
     try testing.expectEqual(@as(usize, 7), updates.len);
-    try testing.expectEqualStrings("acl", mem.sliceTo(&updates[0].pkg_name, 0));
-    try testing.expectEqualStrings("2.3.2_1", mem.sliceTo(&updates[0].new_version, 0));
-    try testing.expectEqualStrings("dash", mem.sliceTo(&updates[6].pkg_name, 0));
-    try testing.expectEqualStrings("0.5.12_2", mem.sliceTo(&updates[6].new_version, 0));
+    try testing.expectEqualStrings("acl", updates[0].pkg_name);
+    try testing.expectEqualStrings("2.3.2_1", updates[0].new_version);
+    try testing.expectEqualStrings("dash", updates[6].pkg_name);
+    try testing.expectEqualStrings("0.5.12_2", updates[6].new_version);
 }

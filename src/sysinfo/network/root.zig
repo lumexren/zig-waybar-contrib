@@ -18,6 +18,10 @@
 // along with this program. If not, see <https://gnu.org/licenses>.
 
 pub const lib = @import("lib.zig");
+pub const NetworkError = @import("NetworkError.zig").NetworkError;
+pub const RouteInfo = @import("RouteInfo.zig");
+pub const NetworkStats = @import("NetworkStats.zig");
+pub const Header = @import("Header.zig");
 
 const std = @import("std");
 const mem = std.mem;
@@ -30,38 +34,6 @@ const linux = std.os.linux;
 const SIOCGIFADDR: u32 = 0x8915;
 const ROUTE_PATH = "/proc/net/route";
 const DEV_PATH = "/proc/net/dev";
-
-pub const NetworkError = error{
-    NoDefaultRoute,
-    InvalidRouteFormat,
-    InvalidDevFormat,
-    InterfaceNotFound,
-};
-
-/// Default route information.
-pub const RouteInfo = struct {
-    interface: []const u8,
-    gateway: []const u8,
-};
-
-/// Network traffic statistics.
-pub const NetworkStats = struct {
-    rx_bytes: u64,
-    tx_bytes: u64,
-    timestamp: i64,
-
-    /// Calculate rates (bytes/sec) between two samples.
-    pub fn calculateRates(old: @This(), new: @This()) struct { download: f64, upload: f64, total: f64 } {
-        const dt = new.timestamp - old.timestamp;
-        if (dt <= 0) return .{ .download = 0.0, .upload = 0.0, .total = 0.0 };
-
-        const t: f64 = @floatFromInt(dt);
-        const rx: f64 = @floatFromInt(new.rx_bytes -| old.rx_bytes);
-        const tx: f64 = @floatFromInt(new.tx_bytes -| old.tx_bytes);
-
-        return .{ .download = rx / t, .upload = tx / t, .total = (rx + tx) / t };
-    }
-};
 
 /// Formats an IPv4 address from 4 bytes.
 fn formatIPv4(allocator: Allocator, bytes: [4]u8) ![]const u8 {
