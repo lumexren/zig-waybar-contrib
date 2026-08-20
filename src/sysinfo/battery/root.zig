@@ -17,106 +17,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+pub const BatteryInfo = @import("BatteryInfo.zig");
+pub const BatteryError = @import("BatteryError.zig").BatteryError;
+pub const BatteryState = @import("BatteryState.zig").BatteryState;
+pub const DeviceType = @import("DeviceType.zig").DeviceType;
+
 const dbus = @import("bindings").dbus;
 
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const fmt = std.fmt;
 const mem = std.mem;
 const Allocator = mem.Allocator;
-
-pub const BatteryError = error{
-    ConnectionFailed,
-    CallFailed,
-    NotFound,
-    InvalidResponse,
-    OutOfMemory,
-};
-
-/// UPower battery state
-pub const BatteryState = enum(u32) {
-    unknown = 0,
-    charging = 1,
-    discharging = 2,
-    empty = 3,
-    fully_charged = 4,
-    pending_charge = 5,
-    pending_discharge = 6,
-
-    pub fn toString(this: @This()) [:0]const u8 {
-        return switch (this) {
-            .charging => "Charging",
-            .discharging => "Discharging",
-            .empty => "Empty",
-            .fully_charged => "Full",
-            .pending_charge => "Pending charge",
-            .pending_discharge => "Pending discharge",
-            .unknown => "Unknown",
-        };
-    }
-};
-
-/// UPower device type
-pub const DeviceType = enum(u32) {
-    unknown = 0,
-    line_power = 1,
-    battery = 2,
-    ups = 3,
-    monitor = 4,
-    mouse = 5,
-    keyboard = 6,
-    pda = 7,
-    phone = 8,
-    media_player = 9,
-    tablet = 10,
-    computer = 11,
-    gaming_input = 12,
-    pen = 13,
-    touchpad = 14,
-    modem = 15,
-    network = 16,
-    headset = 17,
-    speakers = 18,
-    headphones = 19,
-    video = 20,
-    other_audio = 21,
-    remote_control = 22,
-    printer = 23,
-    scanner = 24,
-    camera = 25,
-    wearable = 26,
-    toy = 27,
-    bluetooth_generic = 28,
-    _,
-};
-
-/// Battery information from UPower
-pub const BatteryInfo = struct {
-    path: []const u8,
-    native_path: ?[]const u8 = null,
-    model: ?[]const u8 = null,
-    vendor: ?[]const u8 = null,
-    device_type: DeviceType = .battery,
-    state: BatteryState = .unknown,
-    percentage: f64 = 0,
-    energy: f64 = 0, // Wh
-    energy_full: f64 = 0, // Wh
-    energy_full_design: f64 = 0, // Wh
-    energy_rate: f64 = 0, // W
-    voltage: f64 = 0, // V
-    time_to_empty: i64 = 0, // seconds
-    time_to_full: i64 = 0, // seconds
-    is_present: bool = false,
-    is_rechargeable: bool = false,
-    health: ?u8 = null, // calculated
-
-    pub fn deinit(this: *@This(), allocator: Allocator) void {
-        allocator.free(this.path);
-        if (this.native_path) |p| allocator.free(p);
-        if (this.model) |m| allocator.free(m);
-        if (this.vendor) |v| allocator.free(v);
-        this.* = undefined;
-    }
-};
 
 const UPOWER_SERVICE: [*:0]const u8 = "org.freedesktop.UPower";
 const UPOWER_PATH: [*:0]const u8 = "/org/freedesktop/UPower";
@@ -212,7 +124,7 @@ fn getDeviceInfo(allocator: Allocator, conn: *dbus.Connection, path: []const u8)
     errdefer info.deinit(allocator);
 
     var path_buf: [257]u8 = undefined;
-    const path_z = std.fmt.bufPrintSentinel(&path_buf, "{s}", .{path}, 0) catch return BatteryError.InvalidResponse;
+    const path_z = fmt.bufPrintSentinel(&path_buf, "{s}", .{path}, 0) catch return BatteryError.InvalidResponse;
 
     var err: dbus.Error = .{};
     dbus.dbus_error_init(&err);
@@ -342,25 +254,11 @@ fn getDeviceInfo(allocator: Allocator, conn: *dbus.Connection, path: []const u8)
 
 const testing = std.testing;
 
-test "BatteryState.toString" {
-    try testing.expectEqualStrings("Charging", BatteryState.charging.toString());
-    try testing.expectEqualStrings("Discharging", BatteryState.discharging.toString());
-    try testing.expectEqualStrings("Full", BatteryState.fully_charged.toString());
-}
-
-test "BatteryInfo.deinit" {
-    var info = BatteryInfo{
-        .path = try testing.allocator.dupe(u8, "/org/freedesktop/UPower/devices/battery_BAT0"),
-        .model = try testing.allocator.dupe(u8, "Test Battery"),
-    };
-    info.deinit(testing.allocator);
-}
-
 test "getBatteries - integration" {
-    const batteries = getBatteries(testing.allocator) catch |err| {
-        switch (err) {
+    const batteries = getBatteries(testing.allocator) catch |e| {
+        switch (e) {
             BatteryError.ConnectionFailed, BatteryError.CallFailed => return,
-            else => return err,
+            else => return e,
         }
     };
     defer {
@@ -372,4 +270,17 @@ test "getBatteries - integration" {
         try testing.expect(b.path.len > 0);
         try testing.expect(b.percentage >= 0 and b.percentage <= 100);
     }
+}
+
+test "getDisplayDevice - integration" {
+    var info = getDisplayDevice(testing.allocator) catch |e| {
+        switch (e) {
+            BatteryError.ConnectionFailed, BatteryError.CallFailed => return,
+            else => return e,
+        }
+    };
+    defer info.deinit(testing.allocator);
+
+    try testing.expect(info.path.len > 0);
+    try testing.expect(info.percentage >= 0 and info.percentage <= 100);
 }

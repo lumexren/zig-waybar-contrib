@@ -17,14 +17,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-const bo = @import("build_options");
+/// Raw CPU time counters as read from /proc/stat.
+const Sample = @This();
 
-pub const SMI = blk: {
-    if (bo.has_amdsmi) {
-        break :blk @import("amdsmi.zig");
-    } else if (bo.has_nvml) {
-        break :blk @import("nvml.zig");
-    } else {
-        break :blk @import("template.zig");
-    }
-};
+idle: u64,
+total: u64,

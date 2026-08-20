@@ -19,6 +19,13 @@
 
 const CPU = @This();
 
+pub const CPUError = @import("CPUError.zig").CPUError;
+pub const Sample = @import("Sample.zig");
+pub const FrequencyValue = @import("FrequencyValue.zig");
+pub const Frequency = @import("Frequency.zig");
+pub const FrequencyRange = @import("FrequencyRange.zig");
+pub const CoreInfo = @import("CoreInfo.zig");
+
 const std = @import("std");
 const mem = std.mem;
 const fmt = std.fmt;
@@ -29,48 +36,8 @@ const Allocator = mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const STAT_BUFFER_SIZE: usize = 16 * 1024;
-// Enough headroom for the longest possible sysfs cpufreq path.
-// /sys/devices/system/cpu/cpu<4-digit-index>/cpufreq/cpuinfo_min_freq = ~62 chars.
 const SYSFS_PATH_MAX: usize = 96;
-// Baseline sleep before the first delta measurement (milliseconds).
 const BASELINE_SLEEP_MS: u64 = 100;
-
-pub const CPUError = error{
-    UnexpectedFormat,
-    CoreCountChanged,
-};
-
-/// Raw CPU time counters as read from /proc/stat.
-pub const Sample = struct {
-    idle: u64,
-    total: u64,
-};
-
-/// Combined per-core CPU information.
-pub const CoreInfo = struct {
-    usage: f64 = 0.0,
-    frequency: FrequencyRange = .{},
-};
-
-/// CPU frequency range (min, max, current).
-pub const FrequencyRange = struct {
-    min: Frequency = .{},
-    max: Frequency = .{},
-    current: Frequency = .{},
-};
-
-/// CPU frequency with pre-computed display fields.
-pub const Frequency = struct {
-    value: FrequencyValue = .{},
-    unit: []const u8 = "MHz",
-};
-
-pub const FrequencyValue = struct {
-    raw: f64 = 0.0,
-    rounded: i64 = 0,
-    /// True when the raw value differs from its rounded form by more than 0.001.
-    fraction: bool = false,
-};
 
 io: Io,
 allocator: Allocator,
@@ -92,9 +59,6 @@ pub fn deinit(this: *CPU) void {
 }
 
 /// Updates CPU usage metrics and frequencies.
-///
-/// On the very first call this establishes a baseline snapshot, sleeps briefly,
-/// then immediately computes the first delta so the caller always gets valid data.
 pub fn update(this: *CPU) !void {
     if (this.prev_cores.len == 0)
         try this.initBaseline();
@@ -113,8 +77,6 @@ pub fn update(this: *CPU) !void {
     @memcpy(this.prev_cores, this.scratch_samples.items);
 }
 
-/// Allocates backing slices and captures the first snapshot used as the baseline.
-/// All allocations are rolled back on any error.
 fn initBaseline(this: *CPU) !void {
     try this.captureSnapshot(&this.prev_overall);
 
@@ -135,7 +97,6 @@ fn initBaseline(this: *CPU) !void {
     try this.io.sleep(.fromMilliseconds(BASELINE_SLEEP_MS), .boot);
 }
 
-/// Reads /proc/stat and populates `overall` and `this.scratch_samples`.
 fn captureSnapshot(this: *CPU, overall: *Sample) !void {
     this.scratch_samples.clearRetainingCapacity();
 
@@ -193,9 +154,6 @@ fn updateFrequencies(this: *CPU) void {
     }
 }
 
-/// Parses a single `cpu` or `cpuN` line from /proc/stat.
-///
-/// Field order: user nice system idle iowait irq softirq steal
 pub inline fn parseLine(line: []const u8) CPUError!Sample {
     var it = mem.tokenizeScalar(u8, line, ' ');
     _ = it.next() orelse return CPUError.UnexpectedFormat;
@@ -208,17 +166,14 @@ pub inline fn parseLine(line: []const u8) CPUError!Sample {
         fields[idx] = fmt.parseInt(u64, tok, 10) catch return CPUError.UnexpectedFormat;
     }
 
-    // Need at least: user nice system idle
     if (idx < 4) return CPUError.UnexpectedFormat;
 
-    const idle_all = fields[3] + fields[4]; // idle + iowait
+    const idle_all = fields[3] + fields[4];
     const non_idle = fields[0] + fields[1] + fields[2] + fields[5] + fields[6] + fields[7];
 
     return .{ .idle = idle_all, .total = idle_all + non_idle };
 }
 
-/// Computes CPU usage percentage as a value in [0.0, 100.0].
-/// Returns 0.0 on counter wrap-around or degenerate input.
 pub inline fn computeUsage(a: Sample, b: Sample) f64 {
     if (b.total <= a.total or b.idle < a.idle) return 0.0;
 
@@ -231,7 +186,6 @@ pub inline fn computeUsage(a: Sample, b: Sample) f64 {
         @as(f64, @floatFromInt(totald)) * 100.0;
 }
 
-/// Converts a raw kHz value from sysfs into a human-readable Frequency.
 pub inline fn calculateFrequency(mhz: f64) Frequency {
     const is_ghz = mhz >= 1000.0;
     const value = if (is_ghz) mhz * 0.001 else mhz;
@@ -248,8 +202,6 @@ pub inline fn calculateFrequency(mhz: f64) Frequency {
     };
 }
 
-/// Reads a kHz frequency value from a sysfs cpufreq file and converts it.
-/// Returns a zeroed Frequency on any I/O or parse error.
 fn readSysfsFrequency(io: Io, path: []const u8) Frequency {
     var file = Dir.openFileAbsolute(io, path, .{ .mode = .read_only }) catch return .{};
     defer file.close(io);
@@ -298,20 +250,15 @@ test "cpu lifecycle and update integration" {
 test "parseLine" {
     const line = "cpu  100 200 300 400 500 600 700 800";
     const s = try parseLine(line);
-    // idle = 400 + 500 = 900; non_idle = 100+200+300+600+700+800 = 2700; total = 3600
     try std.testing.expectEqual(@as(u64, 900), s.idle);
     try std.testing.expectEqual(@as(u64, 3600), s.total);
 
     const line2 = "cpu0 10 20 30 40 50 60 70 80";
     const s2 = try parseLine(line2);
-    // idle = 40+50 = 90; non_idle = 10+20+30+60+70+80 = 270; total = 360
     try std.testing.expectEqual(@as(u64, 90), s2.idle);
     try std.testing.expectEqual(@as(u64, 360), s2.total);
 
-    // Fewer than 4 fields
     try std.testing.expectError(CPUError.UnexpectedFormat, parseLine("cpu  10 20 30"));
-
-    // Non-integer field
     try std.testing.expectError(CPUError.UnexpectedFormat, parseLine("cpu  10 20 abc 40"));
 }
 
@@ -323,23 +270,17 @@ test "computeUsage" {
 
     try std.testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s0, s1), 0.001);
     try std.testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s1, s2), 0.001);
-
-    // No time elapsed
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s3), 0.001);
 
-    // 100% busy: idle unchanged, total grows
     const s_busy = Sample{ .idle = 50, .total = 200 };
     try std.testing.expectApproxEqAbs(@as(f64, 100.0), computeUsage(s1, s_busy), 0.001);
 
-    // 0% busy: idle and total grow by the same amount
     const s_idle = Sample{ .idle = 150, .total = 200 };
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle), 0.001);
 
-    // Counter wrap-around
     const s_wrap = Sample{ .idle = 10, .total = 50 };
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_wrap), 0.001);
 
-    // Idle decreases (corrupt data)
     const s_idle_dec = Sample{ .idle = 30, .total = 150 };
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle_dec), 0.001);
 }
@@ -363,7 +304,6 @@ test "calculateFrequency" {
     try std.testing.expectEqual(@as(i64, 3), f3.value.rounded);
     try std.testing.expectEqual(false, f3.value.fraction);
 
-    // Noise suppression: tiny float drift must not set fraction
     const f4 = calculateFrequency(800.0000001);
     try std.testing.expectEqualStrings("MHz", f4.unit);
     try std.testing.expectEqual(false, f4.value.fraction);

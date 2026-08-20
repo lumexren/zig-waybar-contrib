@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// This file is part of zig-waybar-contrib.
+//
+// Copyright (c) 2026 erffy
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://gnu.org/licenses>.
+
+/// Disk usage information for a filesystem.
+const DiskInfo = @This();
+
+const SizeUnit = @import("SizeUnit.zig").SizeUnit;
+const std = @import("std");
+const fmt = std.fmt;
+
+path: []const u8 = "/",
+
+// Space (in bytes)
+total: u64 = 0,
+free: u64 = 0, // Available for unprivileged users (f_bavail)
+used: u64 = 0,
+
+// Percentages (0-100)
+percentage_used: u8 = 0,
+percentage_free: u8 = 0,
+
+// Block sizes
+block_size: u64 = 0,
+fragment_size: u64 = 0,
+
+// Inodes
+inodes_total: u64 = 0,
+inodes_free: u64 = 0,
+inodes_used: u64 = 0,
+inodes_percentage_used: u8 = 0,
+
+/// Converts bytes to a float in the specified unit.
+fn toUnit(bytes: u64, unit: SizeUnit) f64 {
+    return @as(f64, @floatFromInt(bytes)) / unit.divisor();
+}
+
+pub fn totalInUnit(this: @This(), unit: SizeUnit) f64 {
+    return toUnit(this.total, unit);
+}
+
+pub fn freeInUnit(this: @This(), unit: SizeUnit) f64 {
+    return toUnit(this.free, unit);
+}
+
+pub fn usedInUnit(this: @This(), unit: SizeUnit) f64 {
+    return toUnit(this.used, unit);
+}
+
+pub fn formatTotal(this: @This(), buf: []u8) ![]const u8 {
+    return formatBytes(this.total, buf);
+}
+
+pub fn formatFree(this: @This(), buf: []u8) ![]const u8 {
+    return formatBytes(this.free, buf);
+}
+
+pub fn formatUsed(this: @This(), buf: []u8) ![]const u8 {
+    return formatBytes(this.used, buf);
+}
+
+/// Formats bytes into a human-readable string with auto-selected IEC unit.
+pub fn formatBytes(bytes: u64, buf: []u8) ![]const u8 {
+    const value: f64 = @floatFromInt(bytes);
+    const SizeUnitMod = @import("SizeUnit.zig");
+
+    const unit: SizeUnit = if (value >= SizeUnitMod.TiB) .TiB else if (value >= SizeUnitMod.GiB) .GiB else if (value >= SizeUnitMod.MiB) .MiB else if (value >= SizeUnitMod.KiB) .KiB else .B;
+
+    return fmt.bufPrint(buf, "{d:.1} {s}", .{ value / unit.divisor(), unit.suffix() });
+}

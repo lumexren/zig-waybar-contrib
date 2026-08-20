@@ -17,6 +17,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+pub const NetworkError = @import("NetworkError.zig").NetworkError;
+pub const Header = @import("Header.zig");
+
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const mem = std.mem;
@@ -33,44 +36,6 @@ pub const DNS_CLASS_IN: u16 = 1;
 
 // Fallback DNS servers (used if /etc/resolv.conf parsing fails)
 const FALLBACK_DNS = [_][]const u8{ "9.9.9.9", "1.1.1.1" };
-
-pub const NetworkError = error{
-    InvalidResponse,
-    InvalidHeader,
-    InvalidLabel,
-    InvalidCompression,
-    NameTooLong,
-    ResponseTooSmall,
-    LabelTooLong,
-    BufferTooSmall,
-};
-
-/// DNS Header (12 bytes)
-pub const Header = struct {
-    id: u16,
-    flags: u16,
-    qdcount: u16,
-    ancount: u16,
-    nscount: u16,
-    arcount: u16,
-
-    pub fn toBytes(this: @This()) [12]u8 {
-        var buf: [12]u8 = undefined;
-        inline for (.{ this.id, this.flags, this.qdcount, this.ancount, this.nscount, this.arcount }, 0..) |val, i| mem.writeInt(u16, buf[i * 2 ..][0..2], val, .big);
-        return buf;
-    }
-
-    pub fn fromBytes(bytes: *const [12]u8) Header {
-        return .{
-            .id = mem.readInt(u16, bytes[0..2], .big),
-            .flags = mem.readInt(u16, bytes[2..4], .big),
-            .qdcount = mem.readInt(u16, bytes[4..6], .big),
-            .ancount = mem.readInt(u16, bytes[6..8], .big),
-            .nscount = mem.readInt(u16, bytes[8..10], .big),
-            .arcount = mem.readInt(u16, bytes[10..12], .big),
-        };
-    }
-};
 
 /// Reads DNS servers from /etc/resolv.conf.
 /// Returns a slice of server IP strings. Caller must free each string and the slice.

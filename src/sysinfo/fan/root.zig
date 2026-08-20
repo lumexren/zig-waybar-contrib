@@ -19,6 +19,8 @@
 
 const Fan = @This();
 
+pub const FanInfo = @import("FanInfo.zig");
+
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Io = std.Io;
@@ -27,11 +29,6 @@ const ascii = std.ascii;
 const fmt = std.fmt;
 const mem = std.mem;
 const Allocator = mem.Allocator;
-
-pub const FanInfo = struct {
-    name: []const u8,
-    speed: i64,
-};
 
 pub const HWMON_PATH = "/sys/class/hwmon";
 
@@ -140,50 +137,8 @@ test "scanDeviceFans reproduction" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    // Setup: Create a fake hwmon device dir
-    // We need to write files into it.
-    // std.testing.tmpDir returns a struct wrapping std.fs.Dir.
-    // std.fs.Dir.writeFile takes `sub_path: []const u8, data: []const u8`.
-    // Wait, the error said: `expected type 'Io', found '*const [10:0]u8'`.
-    // This implies `tmp.dir` is of type `Dir` which is `Io.Dir` (custom), NOT `std.fs.Dir`?
-    // Let's check imports. `const Dir = Io.Dir;`.
-    // BUT `std.testing.tmpDir` returns `std.testing.TmpDir`.
-    // `tmp.dir` is `std.fs.Dir`.
-    // The error says:
-    // `lib/fan.zig:121:27: error: expected type 'Io', found '*const [10:0]u8'`
-    // `try tmp.dir.writeFile("fan1_input", "2000\no");`
-    // This means `tmp.dir` behaves like it expects `Io` as first arg?
-    // Maybe `std` IS patched globally in this environment?
-    // Or maybe I am misreading the error.
-    // `note: struct declared here ... std/Io/Dir.zig`
-    // It seems `std.fs.Dir` MIGHT be aliased to `std.Io.Dir` or similar?
-    // OR `std.testing.tmpDir` returns something that has `writeFile` that expects `Io`.
-
-    // Let's try passing `io` to writeFile if that's what it wants.
-    // `tmp.dir` is likely `std.fs.Dir`.
-    // If `std.fs.Dir` is modified to take `io`, then:
-    // Error said: member function expected 2 argument(s), found 4
-    // `pub fn writeFile(dir: Dir, io: Io, options: WriteFileOptions)`
-    // So usage is `dir.writeFile(io, options)`.
-    // options likely has fields for path and data.
     try tmp.dir.writeFile(io, .{ .sub_path = "fan1_input", .data = "2000\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "fan1_label", .data = "System Fan\n" });
-
-    // We need to open tmp.dir as a Dir for scanDeviceFans
-    // But scanDeviceFans takes `std.Io.Dir`.
-    // Wait, `std.Io` is custom again?
-    // In `lib/fan.zig`, `const Dir = Io.Dir;`
-    // In `lib/build.zig`, `Threaded` comes from `std.Io`.
-    // The provided `io` has methods to open dirs.
-    // However, `scanDeviceFans` takes `device_dir: Dir`.
-    // `std.fs.Dir` is NOT compatible with `Io.Dir` likely if it's a wrapper.
-    // Let's check `lib/cpu.zig` again or assume `Io` wraps `std.fs`.
-    // If I look at `lib/fan.zig`: `const Dir = Io.Dir;`.
-    // `scanDeviceFans` takes `device_dir: Dir`.
-    // `tmp.dir` is `std.fs.Dir`.
-    // I probably need to open it via `io` wrapper.
-    // `io.openDirAbsolute` exists.
-    // `tmp.dir.realpath` can give me an absolute path.
 
     var buf: [4096]u8 = undefined;
     const len = try tmp.dir.realPathFile(io, ".", &buf);
@@ -199,13 +154,9 @@ test "scanDeviceFans reproduction" {
 
     try fan.scan();
 
-    // Expect 1 fan found
     try std.testing.expectEqual(@as(usize, 1), fan.fans.items.len);
     try std.testing.expectEqualStrings("System Fan", fan.fans.items[0].name);
     try std.testing.expectEqual(@as(i64, 2000), fan.fans.items[0].speed);
-    // Wait, I want to assert the BUG exists first, or fix it and assert it works?
-    // Best practice: write test that FAILS with bug.
-    // So expectation should be `1`. It will fail.
 }
 
 test "scanDeviceFans fallback" {
@@ -217,7 +168,6 @@ test "scanDeviceFans fallback" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    // Setup: fan2_input and name file
     try tmp.dir.writeFile(io, .{ .sub_path = "fan2_input", .data = "1500\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "name", .data = "k10temp\n" });
 
@@ -235,7 +185,6 @@ test "scanDeviceFans fallback" {
 
     try fan.scanDevice(device_dir);
 
-    // Expect 1 fan: "k10temp fan2"
     try std.testing.expectEqualStrings("k10temp fan2", fan.fans.items[0].name);
     try std.testing.expectEqual(@as(i64, 1500), fan.fans.items[0].speed);
 }
@@ -249,31 +198,15 @@ test "scanHwmonFans" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    // Create structure:
-    // tmp/hwmon0/fan1_input
-    // tmp/hwmon0/fan1_label
-    // tmp/hwmon1/fan1_input (no label)
-    // tmp/other/ (should be ignored)
-
-    // We need subdirectories.
-    // Try passing io to createDir (makeDir not present)
     try tmp.dir.createDir(io, "hwmon0", .default_dir);
     try tmp.dir.createDir(io, "hwmon1", .default_dir);
     try tmp.dir.createDir(io, "other", .default_dir);
 
-    // hwmon0 files
-    // Note: writeFile in standard zig (latest) usually takes sub_path.
-    // But we saw explicit `io` requirement in previous steps.
-    // However, `tmp.dir` is `std.fs.Dir`. `makeDir` is standard.
-    // The previous tests used `tmp.dir.writeFile(io, ...)` because of `std` patch presumably.
-    // So we continue that pattern.
-
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon0/fan1_input", .data = "1000\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon0/fan1_label", .data = "CPU Fan\n" });
 
-    // hwmon1 files (no label, so name should be hwmon1 fan1)
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/fan1_input", .data = "2000\n" });
-    try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/name", .data = "box\n" }); // Driver name
+    try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/name", .data = "box\n" });
 
     var fan_list: ArrayList(FanInfo) = .empty;
 
@@ -282,8 +215,6 @@ test "scanHwmonFans" {
 
     try fan.scan();
 
-    // Expect 2 fans
-    // Order depends on directory iteration order (hash map logic usually in fs), so we can't guarantee order.
     try std.testing.expectEqual(@as(usize, 2), fan.fans.items.len);
 
     var found_cpu = false;

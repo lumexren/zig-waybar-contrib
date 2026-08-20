@@ -17,14 +17,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
-pub const CPU = @import("cpu.zig");
-pub const disk = @import("disk.zig");
-pub const Memory = @import("memory.zig");
-pub const Fan = @import("fan.zig");
-pub const network = @import("network/network.zig");
-pub const Updates = @import("updates.zig");
-pub const gpu = @import("gpu/gpu.zig").SMI;
-pub const mpris = @import("mpris.zig");
-pub const battery = @import("battery.zig");
-pub const Backlight = @import("backlight.zig");
-pub const bluetooth = @import("bluetooth.zig");
+pub const CPU = @import("cpu/root.zig");
+pub const disk = @import("disk/root.zig");
+pub const Memory = @import("memory/root.zig");
+pub const Fan = @import("fan/root.zig");
+pub const network = @import("network/root.zig");
+pub const Updates = @import("updates/root.zig");
+pub const gpu = @import("gpu/root.zig").SMI;
+pub const mpris = @import("mpris/root.zig");
+pub const battery = @import("battery/root.zig");
+pub const Backlight = @import("backlight/root.zig");
+pub const bluetooth = @import("bluetooth/root.zig");

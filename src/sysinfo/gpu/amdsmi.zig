@@ -19,6 +19,10 @@
 
 const Backend = @This();
 
+pub const GPUError = @import("GPUError.zig").GPUError;
+pub const GPUInfo = @import("GPUInfo.zig");
+pub const GPUMemoryInfo = @import("GPUMemoryInfo.zig");
+
 const smi = @import("bindings").amdsmi;
 
 const std = @import("std");
@@ -26,25 +30,6 @@ const Allocator = std.mem.Allocator;
 
 allocator: Allocator,
 handle: smi.amdsmi_processor_handle = null,
-
-pub const GPUError = error{
-    HandleFailed,
-    InitFailed,
-    NoDevices,
-};
-
-pub const GPUInfo = struct {
-    gpu_busy: u64,
-    temperature: f32,
-    pwm: u64,
-    memory_info: GPUMemoryInfo,
-};
-
-pub const GPUMemoryInfo = struct {
-    total: u64,
-    used: u64,
-    free: u64,
-};
 
 pub inline fn init(allocator: Allocator) Backend {
     return .{ .allocator = allocator };

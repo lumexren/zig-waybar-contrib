@@ -19,18 +19,9 @@
 
 const Backend = @This();
 
-pub const GPUInfo = struct {
-    gpu_busy: u64 = 0,
-    temperature: f32 = 0.0,
-    pwm: u64 = 0,
-    memory_info: GPUMemoryInfo = .{},
-};
-
-pub const GPUMemoryInfo = struct {
-    total: u64 = 0,
-    used: u64 = 0,
-    free: u64 = 0,
-};
+pub const GPUError = @import("GPUError.zig").GPUError;
+pub const GPUInfo = @import("GPUInfo.zig");
+pub const GPUMemoryInfo = @import("GPUMemoryInfo.zig");
 
 pub fn init(_: anytype) Backend {
     return .{};
