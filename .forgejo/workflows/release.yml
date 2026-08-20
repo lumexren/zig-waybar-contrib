@@ -42,7 +42,17 @@ jobs:
       - name: Set Version
         id: version
         run: |
-          VERSION="$(date +'%y.%m.%d')"
+          DATE_PREFIX="$(date +'%y.%m.%d')"
+          
+          LAST_REL=$(git tag -l "${DATE_PREFIX}.*" | sed -E "s/^${DATE_PREFIX}\.//" | sort -n | tail -n1)
+
+          if [[ -z "$LAST_REL" ]]; then
+            REL=1
+          else
+            REL=$((LAST_REL + 1))
+          fi
+
+          VERSION="${DATE_PREFIX}.${REL}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create and Push Git Tag
