@@ -19,12 +19,14 @@
 
 const mpris = @import("sysinfo").mpris;
 
+const plume = @import("plume");
+const Connection = plume.Connection;
+
 const std = @import("std");
 const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const math = std.math;
 const fmt = std.fmt;
 
 const Config = utils.Config;
@@ -33,10 +35,10 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    icon: []const u8 = "",
-    icon_playing: []const u8 = "",
-    icon_paused: []const u8 = "",
-    icon_stopped: []const u8 = "",
+    icon: []const u8 = "",
+    icon_playing: []const u8 = "",
+    icon_paused: []const u8 = "",
+    icon_stopped: []const u8 = "",
     text: []const u8 = "{icon}  {title} {dot} {artist}",
     text_max_length: u16 = 256,
     tooltip: []const u8 = "{player_name}: {status:nl:title} - {artist:nl}Album: {album:nl:position} / {length}",
@@ -61,13 +63,16 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var connection: Connection = try .init(io, gpa, init.environ_map, .Session);
+    defer connection.close();
+
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
         try replacer.addCommonPlaceholders();
 
-        const player_info = mpris.getActivePlayer(gpa) catch |err| {
+        const player_info = mpris.getActivePlayer(gpa, &connection) catch |err| {
             switch (err) {
                 mpris.MprisError.NoPlayers, mpris.MprisError.ConnectionFailed => {
                     try replacer.addKey("icon", data.icon);

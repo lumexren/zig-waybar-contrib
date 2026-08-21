@@ -28,3 +28,4 @@ pub const mpris = @import("mpris/root.zig");
 pub const battery = @import("battery/root.zig");
 pub const Backlight = @import("backlight/root.zig");
 pub const bluetooth = @import("bluetooth/root.zig");
+pub const Pipewire = @import("pipewire/root.zig");

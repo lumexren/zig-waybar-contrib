@@ -577,6 +577,42 @@ The `text` and `tooltip` options support the following placeholders:
 
 ---
 
+### **PipeWire**
+
+Monitors master audio volume, mute status, and device name in real-time. Operating event-driven, updates occur instantly upon volume or mute changes with zero idle CPU overhead.
+
+- **Platforms:** Any Linux with PipeWire or PulseAudio
+
+**Configuration (`~/.config/zig-waybar-contrib/pipewire.zon`):**
+```zig
+.{
+    // Icons for volume levels
+    .icon_high = "󰕾",
+    .icon_medium = "󰖀",
+    .icon_low = "󰕿",
+    .icon_muted = "󰝟",
+    // Custom text format (default shown)
+    .text = "{icon}  {volume:'%'}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Device: {node_name}{nl}Volume: {volume:'%'}{nl}State: {state}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder    | Description                                      |
+| :------------- | :----------------------------------------------- |
+| `{icon}`       | Module icon based on volume level and mute state |
+| `{volume}`     | Volume percentage (0–100)                        |
+| `{raw_volume}` | Volume as float (0.00–1.00)                      |
+| `{node_name}`  | Active audio sink/device description             |
+| `{state}`      | Audio state ("Active" or "Muted")                |
+| `{is_muted}`   | Boolean indicating if audio is muted             |
+
+---
+
 ### **Common Placeholders**
 
 These placeholders are available in all modules:

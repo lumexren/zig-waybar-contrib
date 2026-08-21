@@ -28,7 +28,6 @@ const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 0 };
 const ModuleConfig = struct {
     name: []const u8,
     path: []const u8,
-    dbus: bool = false,
     libc: bool = false,
 };
 
@@ -41,10 +40,11 @@ const modules = [_]ModuleConfig{
     .{ .name = "fan", .path = "src/modules/fan.zig" },
     .{ .name = "gpu", .path = "src/modules/gpu.zig", .libc = true },
     .{ .name = "disk", .path = "src/modules/disk.zig", .libc = true },
-    .{ .name = "mpris", .path = "src/modules/mpris.zig", .libc = true, .dbus = true },
-    .{ .name = "battery", .path = "src/modules/battery.zig", .libc = true, .dbus = true },
+    .{ .name = "mpris", .path = "src/modules/mpris.zig" },
+    .{ .name = "battery", .path = "src/modules/battery.zig" },
     .{ .name = "backlight", .path = "src/modules/backlight.zig" },
-    .{ .name = "bluetooth", .path = "src/modules/bluetooth.zig", .libc = true, .dbus = true },
+    .{ .name = "bluetooth", .path = "src/modules/bluetooth.zig" },
+    .{ .name = "pipewire", .path = "src/modules/pipewire.zig" },
 };
 
 pub fn build(b: *Build) void {
@@ -56,12 +56,10 @@ pub fn build(b: *Build) void {
 
     const has_amdsmi = fileExists(b.pathJoin(&.{ rocm_path, "lib", "libamd_smi.so" }));
     const has_nvml = fileExists(b.pathJoin(&.{ cuda_path, "lib", "stubs", "libnvidia-ml.so" }));
-    const has_dbus = pkgConfigExists("dbus-1");
 
     const options = b.addOptions();
     options.addOption(bool, "has_amdsmi", has_amdsmi);
     options.addOption(bool, "has_nvml", has_nvml);
-    options.addOption(bool, "has_dbus", has_dbus);
 
     const build_options = options.createModule();
 
@@ -94,7 +92,6 @@ pub fn build(b: *Build) void {
         },
     });
 
-    if (has_dbus) sysinfo_mod.linkSystemLibrary("dbus-1", .{});
     if (has_amdsmi) linkGpu(sysinfo_mod, rocm_path, "amd_smi");
     if (has_nvml) linkGpu(sysinfo_mod, cuda_path, "nvidia-ml");
 
@@ -115,8 +112,6 @@ pub fn build(b: *Build) void {
                 .{ .name = "plume", .module = plume_mod },
             },
         });
-
-        if (cfg.dbus) mod.linkSystemLibrary("dbus-1", .{ .needed = true });
 
         const exe = b.addExecutable(.{
             .name = cfg.name,

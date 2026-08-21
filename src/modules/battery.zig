@@ -19,14 +19,15 @@
 
 const sysinfo = @import("sysinfo").battery;
 
+const plume = @import("plume");
+const Connection = plume.Connection;
+
 const std = @import("std");
 const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
 const fmt = std.fmt;
-const heap = std.heap;
-const ArenaAllocator = heap.ArenaAllocator;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -34,9 +35,9 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
-    icon: []const u8 = "",
-    icon_charging: []const u8 = "",
-    icon_full: []const u8 = "",
+    icon: []const u8 = "",
+    icon_charging: []const u8 = "",
+    icon_full: []const u8 = "",
     text: []const u8 = "{icon}  {percentage}%",
     tooltip: []const u8 = "Battery: {state:nl}Time remaining: {time_remaining:nl}Model: {model}",
 };
@@ -78,11 +79,17 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    defer connection.close();
+
+    var battery_sys: sysinfo = .init(io, gpa, &connection);
+    defer battery_sys.deinit();
+
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const battery = sysinfo.getDisplayDevice(gpa) catch |err| {
+        const battery = battery_sys.getDisplayDevice() catch |err| {
             try json.set("text", @as([]const u8, "No battery found"));
             try json.set("tooltip", @as([]const u8, "No battery found"));
             try json.write(stdout);

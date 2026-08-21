@@ -37,6 +37,7 @@
 | **Fan**     | Monitors fan speeds                    |
 | **GPU**     | Monitors GPU usage and temperature     |
 | **Bluetooth** | Monitors Bluetooth device status     |
+| **PipeWire** | Monitors master audio volume and mute status in real-time |
 | **Updates** | Tracks system package updates          |
 
 See the source code for detailed documentation on each module.

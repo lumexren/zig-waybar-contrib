@@ -19,6 +19,9 @@
 
 const sysinfo = @import("sysinfo").bluetooth;
 
+const plume = @import("plume");
+const Connection = plume.Connection;
+
 const std = @import("std");
 const utils = @import("utils");
 const ArrayList = std.ArrayList;
@@ -32,8 +35,8 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
-    icon_on: []const u8 = "",
-    icon_off: []const u8 = "",
+    icon_on: []const u8 = "",
+    icon_off: []const u8 = "",
     text: []const u8 = "{icon}  {device_count}",
     tooltip: []const u8 = "Adapter: {adapter_name:nl}Power: {adapter_powered:nl}Connected: {device_count} devices{nl:devices}",
     device_format: []const u8 = "{device_alias}",
@@ -57,11 +60,17 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    defer connection.close();
+
+    var bluetooth_sys: sysinfo = .init(io, gpa, &connection);
+    defer bluetooth_sys.deinit();
+
     while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
         defer json.clear();
         defer replacer.clear();
 
-        const adapters = sysinfo.getAdapters(gpa) catch |err| {
+        const adapters = bluetooth_sys.getAdapters() catch |err| {
             try json.set("text", data.icon_off);
             try json.set("tooltip", @as([]const u8, "Bluetooth unavailable"));
             try json.write(stdout);
@@ -86,7 +95,7 @@ pub fn main(init: process.Init) !void {
 
         const adapter = adapters[0];
 
-        const devices = sysinfo.getDevices(gpa) catch &[_]sysinfo.DeviceInfo{};
+        const devices = bluetooth_sys.getDevices() catch &[_]sysinfo.DeviceInfo{};
         defer {
             for (devices) |*d| @constCast(d).deinit(gpa);
             gpa.free(devices);

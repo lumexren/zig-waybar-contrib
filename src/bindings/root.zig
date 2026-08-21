@@ -19,5 +19,4 @@
 
 pub const nvml = @import("nvml.zig");
 pub const amdsmi = @import("amdsmi.zig");
-pub const dbus = @import("dbus.zig");
 pub const statvfs = @import("statvfs.zig");

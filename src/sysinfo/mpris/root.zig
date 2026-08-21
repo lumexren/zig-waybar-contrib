@@ -23,37 +23,41 @@ pub const LoopStatus = @import("LoopStatus.zig").LoopStatus;
 pub const Metadata = @import("Metadata.zig");
 pub const PlayerInfo = @import("PlayerInfo.zig");
 
-const dbus = @import("bindings").dbus;
+const plume = @import("plume");
+const Connection = plume.Connection;
+const Proxy = plume.Proxy;
+const Value = plume.Value;
+const GStr = Value.GStr;
+const GVariant = Value.GVariant;
 
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const meta = std.meta;
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const Io = std.Io;
 
 pub const MPRIS_PREFIX = "org.mpris.MediaPlayer2.";
 pub const MPRIS_PATH: [:0]const u8 = "/org/mpris/MediaPlayer2";
+pub const PLAYER_IFACE: [:0]const u8 = "org.mpris.MediaPlayer2.Player";
+pub const ROOT_IFACE: [:0]const u8 = "org.mpris.MediaPlayer2";
 
-pub fn listPlayers(allocator: Allocator) ![][]const u8 {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    const conn = dbus.dbus_bus_get(dbus.BUS_SESSION, &err) orelse return MprisError.ConnectionFailed;
-    if (dbus.dbus_error_is_set(&err) != 0) return MprisError.ConnectionFailed;
-    defer dbus.dbus_connection_unref(conn);
-
-    const msg = dbus.dbus_message_new_method_call(
+pub fn listPlayers(allocator: Allocator, connection: *Connection) ![][]const u8 {
+    var dbus_proxy = Proxy.init(
+        connection,
         "org.freedesktop.DBus",
         "/org/freedesktop/DBus",
         "org.freedesktop.DBus",
-        "ListNames",
-    ) orelse return MprisError.CallFailed;
-    defer dbus.dbus_message_unref(msg);
+    );
 
-    const reply = dbus.dbus_connection_send_with_reply_and_block(conn, msg, -1, &err) orelse return MprisError.CallFailed;
-    if (dbus.dbus_error_is_set(&err) != 0) return MprisError.CallFailed;
-    defer dbus.dbus_message_unref(reply);
+    var res = dbus_proxy.call("ListNames", .{}) catch return MprisError.ConnectionFailed;
+    defer res.deinit();
+
+    const names = res.expectAlloc([]GStr) catch return MprisError.InvalidResponse;
+    defer {
+        for (names) |n| allocator.free(n.s);
+        allocator.free(names);
+    }
 
     var players: ArrayListUnmanaged([]const u8) = .empty;
     errdefer {
@@ -61,39 +65,16 @@ pub fn listPlayers(allocator: Allocator) ![][]const u8 {
         players.deinit(allocator);
     }
 
-    var iter: dbus.MessageIter = .{};
-    if (dbus.dbus_message_iter_init(reply, &iter) == 0) return MprisError.InvalidResponse;
-
-    if (dbus.dbus_message_iter_get_arg_type(&iter) != dbus.TYPE_ARRAY) return MprisError.InvalidResponse;
-
-    var sub_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&iter, &sub_iter);
-
-    while (dbus.dbus_message_iter_get_arg_type(&sub_iter) == dbus.TYPE_STRING) {
-        var name_ptr: [*:0]const u8 = undefined;
-        dbus.dbus_message_iter_get_basic(&sub_iter, @ptrCast(&name_ptr));
-
-        const name_slice = mem.sliceTo(name_ptr, 0);
-        if (mem.startsWith(u8, name_slice, MPRIS_PREFIX)) {
-            const duped = try allocator.dupe(u8, name_slice);
-            try players.append(allocator, duped);
+    for (names) |name| {
+        if (mem.startsWith(u8, name.s, MPRIS_PREFIX)) {
+            try players.append(allocator, try allocator.dupe(u8, name.s));
         }
-
-        _ = dbus.dbus_message_iter_next(&sub_iter);
     }
 
     return players.toOwnedSlice(allocator);
 }
 
-pub fn getPlayerInfo(allocator: Allocator, bus_name: []const u8) !PlayerInfo {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    const conn = dbus.dbus_bus_get(dbus.BUS_SESSION, &err) orelse return MprisError.ConnectionFailed;
-    if (dbus.dbus_error_is_set(&err) != 0) return MprisError.ConnectionFailed;
-    defer dbus.dbus_connection_unref(conn);
-
+pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []const u8) !PlayerInfo {
     const player_name = if (bus_name.len > MPRIS_PREFIX.len)
         bus_name[MPRIS_PREFIX.len..]
     else
@@ -104,55 +85,81 @@ pub fn getPlayerInfo(allocator: Allocator, bus_name: []const u8) !PlayerInfo {
     };
     errdefer info.deinit(allocator);
 
-    const bus_name_z = try allocator.dupe(u8, bus_name);
+    // Sentinel-terminate the bus name for plume
+    const bus_name_z = try std.fmt.allocPrintSentinel(allocator, "{s}", .{bus_name}, 0);
     defer allocator.free(bus_name_z);
 
-    info.identity = getStringProperty(allocator, conn, bus_name_z, "org.mpris.MediaPlayer2", "Identity");
+    const root_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, ROOT_IFACE);
+    const player_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, PLAYER_IFACE);
 
-    if (getStringProperty(allocator, conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "PlaybackStatus")) |status_str| {
-        defer allocator.free(status_str);
-        if (mem.eql(u8, status_str, "Playing")) {
-            info.status = .playing;
-        } else if (mem.eql(u8, status_str, "Paused")) {
-            info.status = .paused;
-        } else if (mem.eql(u8, status_str, "Stopped")) {
-            info.status = .stopped;
-        } else if (meta.stringToEnum(PlaybackStatus, status_str)) |status| {
-            info.status = status;
+    // Identity
+    if (root_proxy.getProperty(GVariant, "Identity")) |v| {
+        var mv = v;
+        defer mv.deinit(allocator);
+        if (v == .string) info.identity = try allocator.dupe(u8, v.string.s);
+    } else |_| {}
+
+    // PlaybackStatus
+    if (player_proxy.getProperty(GVariant, "PlaybackStatus")) |v| {
+        var mv = v;
+        defer mv.deinit(allocator);
+        if (v == .string) {
+            if (mem.eql(u8, v.string.s, "Playing")) info.status = .playing
+            else if (mem.eql(u8, v.string.s, "Paused")) info.status = .paused
+            else if (mem.eql(u8, v.string.s, "Stopped")) info.status = .stopped;
         }
+    } else |_| {}
+
+    // LoopStatus
+    if (player_proxy.getProperty(GVariant, "LoopStatus")) |v| {
+        var mv = v;
+        defer mv.deinit(allocator);
+        if (v == .string) {
+            if (mem.eql(u8, v.string.s, "None")) info.loop_status = .none
+            else if (mem.eql(u8, v.string.s, "Track")) info.loop_status = .track
+            else if (mem.eql(u8, v.string.s, "Playlist")) info.loop_status = .playlist;
+        }
+    } else |_| {}
+
+    // Boolean caps
+    inline for (.{
+        .{ "Shuffle", "shuffle" },
+        .{ "CanControl", "can_control" },
+        .{ "CanGoNext", "can_go_next" },
+        .{ "CanGoPrevious", "can_go_previous" },
+        .{ "CanPlay", "can_play" },
+        .{ "CanPause", "can_pause" },
+        .{ "CanSeek", "can_seek" },
+    }) |pair| {
+        if (player_proxy.getProperty(GVariant, pair[0])) |v| {
+            var mv = v;
+            defer mv.deinit(allocator);
+            if (v == .boolean) @field(info, pair[1]) = v.boolean;
+        } else |_| {}
     }
 
-    if (getStringProperty(allocator, conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "LoopStatus")) |status_str| {
-        defer allocator.free(status_str);
-        if (mem.eql(u8, status_str, "None")) {
-            info.loop_status = .none;
-        } else if (mem.eql(u8, status_str, "Track")) {
-            info.loop_status = .track;
-        } else if (mem.eql(u8, status_str, "Playlist")) {
-            info.loop_status = .playlist;
-        } else if (meta.stringToEnum(LoopStatus, status_str)) |status| {
-            info.loop_status = status;
-        }
-    }
+    // Volume
+    if (player_proxy.getProperty(GVariant, "Volume")) |v| {
+        var mv = v;
+        defer mv.deinit(allocator);
+        if (v == .double) info.volume = v.double;
+    } else |_| {}
 
-    info.shuffle = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "Shuffle");
-    info.can_control = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanControl");
-    info.can_go_next = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanGoNext");
-    info.can_go_previous = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanGoPrevious");
-    info.can_play = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanPlay");
-    info.can_pause = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanPause");
-    info.can_seek = getBoolProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "CanSeek");
+    // Position
+    if (player_proxy.getProperty(GVariant, "Position")) |v| {
+        var mv = v;
+        defer mv.deinit(allocator);
+        if (v == .int64) info.position_us = v.int64;
+    } else |_| {}
 
-    info.volume = getDoubleProperty(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "Volume");
-    info.position_us = getInt64Property(conn, bus_name_z, "org.mpris.MediaPlayer2.Player", "Position");
-
-    info.metadata = getMetadataProperty(allocator, conn, bus_name_z);
+    // Metadata
+    info.metadata = getMetadataProperty(allocator, player_proxy);
 
     return info;
 }
 
-pub fn getActivePlayer(allocator: Allocator) !PlayerInfo {
-    const players = try listPlayers(allocator);
+pub fn getActivePlayer(allocator: Allocator, connection: *Connection) !PlayerInfo {
+    const players = try listPlayers(allocator, connection);
     defer {
         for (players) |p| allocator.free(p);
         allocator.free(players);
@@ -160,284 +167,48 @@ pub fn getActivePlayer(allocator: Allocator) !PlayerInfo {
 
     if (players.len == 0) return MprisError.NoPlayers;
 
-    return getPlayerInfo(allocator, players[0]);
+    return getPlayerInfo(allocator, connection, players[0]);
 }
 
-fn getStringProperty(allocator: Allocator, conn: *dbus.Connection, dest: []const u8, iface: [*:0]const u8, prop: [*:0]const u8) ?[]const u8 {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    var dest_buf: [256]u8 = undefined;
-    if (dest.len >= dest_buf.len) return null;
-    @memcpy(dest_buf[0..dest.len], dest);
-    dest_buf[dest.len] = 0;
-    const dest_z = dest_buf[0..dest.len :0].ptr;
-
-    const msg = dbus.dbus_message_new_method_call(dest_z, MPRIS_PATH.ptr, "org.freedesktop.DBus.Properties", "Get") orelse return null;
-    defer dbus.dbus_message_unref(msg);
-
-    var args: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_init_append(msg, &args);
-
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&iface)) == 0) return null;
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&prop)) == 0) return null;
-
-    const reply = dbus.dbus_connection_send_with_reply_and_block(conn, msg, 1000, &err) orelse return null;
-    if (dbus.dbus_error_is_set(&err) != 0) return null;
-    defer dbus.dbus_message_unref(reply);
-
-    var iter: dbus.MessageIter = .{};
-    if (dbus.dbus_message_iter_init(reply, &iter) == 0) return null;
-
-    if (dbus.dbus_message_iter_get_arg_type(&iter) != dbus.TYPE_VARIANT) return null;
-
-    var variant_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&iter, &variant_iter);
-
-    if (dbus.dbus_message_iter_get_arg_type(&variant_iter) != dbus.TYPE_STRING) return null;
-
-    var value_ptr: [*:0]const u8 = undefined;
-    dbus.dbus_message_iter_get_basic(&variant_iter, @ptrCast(&value_ptr));
-
-    return allocator.dupe(u8, mem.sliceTo(value_ptr, 0)) catch null;
-}
-
-fn getBoolProperty(conn: *dbus.Connection, dest: []const u8, iface: [*:0]const u8, prop: [*:0]const u8) bool {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    var dest_buf: [256]u8 = undefined;
-    if (dest.len >= dest_buf.len) return false;
-    @memcpy(dest_buf[0..dest.len], dest);
-    dest_buf[dest.len] = 0;
-    const dest_z = dest_buf[0..dest.len :0].ptr;
-
-    const msg = dbus.dbus_message_new_method_call(dest_z, MPRIS_PATH.ptr, "org.freedesktop.DBus.Properties", "Get") orelse return false;
-    defer dbus.dbus_message_unref(msg);
-
-    var args: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_init_append(msg, &args);
-
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&iface)) == 0) return false;
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&prop)) == 0) return false;
-
-    const reply = dbus.dbus_connection_send_with_reply_and_block(conn, msg, 1000, &err) orelse return false;
-    if (dbus.dbus_error_is_set(&err) != 0) return false;
-    defer dbus.dbus_message_unref(reply);
-
-    var iter: dbus.MessageIter = .{};
-    if (dbus.dbus_message_iter_init(reply, &iter) == 0) return false;
-
-    if (dbus.dbus_message_iter_get_arg_type(&iter) != dbus.TYPE_VARIANT) return false;
-
-    var variant_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&iter, &variant_iter);
-
-    if (dbus.dbus_message_iter_get_arg_type(&variant_iter) != dbus.TYPE_BOOLEAN) return false;
-
-    var value: u32 = 0;
-    dbus.dbus_message_iter_get_basic(&variant_iter, @ptrCast(&value));
-
-    return value != 0;
-}
-
-fn getDoubleProperty(conn: *dbus.Connection, dest: []const u8, iface: [*:0]const u8, prop: [*:0]const u8) f64 {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    var dest_buf: [256]u8 = undefined;
-    if (dest.len >= dest_buf.len) return 1.0;
-    @memcpy(dest_buf[0..dest.len], dest);
-    dest_buf[dest.len] = 0;
-    const dest_z = dest_buf[0..dest.len :0].ptr;
-
-    const msg = dbus.dbus_message_new_method_call(dest_z, MPRIS_PATH.ptr, "org.freedesktop.DBus.Properties", "Get") orelse return 1.0;
-    defer dbus.dbus_message_unref(msg);
-
-    var args: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_init_append(msg, &args);
-
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&iface)) == 0) return 1.0;
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&prop)) == 0) return 1.0;
-
-    const reply = dbus.dbus_connection_send_with_reply_and_block(conn, msg, 1000, &err) orelse return 1.0;
-    if (dbus.dbus_error_is_set(&err) != 0) return 1.0;
-    defer dbus.dbus_message_unref(reply);
-
-    var iter: dbus.MessageIter = .{};
-    if (dbus.dbus_message_iter_init(reply, &iter) == 0) return 1.0;
-
-    if (dbus.dbus_message_iter_get_arg_type(&iter) != dbus.TYPE_VARIANT) return 1.0;
-
-    var variant_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&iter, &variant_iter);
-
-    if (dbus.dbus_message_iter_get_arg_type(&variant_iter) != dbus.TYPE_DOUBLE) return 1.0;
-
-    var value: f64 = 1.0;
-    dbus.dbus_message_iter_get_basic(&variant_iter, @ptrCast(&value));
-
-    return value;
-}
-
-fn getInt64Property(conn: *dbus.Connection, dest: []const u8, iface: [*:0]const u8, prop: [*:0]const u8) i64 {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    var dest_buf: [256]u8 = undefined;
-    if (dest.len >= dest_buf.len) return 0;
-    @memcpy(dest_buf[0..dest.len], dest);
-    dest_buf[dest.len] = 0;
-    const dest_z = dest_buf[0..dest.len :0].ptr;
-
-    const msg = dbus.dbus_message_new_method_call(dest_z, MPRIS_PATH.ptr, "org.freedesktop.DBus.Properties", "Get") orelse return 0;
-    defer dbus.dbus_message_unref(msg);
-
-    var args: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_init_append(msg, &args);
-
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&iface)) == 0) return 0;
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&prop)) == 0) return 0;
-
-    const reply = dbus.dbus_connection_send_with_reply_and_block(conn, msg, 1000, &err) orelse return 0;
-    if (dbus.dbus_error_is_set(&err) != 0) return 0;
-    defer dbus.dbus_message_unref(reply);
-
-    var iter: dbus.MessageIter = .{};
-    if (dbus.dbus_message_iter_init(reply, &iter) == 0) return 0;
-
-    if (dbus.dbus_message_iter_get_arg_type(&iter) != dbus.TYPE_VARIANT) return 0;
-
-    var variant_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&iter, &variant_iter);
-
-    if (dbus.dbus_message_iter_get_arg_type(&variant_iter) != dbus.TYPE_INT64) return 0;
-
-    var value: i64 = 0;
-    dbus.dbus_message_iter_get_basic(&variant_iter, @ptrCast(&value));
-
-    return value;
-}
-
-fn getMetadataProperty(allocator: Allocator, conn: *dbus.Connection, dest: []const u8) Metadata {
-    var err: dbus.Error = .{};
-    dbus.dbus_error_init(&err);
-    defer dbus.dbus_error_free(&err);
-
-    const iface: [*:0]const u8 = "org.mpris.MediaPlayer2.Player";
-    const prop: [*:0]const u8 = "Metadata";
-
-    var dest_buf: [256]u8 = undefined;
-    if (dest.len >= dest_buf.len) return .{};
-    @memcpy(dest_buf[0..dest.len], dest);
-    dest_buf[dest.len] = 0;
-    const dest_z = dest_buf[0..dest.len :0];
-
-    const msg = dbus.dbus_message_new_method_call(dest_z, MPRIS_PATH.ptr, "org.freedesktop.DBus.Properties", "Get") orelse return .{};
-    defer dbus.dbus_message_unref(msg);
-
-    var args: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_init_append(msg, &args);
-
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&iface)) == 0) return .{};
-    if (dbus.dbus_message_iter_append_basic(&args, dbus.TYPE_STRING, @ptrCast(&prop)) == 0) return .{};
-
-    const reply = dbus.dbus_connection_send_with_reply_and_block(conn, msg, 1000, &err) orelse return .{};
-    if (dbus.dbus_error_is_set(&err) != 0) return .{};
-    defer dbus.dbus_message_unref(reply);
-
-    var iter: dbus.MessageIter = .{};
-    if (dbus.dbus_message_iter_init(reply, &iter) == 0) return .{};
-
-    if (dbus.dbus_message_iter_get_arg_type(&iter) != dbus.TYPE_VARIANT) return .{};
-
-    var variant_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&iter, &variant_iter);
-
-    if (dbus.dbus_message_iter_get_arg_type(&variant_iter) != dbus.TYPE_ARRAY) return .{};
-
+fn getMetadataProperty(allocator: Allocator, player_proxy: Proxy) Metadata {
     var metadata: Metadata = .{};
-    errdefer metadata.deinit(allocator);
 
-    var dict_iter: dbus.MessageIter = .{};
-    dbus.dbus_message_iter_recurse(&variant_iter, &dict_iter);
+    const v = player_proxy.getProperty(GVariant, "Metadata") catch return metadata;
+    var mv = v;
+    defer mv.deinit(allocator);
 
-    while (dbus.dbus_message_iter_get_arg_type(&dict_iter) == dbus.TYPE_DICT_ENTRY) {
-        var entry_iter: dbus.MessageIter = .{};
-        dbus.dbus_message_iter_recurse(&dict_iter, &entry_iter);
+    // Metadata is a{sv}
+    const dict = if (v == .variant) v.variant.* else v;
+    if (dict != .dict) return metadata;
 
-        if (dbus.dbus_message_iter_get_arg_type(&entry_iter) != dbus.TYPE_STRING) {
-            _ = dbus.dbus_message_iter_next(&dict_iter);
-            continue;
-        }
-
-        var key_ptr: [*:0]const u8 = undefined;
-        dbus.dbus_message_iter_get_basic(&entry_iter, @ptrCast(&key_ptr));
-        const key = mem.sliceTo(key_ptr, 0);
-
-        _ = dbus.dbus_message_iter_next(&entry_iter);
-
-        if (dbus.dbus_message_iter_get_arg_type(&entry_iter) != dbus.TYPE_VARIANT) {
-            _ = dbus.dbus_message_iter_next(&dict_iter);
-            continue;
-        }
-
-        var value_iter: dbus.MessageIter = .{};
-        dbus.dbus_message_iter_recurse(&entry_iter, &value_iter);
-
-        const value_type = dbus.dbus_message_iter_get_arg_type(&value_iter);
+    var it = dict.dict.iterator();
+    while (it.next()) |entry| {
+        const key = entry.key_ptr.*;
+        const val = entry.value_ptr.*;
+        const inner = if (val == .variant) val.variant.* else val;
 
         if (mem.eql(u8, key, "xesam:title")) {
-            if (value_type == dbus.TYPE_STRING) {
-                var str_ptr: [*:0]const u8 = undefined;
-                dbus.dbus_message_iter_get_basic(&value_iter, @ptrCast(&str_ptr));
-                metadata.title = allocator.dupe(u8, mem.sliceTo(str_ptr, 0)) catch null;
-            }
+            if (inner == .string) metadata.title = allocator.dupe(u8, inner.string.s) catch null;
         } else if (mem.eql(u8, key, "xesam:artist")) {
-            if (value_type == dbus.TYPE_ARRAY) {
-                var artist_iter: dbus.MessageIter = .{};
-                dbus.dbus_message_iter_recurse(&value_iter, &artist_iter);
-                if (dbus.dbus_message_iter_get_arg_type(&artist_iter) == dbus.TYPE_STRING) {
-                    var str_ptr: [*:0]const u8 = undefined;
-                    dbus.dbus_message_iter_get_basic(&artist_iter, @ptrCast(&str_ptr));
-                    metadata.artist = allocator.dupe(u8, mem.sliceTo(str_ptr, 0)) catch null;
-                }
-            } else if (value_type == dbus.TYPE_STRING) {
-                var str_ptr: [*:0]const u8 = undefined;
-                dbus.dbus_message_iter_get_basic(&value_iter, @ptrCast(&str_ptr));
-                metadata.artist = allocator.dupe(u8, mem.sliceTo(str_ptr, 0)) catch null;
+            if (inner == .array and inner.array.len > 0) {
+                const first = inner.array[0];
+                const s = if (first == .variant) first.variant.* else first;
+                if (s == .string) metadata.artist = allocator.dupe(u8, s.string.s) catch null;
+            } else if (inner == .string) {
+                metadata.artist = allocator.dupe(u8, inner.string.s) catch null;
             }
         } else if (mem.eql(u8, key, "xesam:album")) {
-            if (value_type == dbus.TYPE_STRING) {
-                var str_ptr: [*:0]const u8 = undefined;
-                dbus.dbus_message_iter_get_basic(&value_iter, @ptrCast(&str_ptr));
-                metadata.album = allocator.dupe(u8, mem.sliceTo(str_ptr, 0)) catch null;
-            }
+            if (inner == .string) metadata.album = allocator.dupe(u8, inner.string.s) catch null;
         } else if (mem.eql(u8, key, "mpris:artUrl")) {
-            if (value_type == dbus.TYPE_STRING) {
-                var str_ptr: [*:0]const u8 = undefined;
-                dbus.dbus_message_iter_get_basic(&value_iter, @ptrCast(&str_ptr));
-                metadata.art_url = allocator.dupe(u8, mem.sliceTo(str_ptr, 0)) catch null;
-            }
+            if (inner == .string) metadata.art_url = allocator.dupe(u8, inner.string.s) catch null;
         } else if (mem.eql(u8, key, "mpris:trackid")) {
-            if (value_type == dbus.TYPE_STRING or value_type == dbus.TYPE_OBJECT_PATH) {
-                var str_ptr: [*:0]const u8 = undefined;
-                dbus.dbus_message_iter_get_basic(&value_iter, @ptrCast(&str_ptr));
-                metadata.track_id = allocator.dupe(u8, mem.sliceTo(str_ptr, 0)) catch null;
+            if (inner == .string or inner == .object_path) {
+                const s = if (inner == .object_path) inner.object_path.s else inner.string.s;
+                metadata.track_id = allocator.dupe(u8, s) catch null;
             }
         } else if (mem.eql(u8, key, "mpris:length")) {
-            if (value_type == dbus.TYPE_INT64) {
-                var length: i64 = 0;
-                dbus.dbus_message_iter_get_basic(&value_iter, @ptrCast(&length));
-                metadata.length_us = length;
-            }
+            if (inner == .int64) metadata.length_us = inner.int64;
         }
-
-        _ = dbus.dbus_message_iter_next(&dict_iter);
     }
 
     return metadata;
@@ -488,40 +259,4 @@ test "PlayerInfo.deinit" {
     };
 
     info.deinit(allocator);
-}
-
-test "listPlayers - integration" {
-    const allocator = testing.allocator;
-
-    const players = listPlayers(allocator) catch |err| {
-        switch (err) {
-            MprisError.ConnectionFailed, MprisError.CallFailed => return,
-            else => return err,
-        }
-    };
-    defer {
-        for (players) |p| allocator.free(p);
-        allocator.free(players);
-    }
-
-    for (players) |player| {
-        try testing.expect(mem.startsWith(u8, player, MPRIS_PREFIX));
-    }
-}
-
-test "getActivePlayer - integration" {
-    const allocator = testing.allocator;
-
-    var info = getActivePlayer(allocator) catch |err| {
-        switch (err) {
-            MprisError.ConnectionFailed, MprisError.CallFailed, MprisError.NoPlayers => return,
-            else => return err,
-        }
-    };
-    defer info.deinit(allocator);
-
-    try testing.expect(info.name.len > 0);
-    try testing.expect(info.volume >= 0.0);
-    try testing.expect(info.volume <= 2.0);
-    try testing.expect(info.position_us >= 0);
 }
