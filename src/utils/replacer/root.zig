@@ -20,6 +20,10 @@
 /// Applies typed value substitution and byte-sequence replacements to templates.
 const Replacer = @This();
 
+const Units = @import("Units.zig").Units;
+const Value = @import("Value.zig").Value;
+const ReplacerError = @import("ReplacerError.zig").ReplacerError;
+
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
@@ -30,54 +34,6 @@ const ascii = std.ascii;
 const math = std.math;
 const mem = std.mem;
 const Allocator = mem.Allocator;
-
-pub const ReplacerError = error{
-    PlaceholderNotFound,
-};
-
-/// A typed value that can be substituted into a template placeholder.
-pub const Value = union(enum) {
-    string: []const u8,
-    integer: i64,
-    float: f64,
-    boolean: bool,
-};
-
-/// Measurement unit system used for formatting byte counts and transfer speeds.
-pub const Units = enum {
-    binary,
-    decimal,
-
-    const DECIMAL_BASE: f64 = 1000.0;
-    const BINARY_BASE: f64 = 1024.0;
-
-    const DECIMAL_BYTE_UNITS = [_][]const u8{ "B", "KB", "MB", "GB", "TB", "PB" };
-    const DECIMAL_SPEED_UNITS = [_][]const u8{ "B/s", "KB/s", "MB/s", "GB/s", "TB/s", "PB/s" };
-
-    const BINARY_BYTE_UNITS = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB", "PiB" };
-    const BINARY_SPEED_UNITS = [_][]const u8{ "B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s", "PiB/s" };
-
-    pub fn base(this: @This()) f64 {
-        return switch (this) {
-            .binary => BINARY_BASE,
-            .decimal => DECIMAL_BASE,
-        };
-    }
-
-    pub fn byteUnits(this: @This()) []const []const u8 {
-        return switch (this) {
-            .binary => &BINARY_BYTE_UNITS,
-            .decimal => &DECIMAL_BYTE_UNITS,
-        };
-    }
-
-    pub fn speedUnits(this: @This()) []const []const u8 {
-        return switch (this) {
-            .binary => &BINARY_SPEED_UNITS,
-            .decimal => &DECIMAL_SPEED_UNITS,
-        };
-    }
-};
 
 allocator: Allocator,
 values: StringHashMap(Value),

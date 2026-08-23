@@ -18,6 +18,6 @@
 // along with this program. If not, see <https://gnu.org/licenses>.
 
 pub const Config = @import("Config.zig");
-pub const Json = @import("Json.zig");
-pub const Replacer = @import("Replacer.zig");
-pub const Process = @import("Process.zig");
+pub const Json = @import("json/root.zig");
+pub const Replacer = @import("replacer/root.zig");
+pub const Process = @import("process/root.zig");

@@ -20,6 +20,9 @@
 /// An incremental JSON object builder with explicit memory management.
 const Json = @This();
 
+const Field = @import("Field.zig");
+const Value = @import("Value.zig").Value;
+
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Io = std.Io;
@@ -31,30 +34,6 @@ const fmt = std.fmt;
 allocator: Allocator,
 fields: ArrayListUnmanaged(Field) = .empty,
 counter: u64 = 0,
-
-/// Represents a JSON value supported by the builder.
-///
-/// Only a minimal subset of JSON types is supported:
-/// - `string`  → JSON string
-/// - `number`  → JSON integer number
-/// - `boolean` → JSON boolean
-///
-/// This restricted set is intentional and matches the needs of
-/// lightweight, streaming JSON generation scenarios.
-pub const Value = union(enum) {
-    string: []const u8,
-    number: i64,
-    boolean: bool,
-};
-
-/// Represents a single key-value pair in a JSON object.
-///
-/// The `key` is written as a JSON string, and the associated `value`
-/// is serialized according to its `Value` variant.
-pub const Field = struct {
-    key: []const u8,
-    value: Value,
-};
 
 /// Initializes a new JSON builder using the given allocator.
 ///
