@@ -35,10 +35,10 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
-    icon: []const u8 = "",
-    icon_playing: []const u8 = "",
-    icon_paused: []const u8 = "",
-    icon_stopped: []const u8 = "",
+    icon: []const u8 = "",
+    icon_playing: []const u8 = "",
+    icon_paused: []const u8 = "",
+    icon_stopped: []const u8 = "",
     text: []const u8 = "{icon}  {title} {dot} {artist}",
     text_max_length: u16 = 256,
     tooltip: []const u8 = "{player_name}: {status:nl:title} - {artist:nl}Album: {album:nl:position} / {length}",

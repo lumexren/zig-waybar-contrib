@@ -35,9 +35,9 @@ const Replacer = utils.Replacer;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
-    icon: []const u8 = "",
-    icon_charging: []const u8 = "",
-    icon_full: []const u8 = "",
+    icon: []const u8 = "",
+    icon_charging: []const u8 = "",
+    icon_full: []const u8 = "",
     text: []const u8 = "{icon}  {percentage}%",
     tooltip: []const u8 = "Battery: {state:nl}Time remaining: {time_remaining:nl}Model: {model}",
 };
