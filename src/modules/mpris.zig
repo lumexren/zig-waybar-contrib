@@ -32,6 +32,7 @@ const fmt = std.fmt;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
@@ -57,6 +58,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("mpris", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -66,7 +70,7 @@ pub fn main(init: process.Init) !void {
     var connection: Connection = try .init(io, gpa, init.environ_map, .Session);
     defer connection.close();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -163,5 +167,7 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

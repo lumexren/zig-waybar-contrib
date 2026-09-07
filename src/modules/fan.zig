@@ -29,9 +29,12 @@ const ArrayList = std.ArrayList;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 2,
+    warning_threshold: ?i64 = 3000,
+    critical_threshold: ?i64 = 5000,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {total_fans}",
     tooltip: []const u8 = "{name}: {speed} RPM",
@@ -49,6 +52,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("fan", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -60,7 +66,7 @@ pub fn main(init: process.Init) !void {
     var fan: Fan = .init(io, gpa, &fans);
     defer fan.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
         defer fan.clear();
@@ -79,7 +85,10 @@ pub fn main(init: process.Init) !void {
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(replacer.allocator);
 
+        var max_speed: i64 = 0;
         for (fan.fans.items) |f| {
+            if (f.speed > max_speed) max_speed = f.speed;
+
             try replacer.addKey("name", f.name);
             try replacer.addKeyAny("speed", f.speed);
 
@@ -92,7 +101,29 @@ pub fn main(init: process.Init) !void {
 
         try json.set("tooltip", tooltip_text.items);
 
+        if (data.critical_threshold) |crit| {
+            if (max_speed >= crit) {
+                try json.setClass("critical");
+            } else if (data.warning_threshold) |warn| {
+                if (max_speed >= warn) {
+                    try json.setClass("warning");
+                } else {
+                    try json.setClass("normal");
+                }
+            } else {
+                try json.setClass("normal");
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (max_speed >= warn) {
+                try json.setClass("warning");
+            } else {
+                try json.setClass("normal");
+            }
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

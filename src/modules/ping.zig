@@ -39,11 +39,14 @@ const assert = std.debug.assert;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 const PING_IDENTIFIER: u16 = 0xC0DE;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    warning_threshold: ?i64 = 100,
+    critical_threshold: ?i64 = 250,
     target_domain: []const u8 = "google.com",
     target_domain_ip_update_interval: i64 = 200,
     timeout: i64 = 3,
@@ -69,6 +72,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("ping", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -89,7 +95,7 @@ pub fn main(init: process.Init) !void {
     var total_latency: i64 = 0;
     var ping_count: i64 = 0;
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -115,7 +121,14 @@ pub fn main(init: process.Init) !void {
 
         var ping_buffer: [64]u8 = @splat(0);
         var ping_target = target;
-        const latency = ping(io, socket, &ping_target, &ping_buffer, data.timeout) catch continue;
+        const latency = ping(io, socket, &ping_target, &ping_buffer, data.timeout) catch {
+            try json.set("text", @as([]const u8, "Timeout"));
+            try json.set("tooltip", @as([]const u8, "Ping timeout"));
+            try json.setClass("critical");
+            try json.write(stdout);
+            try stdout.flush();
+            continue;
+        };
 
         ping_count += 1;
         total_latency += latency;
@@ -142,8 +155,30 @@ pub fn main(init: process.Init) !void {
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
 
+        if (data.critical_threshold) |crit| {
+            if (latency >= crit) {
+                try json.setClass("critical");
+            } else if (data.warning_threshold) |warn| {
+                if (latency >= warn) {
+                    try json.setClass("warning");
+                } else {
+                    try json.setClass("normal");
+                }
+            } else {
+                try json.setClass("normal");
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (latency >= warn) {
+                try json.setClass("warning");
+            } else {
+                try json.setClass("normal");
+            }
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }
 

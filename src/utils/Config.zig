@@ -35,12 +35,14 @@ const Map = Environ.Map;
 io: Io,
 environ_map: *Map,
 allocator: Allocator,
+is_allocated: bool = false,
 
 pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
     return .{
         .io = io,
         .environ_map = environ_map,
         .allocator = allocator,
+        .is_allocated = false,
     };
 }
 
@@ -80,13 +82,19 @@ pub fn exists(this: *Config, module_name: []const u8) bool {
 
 /// Frees the allocated fields of a parsed configuration struct.
 pub fn free(this: *Config, config: anytype) void {
-    zon.parse.free(this.allocator, config);
+    if (this.is_allocated) {
+        zon.parse.free(this.allocator, config);
+        this.is_allocated = false;
+    }
 }
 
 /// Strictly loads a typed config struct `T`. Falls back to `T{}` on any error.
 /// Caller is responsible for calling `free()` on success if `T` contains allocated fields.
 pub fn load(this: *Config, module_name: []const u8, comptime T: type) T {
-    return this.loadExact(module_name, T) catch T{};
+    return this.loadExact(module_name, T) catch {
+        this.is_allocated = false;
+        return T{};
+    };
 }
 
 /// Strictly loads a typed config struct `T`. Bubbles up all internal errors.
@@ -104,5 +112,7 @@ pub fn loadExact(this: *Config, module_name: []const u8, comptime T: type) !T {
     var reader = file.reader(this.io, &.{});
     try reader.interface.readSliceAll(buffer);
 
-    return try zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true, .free_on_error = true });
+    const res = try zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true, .free_on_error = true });
+    this.is_allocated = true;
+    return res;
 }

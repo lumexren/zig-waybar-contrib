@@ -17,7 +17,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 
+const std = @import("std");
+const testing = std.testing;
+
 pub const Config = @import("Config.zig");
 pub const Json = @import("json/root.zig");
 pub const Replacer = @import("replacer/root.zig");
 pub const Process = @import("process/root.zig");
+pub const Watcher = @import("Watcher.zig");
+
+test {
+    _ = testing.refAllDecls(@This());
+}

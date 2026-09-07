@@ -32,6 +32,7 @@ const process = std.process;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
@@ -54,6 +55,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("bluetooth", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -66,17 +70,18 @@ pub fn main(init: process.Init) !void {
     var bluetooth_sys: sysinfo = .init(io, gpa, &connection);
     defer bluetooth_sys.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
         const adapters = bluetooth_sys.getAdapters() catch |err| {
             try json.set("text", data.icon_off);
             try json.set("tooltip", @as([]const u8, "Bluetooth unavailable"));
+            try json.setClass("disabled");
             try json.write(stdout);
             try stdout.flush();
 
-            if (err == sysinfo.BluetoothError.NoAdapter or err == sysinfo.BluetoothError.ConnectionFailed) continue;
+            if (err == sysinfo.BluetoothError.NoAdapter or err == sysinfo.BluetoothError.ConnectionFailed or err == sysinfo.BluetoothError.InvalidResponse) continue;
             return err;
         };
 
@@ -88,6 +93,7 @@ pub fn main(init: process.Init) !void {
         if (adapters.len == 0) {
             try json.set("text", data.icon_off);
             try json.set("tooltip", @as([]const u8, "No Bluetooth adapter"));
+            try json.setClass("disabled");
             try json.write(stdout);
             try stdout.flush();
             continue;
@@ -95,11 +101,12 @@ pub fn main(init: process.Init) !void {
 
         const adapter = adapters[0];
 
-        const devices = bluetooth_sys.getDevices() catch &[_]sysinfo.DeviceInfo{};
-        defer {
-            for (devices) |*d| @constCast(d).deinit(gpa);
-            gpa.free(devices);
-        }
+        const maybe_devices = bluetooth_sys.getDevices() catch null;
+        defer if (maybe_devices) |devs| {
+            for (devs) |*d| @constCast(d).deinit(gpa);
+            gpa.free(devs);
+        };
+        const devices = maybe_devices orelse &[_]sysinfo.DeviceInfo{};
 
         var connected_count: usize = 0;
         for (devices) |d| {
@@ -141,7 +148,17 @@ pub fn main(init: process.Init) !void {
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
 
+        if (!adapter.powered) {
+            try json.setClass("off");
+        } else if (connected_count > 0) {
+            try json.setClass("connected");
+        } else {
+            try json.setClass("on");
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

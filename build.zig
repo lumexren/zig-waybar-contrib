@@ -84,6 +84,7 @@ pub fn build(b: *Build) void {
         .root_source_file = b.path("src/sysinfo/root.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
         .imports = &.{
             .{ .name = "bindings", .module = bindings },
             .{ .name = "utils", .module = utils_mod },
@@ -127,6 +128,19 @@ pub fn build(b: *Build) void {
 
         b.installArtifact(exe);
     }
+
+    const test_step = b.step("test", "Run unit tests");
+    const utils_tests = b.addTest(.{
+        .root_module = utils_mod,
+    });
+    const run_utils_tests = b.addRunArtifact(utils_tests);
+    test_step.dependOn(&run_utils_tests.step);
+
+    const sysinfo_tests = b.addTest(.{
+        .root_module = sysinfo_mod,
+    });
+    const run_sysinfo_tests = b.addRunArtifact(sysinfo_tests);
+    test_step.dependOn(&run_sysinfo_tests.step);
 }
 
 fn linkGpu(mod: *Build.Module, base_path: []const u8, lib_name: []const u8) void {

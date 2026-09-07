@@ -19,14 +19,16 @@
 /// Represents a JSON value supported by the builder.
 
 /// Only a minimal subset of JSON types is supported:
-/// - `string`  → JSON string
-/// - `number`  → JSON integer number
-/// - `boolean` → JSON boolean
+/// - `string`       → JSON string
+/// - `array_string` → JSON array of strings
+/// - `number`       → JSON integer number
+/// - `boolean`      → JSON boolean
 ///
 /// This restricted set is intentional and matches the needs of
 /// lightweight, streaming JSON generation scenarios.
 pub const Value = union(enum) {
     string: []const u8,
+    array_string: []const []const u8,
     number: i64,
     boolean: bool,
 };

@@ -71,8 +71,8 @@ pub fn getAdapters(this: *Bluetooth) ![]AdapterInfo {
         adapters.deinit(this.allocator);
     }
 
-    const objects = res.expectAlloc(Value.GVariant) catch return BluetoothError.InvalidResponse;
-    var obj_var = objects;
+    var dec = res.reader();
+    var obj_var = dec.readDynamicVariant(dec.signature, true) catch return BluetoothError.InvalidResponse;
     defer obj_var.deinit(this.allocator);
 
     if (obj_var != .dict) return BluetoothError.InvalidResponse;
@@ -131,8 +131,8 @@ pub fn getDevices(this: *Bluetooth) ![]DeviceInfo {
         devices.deinit(this.allocator);
     }
 
-    const objects = res.expectAlloc(GVariant) catch return BluetoothError.InvalidResponse;
-    var obj_var = objects;
+    var dec = res.reader();
+    var obj_var = dec.readDynamicVariant(dec.signature, true) catch return BluetoothError.InvalidResponse;
     defer obj_var.deinit(this.allocator);
 
     if (obj_var != .dict) return BluetoothError.InvalidResponse;
@@ -182,7 +182,13 @@ pub fn getDevices(this: *Bluetooth) ![]DeviceInfo {
                     if (mem.eql(u8, prop.key_ptr.*, "Percentage")) {
                         const v = prop.value_ptr.*;
                         const inner = if (v == .variant) v.variant.* else v;
-                        if (inner == .byte) device.battery = inner.byte;
+                        if (inner == .byte) {
+                            device.battery = inner.byte;
+                        } else if (inner == .uint32) {
+                            device.battery = @intCast(inner.uint32);
+                        } else if (inner == .int32) {
+                            device.battery = @intCast(inner.int32);
+                        }
                     }
                 }
             }
@@ -234,4 +240,48 @@ test "DeviceInfo.deinit" {
         .address = try testing.allocator.dupe(u8, "AA:BB:CC:DD:EE:FF"),
     };
     device.deinit(testing.allocator);
+}
+
+test "live bluetooth dbus" {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    var environ_map: std.process.Environ.Map = .init(testing.allocator);
+    defer environ_map.deinit();
+
+    var conn = Connection.init(io, testing.allocator, &environ_map, .System) catch |err| {
+        std.debug.print("\nConnection error: {any}\n", .{err});
+        return;
+    };
+    defer conn.close();
+
+    var bt = Bluetooth.init(io, testing.allocator, &conn);
+    defer bt.deinit();
+
+    const adapters = bt.getAdapters() catch |err| {
+        std.debug.print("\ngetAdapters error: {any}\n", .{err});
+        return err;
+    };
+    defer {
+        for (adapters) |*a| a.deinit(testing.allocator);
+        testing.allocator.free(adapters);
+    }
+
+    std.debug.print("\nFound {d} adapters:\n", .{adapters.len});
+    for (adapters) |a| {
+        std.debug.print("Adapter path: {s}, name: {s}, address: {s}, powered: {}\n", .{ a.path, a.name orelse "null", a.address orelse "null", a.powered });
+    }
+
+    const devices = bt.getDevices() catch |err| {
+        std.debug.print("\ngetDevices error: {any}\n", .{err});
+        return err;
+    };
+    defer {
+        for (devices) |*d| d.deinit(testing.allocator);
+        testing.allocator.free(devices);
+    }
+
+    std.debug.print("\nFound {d} devices:\n", .{devices.len});
+    for (devices) |d| {
+        std.debug.print("Device path: {s}, name: {s}, connected: {}, battery: {any}\n", .{ d.path, d.name orelse "null", d.connected, d.battery });
+    }
 }

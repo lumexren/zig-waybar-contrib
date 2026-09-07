@@ -32,6 +32,7 @@ const mem = std.mem;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     icon_high: []const u8 = "󰕾",
@@ -87,8 +88,11 @@ pub fn main(init: process.Init) !void {
         }
     }
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     // Fallback polling if event stream closed unexpectedly
-    while (true) : (try io.sleep(.fromSeconds(1), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(1)) {
         renderOutput(stdout, gpa, &data, &json, &replacer, &pipewire) catch {};
     }
 }

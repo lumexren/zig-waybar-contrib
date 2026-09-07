@@ -32,10 +32,13 @@ const math = std.math;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
     one_indexed: bool = false,
+    warning_threshold: ?f64 = 70.0,
+    critical_threshold: ?f64 = 90.0,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {frequency:2:frequency_unit}",
     tooltip: []const u8 = "Core {core_index}: {core_usage_percentage:'%'} {dot} {core_frequency:2:core_frequency_unit}",
@@ -53,6 +56,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("cpu", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -62,7 +68,7 @@ pub fn main(init: process.Init) !void {
     var cpu: CPU = .init(io, gpa);
     defer cpu.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -80,10 +86,13 @@ pub fn main(init: process.Init) !void {
             if (core.frequency.max.value.raw > global_freq_max.value.raw) global_freq_max = core.frequency.max;
         }
 
+        const usage_pct = cpu.avg;
+        const usage_int: i64 = @intFromFloat(@round(usage_pct));
+
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", data.icon);
 
-        try replacer.addKeyAny("usage_percentage", @as(i64, @intFromFloat(@round(cpu.avg))));
+        try replacer.addKeyAny("usage_percentage", usage_int);
         try replacer.addKeyAny("frequency", if (max_frequency.value.fraction) max_frequency.value.raw else @as(f64, @floatFromInt(max_frequency.value.rounded)));
         try replacer.addKeyAny("frequency_unit", max_frequency.unit);
         try replacer.addKeyAny("frequency_min", if (global_freq_min.value.fraction) global_freq_min.value.raw else @as(f64, @floatFromInt(global_freq_min.value.rounded)));
@@ -121,8 +130,31 @@ pub fn main(init: process.Init) !void {
 
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_text.items);
+        try json.set("percentage", usage_int);
+
+        if (data.critical_threshold) |crit| {
+            if (usage_pct >= crit) {
+                try json.setClass("critical");
+            } else if (data.warning_threshold) |warn| {
+                if (usage_pct >= warn) {
+                    try json.setClass("warning");
+                } else {
+                    try json.setClass("normal");
+                }
+            } else {
+                try json.setClass("normal");
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (usage_pct >= warn) {
+                try json.setClass("warning");
+            } else {
+                try json.setClass("normal");
+            }
+        }
 
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

@@ -29,9 +29,12 @@ const process = std.process;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 30,
+    warning_threshold: ?u8 = 80,
+    critical_threshold: ?u8 = 90,
     path: []const u8 = "/",
     show_all_mounts: bool = false,
     icon: []const u8 = "",
@@ -52,19 +55,23 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("disk", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
         const disk_info = sysinfo.fetchDiskInfo(data.path) catch {
             try json.set("text", @as([]const u8, "Disk: Error"));
             try json.set("tooltip", @as([]const u8, "Failed to read disk info"));
+            try json.setClass("critical");
             try json.write(stdout);
             try stdout.flush();
             continue;
@@ -123,7 +130,32 @@ pub fn main(init: process.Init) !void {
             try json.set("tooltip", tooltip_line);
         }
 
+        try json.set("text", text_line);
+        try json.set("percentage", disk_info.percentage_used);
+
+        if (data.critical_threshold) |crit| {
+            if (disk_info.percentage_used >= crit) {
+                try json.setClass("critical");
+            } else if (data.warning_threshold) |warn| {
+                if (disk_info.percentage_used >= warn) {
+                    try json.setClass("warning");
+                } else {
+                    try json.setClass("normal");
+                }
+            } else {
+                try json.setClass("normal");
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (disk_info.percentage_used >= warn) {
+                try json.setClass("warning");
+            } else {
+                try json.setClass("normal");
+            }
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

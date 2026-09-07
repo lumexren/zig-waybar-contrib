@@ -30,9 +30,12 @@ const ArrayList = std.ArrayList;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 200,
+    warning_threshold: ?usize = 1,
+    critical_threshold: ?usize = 50,
     icon: []const u8 = "",
     error_icon: []const u8 = "",
     manager: ?[]const u8 = null,
@@ -62,6 +65,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("updates", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var manager: Updates.PackageManager = undefined;
     if (data.manager) |m| {
         manager = getManager(m);
@@ -78,7 +84,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer {
             json.clear();
             replacer.clear();
@@ -87,6 +93,7 @@ pub fn main(init: process.Init) !void {
 
         try replacer.addCommonPlaceholders();
 
+        var is_err = false;
         if (updates.check()) |_| {
             try replacer.addKey("icon", data.icon);
             try replacer.addKeyAny("total_updates", updates.count);
@@ -112,6 +119,7 @@ pub fn main(init: process.Init) !void {
                 try json.set("tooltip", "");
             }
         } else |err| {
+            is_err = true;
             try replacer.addKey("icon", data.error_icon);
             try replacer.addKey("manager", updates.manager.name());
             try replacer.addKeyAny("total_updates", updates.count);
@@ -124,7 +132,33 @@ pub fn main(init: process.Init) !void {
 
         try json.set("text", text_line);
 
+        if (is_err) {
+            try json.setClass("error");
+        } else if (data.critical_threshold) |crit| {
+            if (updates.count >= crit) {
+                try json.setClass("critical");
+            } else if (data.warning_threshold) |warn| {
+                if (updates.count >= warn) {
+                    try json.setClass("warning");
+                } else {
+                    try json.setClass("updated");
+                }
+            } else {
+                try json.setClass("updated");
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (updates.count >= warn) {
+                try json.setClass("warning");
+            } else {
+                try json.setClass("updated");
+            }
+        } else {
+            try json.setClass("updated");
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }
