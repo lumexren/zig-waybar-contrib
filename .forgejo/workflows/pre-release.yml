@@ -43,8 +43,9 @@ jobs:
         id: version
         run: |
           DATE_PREFIX="$(date +'%y.%m.%d')"
-          
-          LAST_REL=$(git tag -l "${DATE_PREFIX}.*" | sed -E "s/^${DATE_PREFIX}\.//" | sort -n | tail -n1)
+          TAG_PREFIX="pre-${DATE_PREFIX}"
+
+          LAST_REL=$(git tag -l "${TAG_PREFIX}.*" | sed -E "s/^${TAG_PREFIX}\.//" | sort -n | tail -n1)
 
           if [[ -z "$LAST_REL" ]]; then
             REL=1
@@ -52,7 +53,7 @@ jobs:
             REL=$((LAST_REL + 1))
           fi
 
-          VERSION="${DATE_PREFIX}.${REL}"
+          VERSION="${TAG_PREFIX}.${REL}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create and Push Git Tag
