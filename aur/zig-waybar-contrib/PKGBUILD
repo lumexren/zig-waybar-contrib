@@ -8,8 +8,8 @@ pkgdesc='High-performance Waybar modules written in Zig for efficient system mon
 arch=('x86_64')
 url="https://codeberg.org/erffy/$_pkgbase"
 license=('GPL3')
-provides=("zig-waybar-contrib=$pkgver")
-conflicts=('zig-waybar-contrib')
+provides=("${_pkgbase}=$pkgver")
+conflicts=("${_pkgbase}-beta-bin")
 optdepends=(
   'fakeroot: updates module'
 )
