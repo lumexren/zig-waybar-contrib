@@ -141,6 +141,32 @@ pub fn build(b: *Build) void {
     });
     const run_sysinfo_tests = b.addRunArtifact(sysinfo_tests);
     test_step.dependOn(&run_sysinfo_tests.step);
+
+    const bench_step = b.step("bench", "Run performance and memory benchmarks");
+    const bench_filter = b.option([]const u8, "filter", "Filter benchmarks by name");
+
+    const bench_mod = b.createModule(.{
+        .root_source_file = b.path("benchmark/root.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+        .imports = &.{
+            .{ .name = "utils", .module = utils_mod },
+            .{ .name = "sysinfo", .module = sysinfo_mod },
+            .{ .name = "bindings", .module = bindings },
+            .{ .name = "build_options", .module = build_options },
+            .{ .name = "plume", .module = plume_mod },
+        },
+    });
+
+    const bench_exe = b.addExecutable(.{
+        .name = "bench",
+        .root_module = bench_mod,
+    });
+    const run_bench = b.addRunArtifact(bench_exe);
+    if (bench_filter) |f| {
+        run_bench.addArg(f);
+    }
+    bench_step.dependOn(&run_bench.step);
 }
 
 fn linkGpu(mod: *Build.Module, base_path: []const u8, lib_name: []const u8) void {
