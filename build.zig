@@ -21,6 +21,7 @@ const std = @import("std");
 const Io = std.Io;
 const Dir = Io.Dir;
 const Threaded = Io.Threaded;
+const process = std.process;
 const Build = std.Build;
 
 const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 0 };
@@ -48,14 +49,17 @@ const modules = [_]ModuleConfig{
 };
 
 pub fn build(b: *Build) void {
+    var threaded: Threaded = .init_single_threaded;
+    const io = threaded.io();
+
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSmall });
+    const optimize = b.standardOptimizeOption(.{});
 
     const rocm_path = b.option([]const u8, "rocm-path", "Path to ROCm") orelse "/opt/rocm";
     const cuda_path = b.option([]const u8, "cuda-path", "Path to CUDA") orelse "/opt/cuda/targets/x86_64-linux";
 
-    const has_amdsmi = fileExists(b.pathJoin(&.{ rocm_path, "lib", "libamd_smi.so" }));
-    const has_nvml = fileExists(b.pathJoin(&.{ cuda_path, "lib", "stubs", "libnvidia-ml.so" }));
+    const has_amdsmi = fileExists(io, b.pathJoin(&.{ rocm_path, "lib", "libamd_smi.so" }));
+    const has_nvml = fileExists(io, b.pathJoin(&.{ cuda_path, "lib", "stubs", "libnvidia-ml.so" }));
 
     const options = b.addOptions();
     options.addOption(bool, "has_amdsmi", has_amdsmi);
@@ -121,9 +125,9 @@ pub fn build(b: *Build) void {
         });
 
         exe.lto = switch (optimize) {
-            .Debug, .ReleaseSafe => .none,
-            .ReleaseSmall => .thin,
-            .ReleaseFast => .full,
+            .debug, .safe => .none,
+            .small => .thin,
+            .fast => .full,
         };
 
         b.installArtifact(exe);
@@ -148,7 +152,7 @@ pub fn build(b: *Build) void {
     const bench_mod = b.createModule(.{
         .root_source_file = b.path("benchmark/root.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
         .imports = &.{
             .{ .name = "utils", .module = utils_mod },
             .{ .name = "sysinfo", .module = sysinfo_mod },
@@ -176,21 +180,7 @@ fn linkGpu(mod: *Build.Module, base_path: []const u8, lib_name: []const u8) void
     mod.linkSystemLibrary(lib_name, .{ .needed = true });
 }
 
-fn fileExists(path: []const u8) bool {
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
+fn fileExists(io: Io, path: []const u8) bool {
     Dir.accessAbsolute(io, path, .{}) catch return false;
     return true;
-}
-
-fn pkgConfigExists(pkg: []const u8) bool {
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
-    var child = std.process.spawn(io, .{
-        .argv = &.{ "pkg-config", "--exists", pkg },
-        .stdout = .ignore,
-        .stderr = .ignore,
-    }) catch return false;
-    const term = child.wait(io) catch return false;
-    return term == .exited and term.exited == 0;
 }
