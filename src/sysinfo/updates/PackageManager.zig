@@ -91,7 +91,7 @@ pub const PackageManager = enum {
                 pkg_name = pkg_name_full[0..dot_idx];
             },
             .pacman => {
-                const arrow_idx = mem.indexOf(u8, trimmed, "->") orelse return null;
+                const arrow_idx = mem.find(u8, trimmed, "->") orelse return null;
                 const left_part = mem.trim(u8, trimmed[0..arrow_idx], &ascii.whitespace);
                 new_version = mem.trim(u8, trimmed[arrow_idx + 2 ..], &ascii.whitespace);
 

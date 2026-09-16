@@ -76,9 +76,9 @@ pub fn parseVolumeOutput(output: []const u8) !VolumeState {
     const trimmed = mem.trim(u8, output, &ascii.whitespace);
     if (trimmed.len == 0) return PipewireError.ParseError;
 
-    const is_muted = mem.indexOf(u8, trimmed, "[MUTED]") != null;
+    const is_muted = mem.find(u8, trimmed, "[MUTED]") != null;
 
-    if (mem.indexOf(u8, trimmed, "Volume:")) |idx| {
+    if (mem.find(u8, trimmed, "Volume:")) |idx| {
         const after_vol = trimmed[idx + "Volume:".len ..];
         var tokens = mem.tokenizeAny(u8, after_vol, " \t\r\n/[%]");
         if (tokens.next()) |tok| {
@@ -101,7 +101,7 @@ pub fn parseNodeDescription(output: []const u8, allocator: Allocator) ![]const u
     var lines = mem.splitScalar(u8, output, '\n');
     while (lines.next()) |line| {
         const trimmed = mem.trim(u8, line, &ascii.whitespace);
-        if (mem.indexOf(u8, trimmed, "node.description =")) |idx| {
+        if (mem.find(u8, trimmed, "node.description =")) |idx| {
             const val_part = mem.trim(u8, trimmed[idx + "node.description =".len ..], &ascii.whitespace);
             const clean_name = mem.trim(u8, val_part, "\"");
             if (clean_name.len > 0) return allocator.dupe(u8, clean_name);
@@ -112,7 +112,7 @@ pub fn parseNodeDescription(output: []const u8, allocator: Allocator) ![]const u
     var lines2 = mem.splitScalar(u8, output, '\n');
     while (lines2.next()) |line| {
         const trimmed = mem.trim(u8, line, &ascii.whitespace);
-        if (mem.indexOf(u8, trimmed, "node.name =")) |idx| {
+        if (mem.find(u8, trimmed, "node.name =")) |idx| {
             const val_part = mem.trim(u8, trimmed[idx + "node.name =".len ..], &ascii.whitespace);
             const clean_name = mem.trim(u8, val_part, "\"");
             if (clean_name.len > 0) return allocator.dupe(u8, clean_name);

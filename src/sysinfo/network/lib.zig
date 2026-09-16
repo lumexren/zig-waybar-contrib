@@ -73,7 +73,7 @@ fn parseResolvConf(allocator: Allocator, content: []const u8) ![][]const u8 {
             _ = parts.next();
 
             if (parts.next()) |server| {
-                if (mem.indexOfScalar(u8, server, ':') != null) continue;
+                if (mem.findScalar(u8, server, ':') != null) continue;
                 try servers.append(allocator, try allocator.dupe(u8, server));
             }
         }

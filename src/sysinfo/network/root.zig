@@ -110,7 +110,7 @@ pub fn getNetworkStats(io: Io, interface: []const u8, timestamp: i64) !NetworkSt
     while (lines.next()) |line| {
         if (line.len == 0) continue;
 
-        const colon = mem.indexOfScalar(u8, line, ':') orelse continue;
+        const colon = mem.findScalar(u8, line, ':') orelse continue;
         const iface = mem.trim(u8, line[0..colon], " \t");
 
         if (!mem.eql(u8, iface, interface)) continue;
