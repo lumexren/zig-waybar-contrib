@@ -31,52 +31,57 @@ ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
 
 git config --global user.name "erffy"
 git config --global user.email "$EMAIL"
+git config --global --add safe.directory '*'
 
-cd aur/$AUR_REPO
+PKGVER="${VERSION#pre-}"
+PKGVER="${PKGVER//-/_}"
 
 BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
 CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
 LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
 
-old_ver="$(grep "^pkgver=" PKGBUILD | cut -d= -f2 || printf "")"
-old_rel="$(grep "^pkgrel=" PKGBUILD | cut -d= -f2 || printf "0")"
-if [[ "$old_ver" == "$VERSION" ]]; then
-	new_rel=$(( old_rel + 1 ))
+git clone "ssh://aur@aur.archlinux.org/${AUR_REPO}.git" aur-repo || mkdir -p aur-repo
+
+old_ver="$(grep "^pkgver=" aur-repo/PKGBUILD 2>/dev/null | cut -d= -f2 | tr -d ' "' || printf "")"
+old_rel="$(grep "^pkgrel=" aur-repo/PKGBUILD 2>/dev/null | cut -d= -f2 | tr -d ' "' || printf "0")"
+
+if [[ -n "$old_ver" && "$old_ver" == "$PKGVER" ]]; then
+	new_rel=$(( ${old_rel:-0} + 1 ))
 else
 	new_rel="1"
 fi
 
-sed -i "s|^pkgver=.*|pkgver=${VERSION}|" PKGBUILD
-sed -i "s|^pkgrel=.*|pkgrel=$new_rel|" PKGBUILD
+cp "aur/$AUR_REPO/PKGBUILD" aur-repo/PKGBUILD
+
+cd aur-repo
+
+sed -i "s|^pkgver=.*|pkgver=${PKGVER}|" PKGBUILD
+sed -i "s|^pkgrel=.*|pkgrel=${new_rel}|" PKGBUILD
 sed -i "s|BINARY_DOWNLOAD_URL|${BINARY_URL}|" PKGBUILD
 sed -i "s|CONFIG_DOWNLOAD_URL|${CONFIG_URL}|" PKGBUILD
 sed -i "s|LICENSE_DOWNLOAD_URL|${LICENSE_URL}|" PKGBUILD
 
-curl -fsSL -o zig-waybar-contrib.zip "${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
-curl -fsSL -o config.waybar.jsonc "${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
-curl -fsSL -o LICENSE "${REPO_URL}/raw/tag/${VERSION}/LICENSE"
+curl -fsSL -o zig-waybar-contrib.zip "${BINARY_URL}"
+curl -fsSL -o config.waybar.jsonc "${CONFIG_URL}"
+curl -fsSL -o LICENSE "${LICENSE_URL}"
 
-useradd -m builder
-echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+if ! id -u builder >/dev/null 2>&1; then
+	useradd -m builder
+	echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+fi
 
 chown -R builder .
 
 sudo -u builder bash -c "updpkgsums && makepkg --printsrcinfo > .SRCINFO"
 
-rm zig-waybar-contrib.zip config.waybar.jsonc LICENSE
+rm -f zig-waybar-contrib.zip config.waybar.jsonc LICENSE
 
-cd ../..
-git clone ssh://aur@aur.archlinux.org/${AUR_REPO}.git aur-repo
-
-cp aur/$AUR_REPO/{PKGBUILD,.SRCINFO} aur-repo
-
-cd aur-repo
 git add PKGBUILD .SRCINFO
 
 if git diff --cached --quiet; then
-  echo "No changes detected, skipping push."
+	echo "No changes detected, skipping push."
 	exit 0
 fi
 
-git commit -m "release: update to ${VERSION}-${new_rel}"
+git commit -m "release: update to ${PKGVER}-${new_rel}"
 git push origin master
