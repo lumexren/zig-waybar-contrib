@@ -4,55 +4,57 @@
 ![Issues](https://img.shields.io/gitea/issues/open/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge)
 ![Last Commit](https://img.shields.io/gitea/last-commit/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=F7A41D)
 <br>
+
 **High-performance Waybar modules written in Zig for efficient system monitoring**
 
 ## Table of Contents
+
 - [Overview](#overview)
-- [Support](#support)
-- [Community](#community)
+- [Features](#features)
 - [Modules](#modules)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
 - [Acknowledgments](#acknowledgments)
 
-### Overview
+## Overview
 
-`zig-waybar-contrib` is a collection of high-performance custom modules for [Waybar](https://github.com/Alexays/Waybar), built using the [Zig](https://ziglang.org).
+`zig-waybar-contrib` is a collection of high-performance custom modules for [Waybar](https://github.com/Alexays/Waybar), built using [Zig](https://ziglang.org). Each module runs as a standalone binary that communicates with Waybar via JSON on stdout, giving you fine-grained control over update intervals, thresholds, and display formats.
 
-- **Blazingly Fast**: Minimal startup time and runtime overhead.
-- **Memory Safe**: Leveraging Zig's safety features to prevent common crashes and leaks.
-- **Zero Dependencies**: Statically linked binaries that run anywhere without runtime interpreters.
-- **Deeply Configurable**: Simple, type-safe configuration using Zig Object Notation.
+## Features
 
-### Modules
+- **Blazingly Fast** - Minimal startup time and runtime overhead with zero idle CPU polling
+- **Memory Safe** - Leveraging Zig's safety features to prevent common crashes and leaks
+- **Zero Dependencies** - Statically linked binaries that run anywhere without runtime interpreters
+- **Deeply Configurable** - Simple, type-safe configuration using Zig Object Notation (`.zon`)
+- **Rich Placeholders** - Per-module and global placeholders with format specifiers, chaining, and literals
+- **Thresholds** - Configurable warning/critical thresholds for automatic CSS class switching
 
-| Module      | Description                            |
-|:------------|:---------------------------------------|
-| **CPU**     | Displays per-core CPU usage            |
-| **Memory**  | Reports RAM usage and statistics       |
-| **Disk**    | Monitors disk usage and space statistics |
-| **Network** | Monitors network traffic and speed     |
-| **Ping**    | Measures network latency               |
-| **Fan**     | Monitors fan speeds                    |
-| **GPU**     | Monitors GPU usage and temperature     |
-| **Bluetooth** | Monitors Bluetooth device status     |
-| **PipeWire** | Monitors master audio volume and mute status in real-time |
-| **Updates** | Tracks system package updates          |
+## Modules
 
-See the source code for detailed documentation on each module.
+| Module | Description |
+|:-------|:------------|
+| **CPU** | Per-core CPU usage and frequency |
+| **Memory** | RAM usage and swap statistics |
+| **Disk** | Disk usage with mount tooltip support |
+| **Network** | Traffic speed and interface info |
+| **Ping** | ICMP latency with min/avg/max |
+| **Fan** | Fan speed monitoring |
+| **GPU** | Usage, temperature, VRAM (AMD/NVIDIA) |
+| **Bluetooth** | Adapter state and connected devices |
+| **PipeWire** | Master volume and mute (event-driven) |
+| **Backlight** | Backlight brightness |
+| **Battery** | Battery status and time remaining |
+| **MPRIS** | Media player information |
+| **Updates** | Package updates (pacman/apt/dnf/zypper/xbps) |
 
-### Installation
-![Latest Release](https://img.shields.io/gitea/v/release/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&display_name=tag&style=for-the-badge&label=release)
-![Latest Pre-release](https://img.shields.io/gitea/v/release/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&include_prereleases&display_name=tag&style=for-the-badge&label=pre-release)
+See [MODULES](MODULES.md) for detailed documentation on each module.
 
-> [!NOTE]
-> To try the Nightly versions, follow `Script Installation` section.<br>
-> To try the Beta versions, install the `zig-waybar-contrib-beta-bin` package from [AUR](https://aur.archlinux.org/packages/zig-waybar-contrib-beta-bin) (when available).
+## Installation
 
-#### Quick Installation (AUR)
+### Quick Installation (AUR)
 
-You can easily install the latest version from the [AUR](https://aur.archlinux.org/packages/zig-waybar-contrib).
+Install the latest stable release from the [AUR](https://aur.archlinux.org/packages/zig-waybar-contrib).
 
 ```bash
 # Using paru
@@ -62,29 +64,33 @@ paru -S zig-waybar-contrib
 yay -S zig-waybar-contrib
 ```
 
-#### Manual Build
+### Manual Build
 
 To build from source, you need [Zig](https://ziglang.org/download) installed (check `build.zig` for version requirements).
 
 ```bash
 git clone https://codeberg.org/erffy/zig-waybar-contrib.git
 cd zig-waybar-contrib
-zig build -Drelease
+zig build -Doptimize=small
 ```
 
 Binaries will be available in `zig-out/bin/`.
 
-### Configuration
+> [!NOTE]
+> To try the Nightly versions, follow the `Manual Build` section.
+> To try the Beta versions, install the `zig-waybar-contrib-beta-bin` package from [AUR](https://aur.archlinux.org/packages/zig-waybar-contrib-beta-bin) (when available).
 
-Add the modules to your Waybar configuration. You can include the provided config file or define modules manually.
+## Configuration
 
-**Method 1: Include Config**
+Add the modules to your Waybar configuration. Each module is a standalone executable that outputs JSON on stdout.
+
+### Method 1: Include Config
 
 ```jsonc
 {
   // Load module configurations from zig-waybar-contrib
   "include": [
-    "/usr/share/zig-waybar-contrib/config.jsonc", // if you installed from aur
+    "/usr/share/zig-waybar-contrib/config.jsonc", // if installed from AUR
   ],
 
   "modules-right": [
@@ -97,15 +103,17 @@ Add the modules to your Waybar configuration. You can include the provided confi
 }
 ```
 
-**Method 2: Manual Definition**
+### Method 2: Manual Definition
 
 See the source code in `src/modules/` for the default configuration values and adapt them to your needs.
 
-### Contributing
+Each module reads its configuration from `~/.config/zig-waybar-contrib/<module>.zon`. See [MODULES](MODULES.md) for the full reference.
+
+## Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md)
 
-### Acknowledgments
+## Acknowledgments
 
 - **Zig Team** - For creating an amazing systems programming language
 - **Waybar Contributors** - For the excellent status bar that makes this possible
@@ -115,7 +123,7 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 
 <div align="center">
 
-**Made with ❤️ by Me**
+**Built with ❤️ by erffy**
 
 *Star ⭐ this repo if you find it useful!*<br>
 *Join our [Fluxer](https://fluxer.gg/xnTFlhV0) for support and updates!*
