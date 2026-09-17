@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0-dev.1683+5ceec001b",
     .dependencies = .{
         .plume = .{
-            .url = "https://codeberg.org/erffy/plume/archive/1.0.1.tar.gz",
-            .hash = "plume-1.0.0-K6ts5OKxAwAlgS4R3qaKd9OQwcbGCM5JM-fehCv7zdYK",
+            .url = "https://codeberg.org/erffy/plume/archive/1.0.2.tar.gz",
+            .hash = "plume-1.0.2-K6ts5N6yAwCdoeSrP564l9Sk6d_4LluLEz3Yny5rnW-e",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
