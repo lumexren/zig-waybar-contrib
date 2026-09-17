@@ -170,7 +170,7 @@ pub fn build(b: *Build) void {
         .root_module = bench_mod,
     });
 
-    bench_exe.lto = lto;
+    bench_exe.lto = .full;
 
     const run_bench = b.addRunArtifact(bench_exe);
     if (bench_filter) |f| {
