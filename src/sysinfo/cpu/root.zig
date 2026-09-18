@@ -31,6 +31,7 @@ const mem = std.mem;
 const fmt = std.fmt;
 const ascii = std.ascii;
 const Io = std.Io;
+const Threaded = Io.Threaded;
 const Dir = Io.Dir;
 const Allocator = mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
@@ -217,9 +218,10 @@ fn readSysfsFrequency(io: Io, path: []const u8) Frequency {
 
 // Tests
 
+const testing = std.testing;
+
 test "cpu lifecycle and update integration" {
-    const allocator = std.testing.allocator;
-    const Threaded = std.Io.Threaded;
+    const allocator = testing.allocator;
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
 
@@ -231,35 +233,35 @@ test "cpu lifecycle and update integration" {
         return err;
     };
 
-    try std.testing.expect(cpu.cores.len > 0);
-    try std.testing.expect(cpu.prev_cores.len == cpu.cores.len);
+    try testing.expect(cpu.cores.len > 0);
+    try testing.expect(cpu.prev_cores.len == cpu.cores.len);
 
     try io.sleep(.fromMilliseconds(50), .boot);
 
     try cpu.update();
 
-    try std.testing.expect(cpu.overall >= 0.0 and cpu.overall <= 100.0);
-    try std.testing.expect(cpu.avg >= 0.0 and cpu.avg <= 100.0);
+    try testing.expect(cpu.overall >= 0.0 and cpu.overall <= 100.0);
+    try testing.expect(cpu.avg >= 0.0 and cpu.avg <= 100.0);
 
     for (cpu.cores) |core| {
-        try std.testing.expect(core.usage >= 0.0 and core.usage <= 100.0);
-        try std.testing.expect(core.frequency.current.value.raw >= 0.0);
+        try testing.expect(core.usage >= 0.0 and core.usage <= 100.0);
+        try testing.expect(core.frequency.current.value.raw >= 0.0);
     }
 }
 
 test "parseLine" {
     const line = "cpu  100 200 300 400 500 600 700 800";
     const s = try parseLine(line);
-    try std.testing.expectEqual(@as(u64, 900), s.idle);
-    try std.testing.expectEqual(@as(u64, 3600), s.total);
+    try testing.expectEqual(@as(u64, 900), s.idle);
+    try testing.expectEqual(@as(u64, 3600), s.total);
 
     const line2 = "cpu0 10 20 30 40 50 60 70 80";
     const s2 = try parseLine(line2);
-    try std.testing.expectEqual(@as(u64, 90), s2.idle);
-    try std.testing.expectEqual(@as(u64, 360), s2.total);
+    try testing.expectEqual(@as(u64, 90), s2.idle);
+    try testing.expectEqual(@as(u64, 360), s2.total);
 
-    try std.testing.expectError(CPUError.UnexpectedFormat, parseLine("cpu  10 20 30"));
-    try std.testing.expectError(CPUError.UnexpectedFormat, parseLine("cpu  10 20 abc 40"));
+    try testing.expectError(CPUError.UnexpectedFormat, parseLine("cpu  10 20 30"));
+    try testing.expectError(CPUError.UnexpectedFormat, parseLine("cpu  10 20 abc 40"));
 }
 
 test "computeUsage" {
@@ -268,43 +270,43 @@ test "computeUsage" {
     const s2 = Sample{ .idle = 100, .total = 200 };
     const s3 = Sample{ .idle = 50, .total = 100 };
 
-    try std.testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s0, s1), 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s1, s2), 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s3), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s0, s1), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s1, s2), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s3), 0.001);
 
     const s_busy = Sample{ .idle = 50, .total = 200 };
-    try std.testing.expectApproxEqAbs(@as(f64, 100.0), computeUsage(s1, s_busy), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 100.0), computeUsage(s1, s_busy), 0.001);
 
     const s_idle = Sample{ .idle = 150, .total = 200 };
-    try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle), 0.001);
 
     const s_wrap = Sample{ .idle = 10, .total = 50 };
-    try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_wrap), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_wrap), 0.001);
 
     const s_idle_dec = Sample{ .idle = 30, .total = 150 };
-    try std.testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle_dec), 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle_dec), 0.001);
 }
 
 test "calculateFrequency" {
     const f1 = calculateFrequency(800.0);
-    try std.testing.expectEqualStrings("MHz", f1.unit);
-    try std.testing.expectApproxEqAbs(@as(f64, 800.0), f1.value.raw, 0.001);
-    try std.testing.expectEqual(@as(i64, 800), f1.value.rounded);
-    try std.testing.expectEqual(false, f1.value.fraction);
+    try testing.expectEqualStrings("MHz", f1.unit);
+    try testing.expectApproxEqAbs(@as(f64, 800.0), f1.value.raw, 0.001);
+    try testing.expectEqual(@as(i64, 800), f1.value.rounded);
+    try testing.expectEqual(false, f1.value.fraction);
 
     const f2 = calculateFrequency(2500.0);
-    try std.testing.expectEqualStrings("GHz", f2.unit);
-    try std.testing.expectApproxEqAbs(@as(f64, 2.5), f2.value.raw, 0.001);
-    try std.testing.expectEqual(@as(i64, 3), f2.value.rounded);
-    try std.testing.expectEqual(true, f2.value.fraction);
+    try testing.expectEqualStrings("GHz", f2.unit);
+    try testing.expectApproxEqAbs(@as(f64, 2.5), f2.value.raw, 0.001);
+    try testing.expectEqual(@as(i64, 3), f2.value.rounded);
+    try testing.expectEqual(true, f2.value.fraction);
 
     const f3 = calculateFrequency(3000.0);
-    try std.testing.expectEqualStrings("GHz", f3.unit);
-    try std.testing.expectApproxEqAbs(@as(f64, 3.0), f3.value.raw, 0.001);
-    try std.testing.expectEqual(@as(i64, 3), f3.value.rounded);
-    try std.testing.expectEqual(false, f3.value.fraction);
+    try testing.expectEqualStrings("GHz", f3.unit);
+    try testing.expectApproxEqAbs(@as(f64, 3.0), f3.value.raw, 0.001);
+    try testing.expectEqual(@as(i64, 3), f3.value.rounded);
+    try testing.expectEqual(false, f3.value.fraction);
 
     const f4 = calculateFrequency(800.0000001);
-    try std.testing.expectEqualStrings("MHz", f4.unit);
-    try std.testing.expectEqual(false, f4.value.fraction);
+    try testing.expectEqualStrings("MHz", f4.unit);
+    try testing.expectEqual(false, f4.value.fraction);
 }
