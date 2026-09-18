@@ -41,7 +41,7 @@ jobs:
 
       - name: Build release
         run: |
-          zig build -Drelease
+          zig build -Doptimize=small
           mv zig-out/bin zig-out-release
 
       - name: Set Version
