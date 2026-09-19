@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -104,9 +104,7 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
         var mv = v;
         defer mv.deinit(allocator);
         if (v == .string) {
-            if (mem.eql(u8, v.string.s, "Playing")) info.status = .playing
-            else if (mem.eql(u8, v.string.s, "Paused")) info.status = .paused
-            else if (mem.eql(u8, v.string.s, "Stopped")) info.status = .stopped;
+            if (mem.eql(u8, v.string.s, "Playing")) info.status = .playing else if (mem.eql(u8, v.string.s, "Paused")) info.status = .paused else if (mem.eql(u8, v.string.s, "Stopped")) info.status = .stopped;
         }
     } else |_| {}
 
@@ -115,9 +113,7 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
         var mv = v;
         defer mv.deinit(allocator);
         if (v == .string) {
-            if (mem.eql(u8, v.string.s, "None")) info.loop_status = .none
-            else if (mem.eql(u8, v.string.s, "Track")) info.loop_status = .track
-            else if (mem.eql(u8, v.string.s, "Playlist")) info.loop_status = .playlist;
+            if (mem.eql(u8, v.string.s, "None")) info.loop_status = .none else if (mem.eql(u8, v.string.s, "Track")) info.loop_status = .track else if (mem.eql(u8, v.string.s, "Playlist")) info.loop_status = .playlist;
         }
     } else |_| {}
 

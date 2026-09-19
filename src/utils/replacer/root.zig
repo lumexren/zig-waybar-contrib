@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -143,7 +143,7 @@ pub fn render(this: *const Replacer, template: []const u8) ![]u8 {
         };
 
         const content = rest[0..close];
-        
+
         var parts = mem.splitScalar(u8, content, ':');
         var current_key: ?[]const u8 = null;
         var current_spec: ?[]const u8 = null;

@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2025 erffy
+// Copyright (c) 2025 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,7 +17,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org/licenses>.
 /// Represents a JSON value supported by the builder.
-
 /// Only a minimal subset of JSON types is supported:
 /// - `string`       → JSON string
 /// - `array_string` → JSON array of strings

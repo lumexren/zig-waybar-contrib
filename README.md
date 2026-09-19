@@ -1,8 +1,8 @@
 ![zig-waybar-contrib](https://img.shields.io/badge/zig--waybar--contrib-gray?style=for-the-badge&logo=zig&logoColor=orange) 
 ![License](https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge) 
-![Stars](https://img.shields.io/gitea/stars/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=DAA520)
-![Issues](https://img.shields.io/gitea/issues/open/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge)
-![Last Commit](https://img.shields.io/gitea/last-commit/erffy/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=F7A41D)
+![Stars](https://img.shields.io/gitea/stars/erenvly/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=DAA520)
+![Issues](https://img.shields.io/gitea/issues/open/erenvly/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge)
+![Last Commit](https://img.shields.io/gitea/last-commit/erenvly/zig-waybar-contrib?gitea_url=https%3A%2F%2Fcodeberg.org&style=for-the-badge&color=F7A41D)
 <br>
 
 **High-performance Waybar modules written in Zig for efficient system monitoring**
@@ -69,7 +69,7 @@ yay -S zig-waybar-contrib
 To build from source, you need [Zig](https://ziglang.org/download) installed (check `build.zig` for version requirements).
 
 ```bash
-git clone https://codeberg.org/erffy/zig-waybar-contrib.git
+git clone https://codeberg.org/erenvly/zig-waybar-contrib.git
 cd zig-waybar-contrib
 zig build -Doptimize=small
 ```
@@ -123,7 +123,7 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 
 <div align="center">
 
-**Built with ❤️ by erffy**
+**Built with ❤️ by erenvly**
 
 *Star ⭐ this repo if you find it useful!*<br>
 *Join our [Fluxer](https://fluxer.gg/xnTFlhV0) for support and updates!*

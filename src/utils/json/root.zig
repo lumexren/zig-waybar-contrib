@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2025 erffy
+// Copyright (c) 2025 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -88,7 +88,7 @@ pub inline fn clear(this: *Json) void {
             else => {},
         }
     }
-    
+
     this.fields.clearRetainingCapacity();
     this.counter = 0;
 }
@@ -310,7 +310,7 @@ test "Json class and string array serialization" {
 
     try json.set("text", "Hello");
     try json.setClass("warning");
-    
+
     var buf: [256]u8 = undefined;
     var fbs = Io.Writer.fixed(&buf);
     try json.write(&fbs);

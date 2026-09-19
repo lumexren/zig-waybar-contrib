@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -218,7 +218,7 @@ fn stampIcmpEcho(buffer: []u8, identifier: u16, sequence: u16) void {
     mem.writeInt(u16, buffer[2..4][0..2], icmpChecksum(buffer), .big);
 }
 
-fn isMatchingEchoReply(reply: []const u8, sequence: u16) bool {    
+fn isMatchingEchoReply(reply: []const u8, sequence: u16) bool {
     if (reply.len < 8) return false;
     if (reply[0] != 0) return false;
 

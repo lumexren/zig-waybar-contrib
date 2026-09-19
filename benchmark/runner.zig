@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 
 const TrackingAllocator = @import("TrackingAllocator.zig");
 const Result = @import("Result.zig");
