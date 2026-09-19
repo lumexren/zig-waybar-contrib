@@ -1,4 +1,4 @@
-# Maintainer: erffy <https://codeberg.org/erffy>
+# Maintainer: erenvly <https://codeberg.org/erenvly>
 
 _pkgbase="zig-waybar-contrib"
 pkgname="${_pkgbase}"
@@ -6,7 +6,7 @@ pkgver=0.0.0
 pkgrel=1
 pkgdesc='High-performance Waybar modules written in Zig for efficient system monitoring (Stable binary version)'
 arch=('x86_64')
-url="https://codeberg.org/erffy/$_pkgbase"
+url="https://codeberg.org/erenvly/$_pkgbase"
 license=('GPL3')
 provides=("${_pkgbase}=$pkgver")
 conflicts=("${_pkgbase}-beta-bin")

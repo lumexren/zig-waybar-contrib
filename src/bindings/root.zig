@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -19,5 +19,4 @@
 
 pub const nvml = @import("nvml.zig");
 pub const amdsmi = @import("amdsmi.zig");
-pub const dbus = @import("dbus.zig");
 pub const statvfs = @import("statvfs.zig");

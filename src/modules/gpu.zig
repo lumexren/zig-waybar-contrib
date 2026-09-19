@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -29,9 +29,12 @@ const ArrayList = std.ArrayList;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    warning_threshold: ?f64 = 75.0,
+    critical_threshold: ?f64 = 90.0,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {temperature:'°C'}",
     tooltip: []const u8 = "PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2}",
@@ -49,6 +52,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("gpu", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -59,7 +65,7 @@ pub fn main(init: process.Init) !void {
     try module.initialize();
     defer module.shutdown();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -80,10 +86,35 @@ pub fn main(init: process.Init) !void {
         const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);
 
+        const usage_f64: f64 = @floatFromInt(gpu_info.gpu_busy);
+
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
+        try json.set("percentage", gpu_info.gpu_busy);
+
+        if (data.critical_threshold) |crit| {
+            if (usage_f64 >= crit) {
+                try json.setClass("critical");
+            } else if (data.warning_threshold) |warn| {
+                if (usage_f64 >= warn) {
+                    try json.setClass("warning");
+                } else {
+                    try json.setClass("normal");
+                }
+            } else {
+                try json.setClass("normal");
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (usage_f64 >= warn) {
+                try json.setClass("warning");
+            } else {
+                try json.setClass("normal");
+            }
+        }
 
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

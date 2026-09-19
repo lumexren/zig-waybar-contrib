@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -19,17 +19,20 @@
 
 const mpris = @import("sysinfo").mpris;
 
+const plume = @import("plume");
+const Connection = plume.Connection;
+
 const std = @import("std");
 const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const math = std.math;
 const fmt = std.fmt;
 
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
@@ -55,19 +58,25 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("mpris", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    var connection: Connection = try .init(io, gpa, init.environ_map, .Session);
+    defer connection.close();
+
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
         try replacer.addCommonPlaceholders();
 
-        const player_info = mpris.getActivePlayer(gpa) catch |err| {
+        const player_info = mpris.getActivePlayer(gpa, &connection) catch |err| {
             switch (err) {
                 mpris.MprisError.NoPlayers, mpris.MprisError.ConnectionFailed => {
                     try replacer.addKey("icon", data.icon);
@@ -158,5 +167,7 @@ pub fn main(init: process.Init) !void {
 
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

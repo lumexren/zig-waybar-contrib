@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -110,7 +110,7 @@ pub fn getNetworkStats(io: Io, interface: []const u8, timestamp: i64) !NetworkSt
     while (lines.next()) |line| {
         if (line.len == 0) continue;
 
-        const colon = mem.indexOfScalar(u8, line, ':') orelse continue;
+        const colon = mem.findScalar(u8, line, ':') orelse continue;
         const iface = mem.trim(u8, line[0..colon], " \t");
 
         if (!mem.eql(u8, iface, interface)) continue;

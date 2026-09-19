@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -28,3 +28,20 @@ pub const mpris = @import("mpris/root.zig");
 pub const battery = @import("battery/root.zig");
 pub const Backlight = @import("backlight/root.zig");
 pub const bluetooth = @import("bluetooth/root.zig");
+pub const Pipewire = @import("pipewire/root.zig");
+
+test {
+    _ = @import("std").testing.refAllDecls(@This());
+    _ = @import("cpu/root.zig");
+    _ = @import("disk/root.zig");
+    _ = @import("memory/root.zig");
+    _ = @import("fan/root.zig");
+    _ = @import("network/root.zig");
+    _ = @import("network/lib.zig");
+    _ = @import("updates/root.zig");
+    _ = @import("mpris/root.zig");
+    _ = @import("battery/root.zig");
+    _ = @import("backlight/root.zig");
+    _ = @import("bluetooth/root.zig");
+    _ = @import("pipewire/root.zig");
+}

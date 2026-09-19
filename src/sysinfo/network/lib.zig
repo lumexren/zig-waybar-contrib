@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -73,7 +73,7 @@ fn parseResolvConf(allocator: Allocator, content: []const u8) ![][]const u8 {
             _ = parts.next();
 
             if (parts.next()) |server| {
-                if (mem.indexOfScalar(u8, server, ':') != null) continue;
+                if (mem.findScalar(u8, server, ':') != null) continue;
                 try servers.append(allocator, try allocator.dupe(u8, server));
             }
         }

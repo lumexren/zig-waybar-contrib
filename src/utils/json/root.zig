@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2025 erffy
+// Copyright (c) 2025 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -20,6 +20,9 @@
 /// An incremental JSON object builder with explicit memory management.
 const Json = @This();
 
+const Field = @import("Field.zig");
+const Value = @import("Value.zig").Value;
+
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Io = std.Io;
@@ -31,30 +34,6 @@ const fmt = std.fmt;
 allocator: Allocator,
 fields: ArrayListUnmanaged(Field) = .empty,
 counter: u64 = 0,
-
-/// Represents a JSON value supported by the builder.
-///
-/// Only a minimal subset of JSON types is supported:
-/// - `string`  → JSON string
-/// - `number`  → JSON integer number
-/// - `boolean` → JSON boolean
-///
-/// This restricted set is intentional and matches the needs of
-/// lightweight, streaming JSON generation scenarios.
-pub const Value = union(enum) {
-    string: []const u8,
-    number: i64,
-    boolean: bool,
-};
-
-/// Represents a single key-value pair in a JSON object.
-///
-/// The `key` is written as a JSON string, and the associated `value`
-/// is serialized according to its `Value` variant.
-pub const Field = struct {
-    key: []const u8,
-    value: Value,
-};
 
 /// Initializes a new JSON builder using the given allocator.
 ///
@@ -76,8 +55,13 @@ pub inline fn init(allocator: Allocator) Json {
 /// to avoid memory leaks.
 pub inline fn deinit(this: *Json) void {
     for (this.fields.items) |field| {
-        if (field.value == .string) {
-            this.allocator.free(field.value.string);
+        switch (field.value) {
+            .string => |s| this.allocator.free(s),
+            .array_string => |arr| {
+                for (arr) |s| this.allocator.free(s);
+                this.allocator.free(arr);
+            },
+            else => {},
         }
     }
 
@@ -95,11 +79,16 @@ pub inline fn deinit(this: *Json) void {
 /// freshly initialized, but without reallocating the backing array.
 pub inline fn clear(this: *Json) void {
     for (this.fields.items) |field| {
-        if (field.value == .string) {
-            this.allocator.free(field.value.string);
+        switch (field.value) {
+            .string => |s| this.allocator.free(s),
+            .array_string => |arr| {
+                for (arr) |s| this.allocator.free(s);
+                this.allocator.free(arr);
+            },
+            else => {},
         }
     }
-    
+
     this.fields.clearRetainingCapacity();
     this.counter = 0;
 }
@@ -108,6 +97,7 @@ pub inline fn clear(this: *Json) void {
 ///
 /// Supported value types:
 /// - `[]const u8`, string literals → JSON string
+/// - `[]const []const u8` → JSON array of strings
 /// - Integer types (`u8/i8` … `usize/isize`) → JSON number
 /// - `bool` → JSON boolean
 ///
@@ -118,17 +108,40 @@ pub inline fn clear(this: *Json) void {
 pub fn set(this: *Json, key: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
-    const v = switch (T) {
-        bool => Value{ .boolean = value },
-        u8, i8, u16, i16, u32, i32, u64, i64, usize, isize => Value{ .number = @intCast(value) },
+    const v: Value = switch (T) {
+        bool => .{ .boolean = value },
+        u8, i8, u16, i16, u32, i32, u64, i64, usize, isize => .{ .number = @intCast(value) },
+        []const []const u8, [][]const u8, [][]u8 => bk: {
+            var list = try this.allocator.alloc([]const u8, value.len);
+            var count: usize = 0;
+            errdefer {
+                for (list[0..count]) |elem| this.allocator.free(elem);
+                this.allocator.free(list);
+            }
+            for (value) |elem| {
+                list[count] = try this.allocator.dupe(u8, elem);
+                count += 1;
+            }
+            break :bk .{ .array_string = list };
+        },
         else => bk: {
             const slice: []const u8 = value;
             const owned_str = try this.allocator.dupe(u8, slice);
-            break :bk Value{ .string = owned_str };
+            break :bk .{ .string = owned_str };
         },
     };
 
     try this.fields.append(this.allocator, .{ .key = key, .value = v });
+}
+
+/// Sets the Waybar "class" field as a single class name string.
+pub fn setClass(this: *Json, class_name: []const u8) !void {
+    return this.set("class", class_name);
+}
+
+/// Sets the Waybar "class" field as an array of class name strings.
+pub fn setClasses(this: *Json, classes: []const []const u8) !void {
+    return this.set("class", classes);
 }
 
 /// Sets a JSON string field using a formatted string.
@@ -251,6 +264,16 @@ pub fn writeValue(writer: *Io.Writer, value: Value) !void {
             try writeEscaped(writer, s);
             try writer.writeByte('"');
         },
+        .array_string => |arr| {
+            try writer.writeByte('[');
+            for (arr, 0..) |s, i| {
+                if (i != 0) try writer.writeByte(',');
+                try writer.writeByte('"');
+                try writeEscaped(writer, s);
+                try writer.writeByte('"');
+            }
+            try writer.writeByte(']');
+        },
         .number => |n| try writer.print("{d}", .{n}),
         .boolean => |b| try writer.writeAll(if (b) "true" else "false"),
     }
@@ -278,4 +301,25 @@ pub fn writeEscaped(writer: *Io.Writer, str: []const u8) !void {
             else => try writer.writeByte(c),
         }
     }
+}
+
+test "Json class and string array serialization" {
+    const testing = std.testing;
+    var json = Json.init(testing.allocator);
+    defer json.deinit();
+
+    try json.set("text", "Hello");
+    try json.setClass("warning");
+
+    var buf: [256]u8 = undefined;
+    var fbs = Io.Writer.fixed(&buf);
+    try json.write(&fbs);
+    try testing.expectEqualStrings("{\"text\":\"Hello\",\"class\":\"warning\"}\n", fbs.buffered());
+
+    json.clear();
+    const classes = [_][]const u8{ "warning", "critical" };
+    try json.setClasses(&classes);
+    var fbs2 = Io.Writer.fixed(&buf);
+    try json.write(&fbs2);
+    try testing.expectEqualStrings("{\"class\":[\"warning\",\"critical\"]}\n", fbs2.buffered());
 }

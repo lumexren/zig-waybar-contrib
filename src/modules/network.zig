@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ const Clock = Io.Clock;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
@@ -49,19 +50,29 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("network", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    const route = try sysinfo.getDefaultRoute(io, gpa);
-    const local_ip = try sysinfo.getLocalIP(gpa, route.interface);
+    const route = sysinfo.getDefaultRoute(io, gpa) catch {
+        try json.set("text", @as([]const u8, "Disconnected"));
+        try json.set("tooltip", @as([]const u8, "No active network route"));
+        try json.setClass("disconnected");
+        try json.write(stdout);
+        try stdout.flush();
+        return;
+    };
+    const local_ip = sysinfo.getLocalIP(gpa, route.interface) catch "0.0.0.0";
 
     const initial_time = Clock.now(.boot, io);
-    var prev_stats = try sysinfo.getNetworkStats(io, route.interface, initial_time.toSeconds());
+    var prev_stats = sysinfo.getNetworkStats(io, route.interface, initial_time.toSeconds()) catch sysinfo.NetworkStats{ .rx_bytes = 0, .tx_bytes = 0, .timestamp = initial_time.toSeconds() };
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
@@ -90,8 +101,11 @@ pub fn main(init: process.Init) !void {
 
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
+        try json.setClass("connected");
 
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

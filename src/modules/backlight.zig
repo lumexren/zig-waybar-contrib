@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@ const process = std.process;
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
@@ -51,6 +52,9 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("backlight", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
@@ -63,13 +67,14 @@ pub fn main(init: process.Init) !void {
     var backlight: Backlight = try .init(io, gpa, &connection);
     defer backlight.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
         var info = backlight.getDefaultBacklight() catch |err| {
             try json.set("text", @as([]const u8, "No backlight"));
             try json.set("tooltip", @as([]const u8, "No backlight detected"));
+            try json.setClass("disabled");
             try json.write(stdout);
             try stdout.flush();
 
@@ -96,7 +101,17 @@ pub fn main(init: process.Init) !void {
         try json.set("tooltip", tooltip_line);
         try json.set("percentage", info.percentage);
 
+        if (info.percentage > 70) {
+            try json.setClass("high");
+        } else if (info.percentage > 30) {
+            try json.setClass("medium");
+        } else {
+            try json.setClass("low");
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

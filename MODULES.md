@@ -14,9 +14,9 @@ Controls backlight brightness.
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon}  {percentage}%",
+    .text = "{icon}  {percentage:'%'}",
     // Custom tooltip format (default shown)
-    .tooltip = "Brightness: {percentage}%{nl}Device: {name}",
+    .tooltip = "Brightness: {percentage:'%':nl}Device: {name}",
 }
 ```
 
@@ -49,10 +49,14 @@ Monitors battery status and percentage.
     .icon = "",
     .icon_charging = "",
     .icon_full = "",
+    // Warning threshold percentage
+    .warning_threshold = 20,
+    // Critical threshold percentage
+    .critical_threshold = 10,
     // Custom text format (default shown)
     .text = "{icon}  {percentage}%",
     // Custom tooltip format (default shown)
-    .tooltip = "Battery: {state}{nl}Time remaining: {time_remaining}{nl}Model: {model}",
+    .tooltip = "Battery: {state:nl}Time remaining: {time_remaining:nl}Model: {model}",
 }
 ```
 
@@ -93,7 +97,7 @@ Monitors bluetooth adapter state and connected devices.
     // Custom text format (default shown)
     .text = "{icon}  {device_count}",
     // Custom tooltip format (default shown)
-    .tooltip = "Adapter: {adapter_name}{nl}Power: {adapter_powered}{nl}Connected: {device_count} devices{nl}{devices}",
+    .tooltip = "Adapter: {adapter_name:nl}Power: {adapter_powered:nl}Connected: {device_count} devices{nl:devices}",
     // Format for each device in the list
     .device_format = "{device_alias}",
 }
@@ -140,14 +144,19 @@ Displays per-core CPU usage and frequency information.
     .icon = "",
     // Start core index from 1 instead of 0
     .one_indexed = false,
+    // Warning threshold percentage
+    .warning_threshold = 70,
+    // Critical threshold percentage
+    .critical_threshold = 90,
     // Custom text format (default shown)
-    .text = "{icon}  {usage_percentage}% {dot} {frequency:2}{frequency_unit}",
+    .text = "{icon}  {usage_percentage:'%'} {dot} {frequency:2:frequency_unit}",
     // Custom tooltip format (default shown)
-    .tooltip = "Core {core_index}: {core_usage_percentage}% {dot} {core_frequency:2}{core_frequency_unit}",
+    .tooltip = "Core {core_index}: {core_usage_percentage:'%'} {dot} {core_frequency:2:core_frequency_unit}",
 }
 ```
 
 **Customization:**
+
 The `text` and `tooltip` options support the following placeholders:
 
 | Placeholder            | Description                            |
@@ -192,14 +201,18 @@ Monitors disk usage and space statistics.
     .path = "/",
     // Show all mounted filesystems in tooltip
     .show_all_mounts = false,
+    // Warning threshold percentage
+    .warning_threshold = 80,
+    // Critical threshold percentage
+    .critical_threshold = 90,
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon}  {percentage_used}% {dot} {used:.2}",
+    .text = "{icon}  {percentage_used:'%'} {dot} {used:.2}",
     // Custom tooltip format (default shown)
-    .tooltip = "Total {dot} {total:.2}{nl}Free {dot} {free:.2}{nl}Used {dot} {used:.2}",
+    .tooltip = "Total {dot} {total:.2:nl}Free {dot} {free:.2:nl}Used {dot} {used:.2}",
     // Tooltip format for each mount (when show_all_mounts = true)
-    .mount_tooltip = "{mount_point}: {percentage_used}% ({free:.2} free)",
+    .mount_tooltip = "{mount_point}: {percentage_used:'%'} ({free:.2} free)",
 }
 ```
 
@@ -240,7 +253,11 @@ Monitors fan speeds.
 ```zig
 .{
     // Check interval in seconds
-    .update_interval = 5,
+    .update_interval = 2,
+    // Warning threshold RPM
+    .warning_threshold = 3000,
+    // Critical threshold RPM
+    .critical_threshold = 5000,
     // Module icon
     .icon = "",
     // Custom text format (default shown)
@@ -284,12 +301,16 @@ Monitors GPU usage, temperature, and VRAM statistics.
 .{
     // Check interval in seconds
     .update_interval = 1,
+    // Warning threshold percentage
+    .warning_threshold = 75,
+    // Critical threshold percentage
+    .critical_threshold = 90,
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon}  {usage_percentage}% {dot} {temperature}°C",
+    .text = "{icon}  {usage_percentage:'%'} {dot} {temperature:'°C'}",
     // Custom tooltip format (default shown)
-    .tooltip = "PWM {dot} {pwm_percentage}%{nl}VRAM Total {dot} {vram_total:.0}{nl}VRAM Free {dot} {vram_free:.2}{nl}VRAM Usage {dot} {vram_usage:.2}",
+    .tooltip = "PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2}",
 }
 ```
 
@@ -320,12 +341,16 @@ Reports RAM usage and memory statistics.
 .{
     // Check interval in seconds
     .update_interval = 1,
+    // Warning threshold percentage
+    .warning_threshold = 75,
+    // Critical threshold percentage
+    .critical_threshold = 90,
     // Module icon
     .icon = "",
     // Custom text format (default shown)
-    .text = "{icon}  {percentage}% {dot} {total_usage:.2}",
+    .text = "{icon}  {percentage:'%'} {dot} {total_usage:.2}",
     // Custom tooltip format (default shown)
-    .tooltip = "Physical Memory{nl}Total {dot} {physical_total:.2}{nl}Used {dot} {physical_used:.2}{nl}Free {dot} {physical_free:.2}{nl}Available {dot} {physical_available:.2}{nl}Shared {dot} {physical_shared:.2}{nl}Buffers {dot} {physical_buffers:.2}{nl}Cached {dot} {physical_cached:.2}{nl}{nl}Swap Memory{nl}Total {dot} {swap_total:.2}{nl}Used {dot} {swap_used:.2}{nl}Free {dot} {swap_free:.2}{nl}Cached {dot} {swap_cached:.2}",
+    .tooltip = "Physical Memory{nl}Total {dot} {physical_total:.2:nl}Used {dot} {physical_used:.2:nl}Free {dot} {physical_free:.2:nl}Available {dot} {physical_available:.2:nl}Shared {dot} {physical_shared:.2:nl}Buffers {dot} {physical_buffers:.2:nl}Cached {dot} {physical_cached:.2:nl:nl}Swap Memory{nl}Total {dot} {swap_total:.2:nl}Used {dot} {swap_used:.2:nl}Free {dot} {swap_free:.2:nl}Cached {dot} {swap_cached:.2}",
 }
 ```
 
@@ -419,7 +444,7 @@ Displays media player information using the MPRIS2 standard.
     // Max length of text
     .text_max_length = 256,
     // Custom tooltip format (default shown)
-    .tooltip = "{player_name}: {status}{nl}{title} - {artist}{nl}Album: {album}{nl}{position} / {length}",
+    .tooltip = "{player_name}: {status:nl:title} - {artist:nl}Album: {album:nl:position} / {length}",
     // Text to show when no player is found
     .no_player_text = "No player",
 }
@@ -471,7 +496,7 @@ Monitors network traffic and speed.
     // Custom text format (default shown)
     .text = "{icon}  {total_speed:^1}",
     // Custom tooltip format (default shown)
-    .tooltip = "Interface {dot} {interface}{nl}Gateway {dot} {gateway}{nl}Local IP {dot} {local_ip}{nl}{nl}Download {dot} {download_speed:^1}{nl}Upload {dot} {upload_speed:^1}",
+    .tooltip = "Interface {dot} {interface:nl}Gateway {dot} {gateway:nl}Local IP {dot} {local_ip:nl:nl}Download {dot} {download_speed:^1:nl}Upload {dot} {upload_speed:^1}",
 }
 ```
 
@@ -508,12 +533,16 @@ Measures network latency to a configurable host using ICMP.
     .target_domain_ip_update_interval = 200,
     // Packet timeout in seconds
     .timeout = 3,
+    // Warning threshold ms
+    .warning_threshold = 100,
+    // Critical threshold ms
+    .critical_threshold = 250,
     // Module icon
     .icon = "",
     // Custom text format (default shown)
     .text = "{icon}  {latency}ms",
     // Custom tooltip format (default shown)
-    .tooltip = "Min: {min_latency}ms {dot} Avg: {avg_latency}ms {dot} Max: {max_latency}ms{nl}Domain: {target}{nl}IP: {ip} {dot} {next_ip_update}s",
+    .tooltip = "Min: {min_latency:'ms'} {dot} Avg: {avg_latency:'ms'} {dot} Max: {max_latency:'ms':nl}Domain: {target:nl}IP: {ip} {dot} {next_ip_update:'s'}",
 }
 ```
 
@@ -548,6 +577,10 @@ Tracks available system package updates.
     .update_interval = 200,
     // Package manager override (optional)
     // .manager = "pacman",
+    // Warning threshold count
+    .warning_threshold = 1,
+    // Critical threshold count
+    .critical_threshold = 50,
     // Module icon
     .icon = "",
     // Error icon
@@ -574,6 +607,42 @@ The `text` and `tooltip` options support the following placeholders:
 | :--------------- | :---------------------------- |
 | `{package_name}` | Name of the package to update |
 | `{new_version}`  | New version number            |
+
+---
+
+### **PipeWire**
+
+Monitors master audio volume, mute status, and device name in real-time. Operating event-driven, updates occur instantly upon volume or mute changes with zero idle CPU overhead.
+
+- **Platforms:** Any Linux with PipeWire or PulseAudio
+
+**Configuration (`~/.config/zig-waybar-contrib/pipewire.zon`):**
+```zig
+.{
+    // Icons for volume levels
+    .icon_high = "󰕾",
+    .icon_medium = "󰖀",
+    .icon_low = "󰕿",
+    .icon_muted = "󰝟",
+    // Custom text format (default shown)
+    .text = "{icon}  {volume:'%'}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Device: {node_name}{nl}Volume: {volume:'%'}{nl}State: {state}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder    | Description                                      |
+| :------------- | :----------------------------------------------- |
+| `{icon}`       | Module icon based on volume level and mute state |
+| `{volume}`     | Volume percentage (0–100)                        |
+| `{raw_volume}` | Volume as float (0.00–1.00)                      |
+| `{node_name}`  | Active audio sink/device description             |
+| `{state}`      | Audio state ("Active" or "Muted")                |
+| `{is_muted}`   | Boolean indicating if audio is muted             |
 
 ---
 

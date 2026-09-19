@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -20,7 +20,9 @@
 /// Disk usage information for a filesystem.
 const DiskInfo = @This();
 
-const SizeUnit = @import("SizeUnit.zig").SizeUnit;
+const SU = @import("SizeUnit.zig");
+const SizeUnit = SU.SizeUnit;
+
 const std = @import("std");
 const fmt = std.fmt;
 
@@ -77,9 +79,7 @@ pub fn formatUsed(this: @This(), buf: []u8) ![]const u8 {
 /// Formats bytes into a human-readable string with auto-selected IEC unit.
 pub fn formatBytes(bytes: u64, buf: []u8) ![]const u8 {
     const value: f64 = @floatFromInt(bytes);
-    const SizeUnitMod = @import("SizeUnit.zig");
-
-    const unit: SizeUnit = if (value >= SizeUnitMod.TiB) .TiB else if (value >= SizeUnitMod.GiB) .GiB else if (value >= SizeUnitMod.MiB) .MiB else if (value >= SizeUnitMod.KiB) .KiB else .B;
+    const unit: SizeUnit = if (value >= SU.TiB) .TiB else if (value >= SU.GiB) .GiB else if (value >= SU.MiB) .MiB else if (value >= SU.KiB) .KiB else .B;
 
     return fmt.bufPrint(buf, "{d:.1} {s}", .{ value / unit.divisor(), unit.suffix() });
 }

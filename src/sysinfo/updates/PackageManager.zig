@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -30,12 +30,12 @@ pub const PackageManager = enum {
     zypper,
     xbps,
 
-    pub fn name(this: @This()) []const u8 {
+    pub fn name(this: PackageManager) []const u8 {
         return @tagName(this);
     }
 
     /// Populates a provided scratch buffer to avoid dynamic allocation for argv.
-    pub fn buildArgv(this: @This(), buffer: *[4][]const u8, pacman_db: ?[]const u8) []const []const u8 {
+    pub fn buildArgv(this: PackageManager, buffer: *[4][]const u8, pacman_db: ?[]const u8) []const []const u8 {
         switch (this) {
             .apt => {
                 buffer[0..3].* = .{ "apt", "list", "--upgradable" };
@@ -66,7 +66,7 @@ pub const PackageManager = enum {
 
     /// Parses a single line of package manager output, returning an UpdateInfo
     /// containing slices that point directly to the original line buffer.
-    pub fn parseLine(this: @This(), line: []const u8) ?UpdateInfo {
+    pub fn parseLine(this: PackageManager, line: []const u8) ?UpdateInfo {
         const trimmed = mem.trim(u8, line, &ascii.whitespace);
         if (trimmed.len == 0) return null;
 
@@ -91,7 +91,7 @@ pub const PackageManager = enum {
                 pkg_name = pkg_name_full[0..dot_idx];
             },
             .pacman => {
-                const arrow_idx = mem.indexOf(u8, trimmed, "->") orelse return null;
+                const arrow_idx = mem.find(u8, trimmed, "->") orelse return null;
                 const left_part = mem.trim(u8, trimmed[0..arrow_idx], &ascii.whitespace);
                 new_version = mem.trim(u8, trimmed[arrow_idx + 2 ..], &ascii.whitespace);
 

@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -19,21 +19,25 @@
 
 const sysinfo = @import("sysinfo").battery;
 
+const plume = @import("plume");
+const Connection = plume.Connection;
+
 const std = @import("std");
 const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
 const fmt = std.fmt;
-const heap = std.heap;
-const ArenaAllocator = heap.ArenaAllocator;
 
 const Config = utils.Config;
 const Json = utils.Json;
 const Replacer = utils.Replacer;
+const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 5,
+    warning_threshold: ?f64 = 20.0,
+    critical_threshold: ?f64 = 10.0,
     icon: []const u8 = "",
     icon_charging: []const u8 = "",
     icon_full: []const u8 = "",
@@ -72,19 +76,29 @@ pub fn main(init: process.Init) !void {
     const data: ModuleConfig = config.load("battery", ModuleConfig);
     defer config.free(data);
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     var json: Json = .init(gpa);
     defer json.deinit();
 
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    while (true) : (try io.sleep(.fromSeconds(data.update_interval), .boot)) {
+    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    defer connection.close();
+
+    var battery_sys: sysinfo = .init(io, gpa, &connection);
+    defer battery_sys.deinit();
+
+    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
-        const battery = sysinfo.getDisplayDevice(gpa) catch |err| {
+        const battery = battery_sys.getDisplayDevice() catch |err| {
             try json.set("text", @as([]const u8, "No battery found"));
             try json.set("tooltip", @as([]const u8, "No battery found"));
+            try json.setClass("unknown");
             try json.write(stdout);
             try stdout.flush();
 
@@ -97,6 +111,7 @@ pub fn main(init: process.Init) !void {
         if (battery.device_type != .battery or !battery.is_present) {
             try json.set("text", @as([]const u8, "No battery found"));
             try json.set("tooltip", @as([]const u8, "No battery found"));
+            try json.setClass("unknown");
             try json.write(stdout);
             try stdout.flush();
             continue;
@@ -146,7 +161,50 @@ pub fn main(init: process.Init) !void {
         try json.set("tooltip", tooltip_line);
         try json.set("percentage", percentage);
 
+        var classes_buf: [3][]const u8 = undefined;
+        var class_count: usize = 0;
+
+        switch (battery.state) {
+            .charging, .pending_charge => {
+                classes_buf[class_count] = "charging";
+                class_count += 1;
+            },
+            .fully_charged => {
+                classes_buf[class_count] = "full";
+                class_count += 1;
+            },
+            .discharging, .pending_discharge => {
+                classes_buf[class_count] = "discharging";
+                class_count += 1;
+            },
+            else => {},
+        }
+
+        const pct_f64 = battery.percentage;
+        if (data.critical_threshold) |crit| {
+            if (pct_f64 <= crit) {
+                classes_buf[class_count] = "critical";
+                class_count += 1;
+            } else if (data.warning_threshold) |warn| {
+                if (pct_f64 <= warn) {
+                    classes_buf[class_count] = "warning";
+                    class_count += 1;
+                }
+            }
+        } else if (data.warning_threshold) |warn| {
+            if (pct_f64 <= warn) {
+                classes_buf[class_count] = "warning";
+                class_count += 1;
+            }
+        }
+
+        if (class_count > 0) {
+            try json.setClasses(classes_buf[0..class_count]);
+        }
+
         try json.write(stdout);
         try stdout.flush();
+
+        if (data.update_interval == 0) break;
     }
 }

@@ -2,7 +2,7 @@
 //
 // This file is part of zig-waybar-contrib.
 //
-// Copyright (c) 2026 erffy
+// Copyright (c) 2026 erenvly
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -57,6 +57,10 @@ pub fn scan(this: Fan) !void {
     var hwmon_dir = try Dir.openDirAbsolute(this.io, HWMON_PATH, .{ .iterate = true });
     defer hwmon_dir.close(this.io);
 
+    try this.scanHwmon(hwmon_dir);
+}
+
+pub fn scanHwmon(this: Fan, hwmon_dir: Dir) !void {
     var it = hwmon_dir.iterate();
     while (try it.next(this.io)) |entry| {
         if (entry.kind != .directory and entry.kind != .sym_link) continue;
@@ -152,7 +156,7 @@ test "scanDeviceFans reproduction" {
     const fan: Fan = .init(io, allocator, &fan_list);
     defer fan.deinit();
 
-    try fan.scan();
+    try fan.scanDevice(device_dir);
 
     try std.testing.expectEqual(@as(usize, 1), fan.fans.items.len);
     try std.testing.expectEqualStrings("System Fan", fan.fans.items[0].name);
@@ -208,12 +212,19 @@ test "scanHwmonFans" {
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/fan1_input", .data = "2000\n" });
     try tmp.dir.writeFile(io, .{ .sub_path = "hwmon1/name", .data = "box\n" });
 
+    var buf: [4096]u8 = undefined;
+    const len = try tmp.dir.realPathFile(io, ".", &buf);
+    const path = buf[0..len];
+
+    var hwmon_dir = try Dir.openDirAbsolute(io, path, .{ .iterate = true });
+    defer hwmon_dir.close(io);
+
     var fan_list: ArrayList(FanInfo) = .empty;
 
     const fan: Fan = .init(io, allocator, &fan_list);
     defer fan.deinit();
 
-    try fan.scan();
+    try fan.scanHwmon(hwmon_dir);
 
     try std.testing.expectEqual(@as(usize, 2), fan.fans.items.len);
 
