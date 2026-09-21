@@ -62,7 +62,7 @@ fn resolveModulePath(this: *Config, module_name: []const u8) !?[]u8 {
     const config_dir = try this.resolveConfigDir() orelse return null;
     defer this.allocator.free(config_dir);
 
-    const config_file = try Allocator.print(this.allocator, "{s}.zon", .{module_name});
+    const config_file = try this.allocator.print("{s}.zon", .{module_name});
     defer this.allocator.free(config_file);
 
     return try path.join(this.allocator, &.{ config_dir, "zig-waybar-contrib", config_file });

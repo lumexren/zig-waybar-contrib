@@ -156,7 +156,7 @@ pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name:
     while (it.next()) |dir| {
         if (dir.len == 0) continue;
 
-        const full_path = Allocator.print(allocator, "{s}/{s}", .{ dir, exe_name }) catch continue;
+        const full_path = allocator.print("{s}/{s}", .{ dir, exe_name }) catch continue;
         defer allocator.free(full_path);
 
         if (Dir.accessAbsolute(io, full_path, .{ .execute = true })) {
