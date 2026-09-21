@@ -31,21 +31,21 @@ pub const Units = enum {
     const BINARY_BYTE_UNITS = [_][]const u8{ "B", "KiB", "MiB", "GiB", "TiB", "PiB" };
     const BINARY_SPEED_UNITS = [_][]const u8{ "B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s", "PiB/s" };
 
-    pub fn base(this: @This()) f64 {
+    pub fn base(this: Units) f64 {
         return switch (this) {
             .binary => BINARY_BASE,
             .decimal => DECIMAL_BASE,
         };
     }
 
-    pub fn byteUnits(this: @This()) []const []const u8 {
+    pub fn byteUnits(this: Units) []const []const u8 {
         return switch (this) {
             .binary => &BINARY_BYTE_UNITS,
             .decimal => &DECIMAL_BYTE_UNITS,
         };
     }
 
-    pub fn speedUnits(this: @This()) []const []const u8 {
+    pub fn speedUnits(this: Units) []const []const u8 {
         return switch (this) {
             .binary => &BINARY_SPEED_UNITS,
             .decimal => &DECIMAL_SPEED_UNITS,
