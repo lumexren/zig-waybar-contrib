@@ -20,7 +20,7 @@
 const BenchmarkResult = @This();
 
 const std = @import("std");
-const fmt = std.fmt;
+const mem = std.mem;
 
 name: []const u8,
 iterations: u64,
@@ -33,24 +33,24 @@ leaked_bytes: usize,
 
 pub fn formatDuration(ns: f64, buf: []u8) []const u8 {
     if (ns < 1000.0) {
-        return fmt.bufPrint(buf, "{d:.1} ns", .{ns}) catch "---";
+        return mem.print(buf, "{d:.1} ns", .{ns}) catch "---";
     } else if (ns < 1_000_000.0) {
-        return fmt.bufPrint(buf, "{d:.2} µs", .{ns / 1000.0}) catch "---";
+        return mem.print(buf, "{d:.2} µs", .{ns / 1000.0}) catch "---";
     } else if (ns < 1_000_000_000.0) {
-        return fmt.bufPrint(buf, "{d:.2} ms", .{ns / 1_000_000.0}) catch "---";
+        return mem.print(buf, "{d:.2} ms", .{ns / 1_000_000.0}) catch "---";
     } else {
-        return fmt.bufPrint(buf, "{d:.2} s", .{ns / 1_000_000_000.0}) catch "---";
+        return mem.print(buf, "{d:.2} s", .{ns / 1_000_000_000.0}) catch "---";
     }
 }
 
 pub fn formatBytes(bytes: usize, buf: []u8) []const u8 {
     if (bytes < 1024) {
-        return fmt.bufPrint(buf, "{d} B", .{bytes}) catch "---";
+        return mem.print(buf, "{d} B", .{bytes}) catch "---";
     } else if (bytes < 1024 * 1024) {
         const kb = @as(f64, @floatFromInt(bytes)) / 1024.0;
-        return fmt.bufPrint(buf, "{d:.1} KiB", .{kb}) catch "---";
+        return mem.print(buf, "{d:.1} KiB", .{kb}) catch "---";
     } else {
         const mb = @as(f64, @floatFromInt(bytes)) / (1024.0 * 1024.0);
-        return fmt.bufPrint(buf, "{d:.2} MiB", .{mb}) catch "---";
+        return mem.print(buf, "{d:.2} MiB", .{mb}) catch "---";
     }
 }

@@ -27,7 +27,7 @@ const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const fmt = std.fmt;
+const mem = std.mem;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -134,7 +134,7 @@ pub fn main(init: process.Init) !void {
 
         var time_buf: [32]u8 = undefined;
         const time_remaining = if (time_seconds > 0)
-            fmt.bufPrint(&time_buf, "{d}h {d}m", .{ time_parts.hours, time_parts.minutes }) catch "N/A"
+            mem.print(&time_buf, "{d}h {d}m", .{ time_parts.hours, time_parts.minutes }) catch "N/A"
         else
             "N/A";
 

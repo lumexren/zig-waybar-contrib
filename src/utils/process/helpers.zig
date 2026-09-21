@@ -77,7 +77,7 @@ pub fn findAllByName(io: Io, name: []const u8) !ProcessIterator {
 /// `name_buf` must be at least `comm_buf_len` bytes (20 bytes).
 pub fn findByPid(io: Io, pid: linux.pid_t, name_buf: *[Process.comm_buf_len]u8) !Process {
     var pid_str_buf: [20]u8 = undefined;
-    const pid_str = fmt.bufPrint(&pid_str_buf, "{d}", .{pid}) catch return ProcessError.InvalidPid;
+    const pid_str = mem.print(&pid_str_buf, "{d}", .{pid}) catch return ProcessError.InvalidPid;
 
     const name = readCommInto(io, pid_str, name_buf) catch return ProcessError.NotFound;
     return .{ .name = name, .pid = pid };
@@ -156,7 +156,7 @@ pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name:
     while (it.next()) |dir| {
         if (dir.len == 0) continue;
 
-        const full_path = fmt.allocPrint(allocator, "{s}/{s}", .{ dir, exe_name }) catch continue;
+        const full_path = Allocator.print(allocator, "{s}/{s}", .{ dir, exe_name }) catch continue;
         defer allocator.free(full_path);
 
         if (Dir.accessAbsolute(io, full_path, .{ .execute = true })) {
@@ -173,7 +173,7 @@ pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name:
 /// sub-slice of `buf` — its lifetime is tied to `buf`.
 fn readCommInto(io: Io, pid_str: []const u8, buf: *[Process.comm_buf_len]u8) ![]const u8 {
     var path_buf: [32]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "/proc/{s}/comm", .{pid_str});
+    const path = try mem.print(&path_buf, "/proc/{s}/comm", .{pid_str});
 
     const file = try Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);

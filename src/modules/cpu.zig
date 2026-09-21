@@ -25,7 +25,6 @@ const ArrayList = std.ArrayList;
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const fmt = std.fmt;
 const os = std.os;
 const math = std.math;
 

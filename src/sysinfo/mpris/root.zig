@@ -86,7 +86,7 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
     errdefer info.deinit(allocator);
 
     // Sentinel-terminate the bus name for plume
-    const bus_name_z = try std.fmt.allocPrintSentinel(allocator, "{s}", .{bus_name}, 0);
+    const bus_name_z = try Allocator.printSentinel(allocator, "{s}", .{bus_name}, 0);
     defer allocator.free(bus_name_z);
 
     const root_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, ROOT_IFACE);

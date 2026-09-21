@@ -26,7 +26,6 @@ const Dir = Io.Dir;
 const fs = std.fs;
 const linux = std.os.linux;
 const posix = std.posix;
-const fmt = std.fmt;
 const ascii = std.ascii;
 const mem = std.mem;
 const Allocator = mem.Allocator;
@@ -96,7 +95,7 @@ pub fn isAlive(this: Process) bool {
 /// returned slice and must free it with `allocator`.
 pub fn getCmdline(this: Process, io: Io, allocator: Allocator) ![]u8 {
     var path_buf: [32]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "/proc/{d}/cmdline", .{this.pid});
+    const path = try mem.print(&path_buf, "/proc/{d}/cmdline", .{this.pid});
 
     const file = try Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);
@@ -110,7 +109,7 @@ pub fn getCmdline(this: Process, io: Io, allocator: Allocator) ![]u8 {
 /// Prefer this over `getCmdline` when you want to avoid an allocation.
 pub fn getCmdlineInto(this: Process, io: Io, buf: []u8) ![]u8 {
     var path_buf: [32]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "/proc/{d}/cmdline", .{this.pid});
+    const path = try mem.print(&path_buf, "/proc/{d}/cmdline", .{this.pid});
 
     const file = try Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);
@@ -126,7 +125,7 @@ pub fn getCmdlineInto(this: Process, io: Io, buf: []u8) ![]u8 {
 /// the returned slice and must free it with `allocator`.
 pub fn getEnviron(this: Process, io: Io, allocator: Allocator) ![]u8 {
     var path_buf: [32]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "/proc/{d}/environ", .{this.pid});
+    const path = try mem.print(&path_buf, "/proc/{d}/environ", .{this.pid});
 
     const file = try Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);
@@ -140,7 +139,7 @@ pub fn getEnviron(this: Process, io: Io, allocator: Allocator) ![]u8 {
 /// slice and must free it with `allocator`.
 pub fn getCwd(this: Process, io: Io, allocator: Allocator) ![]u8 {
     var path_buf: [32]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{this.pid});
+    const path = try mem.print(&path_buf, "/proc/{d}/cwd", .{this.pid});
 
     var result_buf: [fs.max_path_bytes]u8 = undefined;
     const resolved = try Dir.readLinkAbsolute(io, path, &result_buf);
@@ -153,7 +152,7 @@ pub fn getCwd(this: Process, io: Io, allocator: Allocator) ![]u8 {
 /// Uses stack storage only — no allocation.
 pub fn getStatusField(this: Process, io: Io, key: []const u8, buf: []u8) !?[]const u8 {
     var path_buf: [32]u8 = undefined;
-    const path = try fmt.bufPrint(&path_buf, "/proc/{d}/status", .{this.pid});
+    const path = try mem.print(&path_buf, "/proc/{d}/status", .{this.pid});
 
     const file = try Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
     defer file.close(io);

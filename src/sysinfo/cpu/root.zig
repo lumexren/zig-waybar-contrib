@@ -148,9 +148,9 @@ fn updateFrequencies(this: *CPU) void {
 
     for (this.cores, 0..) |*core, i| {
         core.frequency = .{
-            .min = readSysfsFrequency(this.io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_min_freq", .{i}) catch return),
-            .max = readSysfsFrequency(this.io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_max_freq", .{i}) catch return),
-            .current = readSysfsFrequency(this.io, fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{i}) catch return),
+            .min = readSysfsFrequency(this.io, mem.print(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_min_freq", .{i}) catch return),
+            .max = readSysfsFrequency(this.io, mem.print(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/cpuinfo_max_freq", .{i}) catch return),
+            .current = readSysfsFrequency(this.io, mem.print(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{i}) catch return),
         };
     }
 }

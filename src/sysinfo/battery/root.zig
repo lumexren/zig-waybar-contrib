@@ -34,7 +34,6 @@ const GVariant = Value.GVariant;
 
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
-const fmt = std.fmt;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
@@ -106,7 +105,7 @@ pub fn getDisplayDevice(this: *Battery) !BatteryInfo {
 
 fn getDeviceInfo(this: *Battery, path: []const u8) !BatteryInfo {
     var path_buf: [257]u8 = undefined;
-    const path_z = fmt.bufPrintSentinel(&path_buf, "{s}", .{path}, 0) catch return BatteryError.InvalidResponse;
+    const path_z = mem.printSentinel(&path_buf, "{s}", .{path}, 0) catch return BatteryError.InvalidResponse;
 
     var dev_proxy = Proxy.init(this.connection, UPOWER_SERVICE, path_z, DEVICE_IFACE);
 

@@ -24,7 +24,7 @@ const SU = @import("SizeUnit.zig");
 const SizeUnit = SU.SizeUnit;
 
 const std = @import("std");
-const fmt = std.fmt;
+const mem = std.mem;
 
 path: []const u8 = "/",
 
@@ -81,5 +81,5 @@ pub fn formatBytes(bytes: u64, buf: []u8) ![]const u8 {
     const value: f64 = @floatFromInt(bytes);
     const unit: SizeUnit = if (value >= SU.TiB) .TiB else if (value >= SU.GiB) .GiB else if (value >= SU.MiB) .MiB else if (value >= SU.KiB) .KiB else .B;
 
-    return fmt.bufPrint(buf, "{d:.1} {s}", .{ value / unit.divisor(), unit.suffix() });
+    return mem.print(buf, "{d:.1} {s}", .{ value / unit.divisor(), unit.suffix() });
 }
