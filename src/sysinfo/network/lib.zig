@@ -23,7 +23,6 @@ pub const Header = @import("Header.zig");
 const std = @import("std");
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const mem = std.mem;
-const fmt = std.fmt;
 const Allocator = mem.Allocator;
 const Io = std.Io;
 const Dir = Io.Dir;
@@ -239,7 +238,7 @@ pub fn resolveIP(allocator: Allocator, io: Io, domain: []const u8) !?[]const u8 
 
         if (parseRecord(response[0..msg.data.len])) |maybe_ip| {
             if (maybe_ip) |ip| {
-                return try fmt.allocPrint(allocator, "{d}.{d}.{d}.{d}", .{ ip[0], ip[1], ip[2], ip[3] });
+                return try Allocator.print(allocator, "{d}.{d}.{d}.{d}", .{ ip[0], ip[1], ip[2], ip[3] });
             }
         } else |_| continue;
     }

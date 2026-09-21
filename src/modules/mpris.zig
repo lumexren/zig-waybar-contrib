@@ -27,7 +27,7 @@ const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const fmt = std.fmt;
+const mem = std.mem;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -126,7 +126,7 @@ pub fn main(init: process.Init) !void {
         const position_sec = @mod(position_secs, 60);
 
         var position_buf: [16]u8 = undefined;
-        const position_str = fmt.bufPrint(&position_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(position_min)), @as(u64, @intCast(position_sec)) }) catch "00:00";
+        const position_str = mem.print(&position_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(position_min)), @as(u64, @intCast(position_sec)) }) catch "00:00";
         try replacer.addKey("position", position_str);
         try replacer.addKeyAny("position_us", player_info.position_us);
 
@@ -136,7 +136,7 @@ pub fn main(init: process.Init) !void {
             const length_sec = @mod(length_secs, 60);
 
             var length_buf: [16]u8 = undefined;
-            const length_str = fmt.bufPrint(&length_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(length_min)), @as(u64, @intCast(length_sec)) }) catch "00:00";
+            const length_str = mem.print(&length_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(length_min)), @as(u64, @intCast(length_sec)) }) catch "00:00";
             try replacer.addKey("length", length_str);
             try replacer.addKeyAny("length_us", length_us);
         } else {

@@ -29,7 +29,6 @@ const Io = std.Io;
 const debug = std.debug;
 const mem = std.mem;
 const Allocator = mem.Allocator;
-const fmt = std.fmt;
 
 allocator: Allocator,
 fields: ArrayListUnmanaged(Field) = .empty,
@@ -153,7 +152,7 @@ pub fn setClasses(this: *Json, classes: []const []const u8) !void {
 /// is set multiple times, all entries will be written to the output.
 /// Use this intentionally or ensure uniqueness at the call site.
 pub fn setFmt(this: *Json, key: []const u8, comptime value: []const u8, args: anytype) !void {
-    const str = try fmt.allocPrint(this.allocator, value, args);
+    const str = try Allocator.print(this.allocator, value, args);
     errdefer this.allocator.free(str);
 
     try this.fields.append(this.allocator, .{ .key = key, .value = .{ .string = str } });
@@ -184,7 +183,7 @@ pub fn has(this: *Json, key: []const u8) bool {
 /// Panics if the key exists but the associated value is not a string,
 /// as appending is only valid for string fields.
 pub fn appendFmt(this: *Json, key: []const u8, comptime value: []const u8, args: anytype) !void {
-    const part = try fmt.allocPrint(this.allocator, value, args);
+    const part = try Allocator.print(this.allocator, value, args);
     errdefer this.allocator.free(part);
 
     for (this.fields.items) |*f| {

@@ -105,7 +105,7 @@ fn readFanName(io: Io, allocator: Allocator, device_dir: Dir, input_name: []cons
         const base = input_name[0 .. input_name.len - 6];
 
         var label_buf: [64]u8 = undefined;
-        const label_name = fmt.bufPrint(&label_buf, "{s}_label", .{base}) catch unreachable;
+        const label_name = mem.print(&label_buf, "{s}_label", .{base}) catch unreachable;
 
         if (device_dir.openFile(io, label_name, .{})) |label_file| {
             defer label_file.close(io);
@@ -125,7 +125,7 @@ fn readFanName(io: Io, allocator: Allocator, device_dir: Dir, input_name: []cons
         if (len > 0) {
             const dev_name = mem.trim(u8, buf[0..len], &ascii.whitespace);
             const fan_id = input_name[0 .. input_name.len - 6];
-            return fmt.allocPrint(allocator, "{s} {s}", .{ dev_name, fan_id });
+            return Allocator.print(allocator, "{s} {s}", .{ dev_name, fan_id });
         }
     } else |_| {}
 

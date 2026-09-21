@@ -37,7 +37,7 @@ const DEV_PATH = "/proc/net/dev";
 
 /// Formats an IPv4 address from 4 bytes.
 fn formatIPv4(allocator: Allocator, bytes: [4]u8) ![]const u8 {
-    return fmt.allocPrint(allocator, "{d}.{d}.{d}.{d}", .{ bytes[0], bytes[1], bytes[2], bytes[3] });
+    return Allocator.print(allocator, "{d}.{d}.{d}.{d}", .{ bytes[0], bytes[1], bytes[2], bytes[3] });
 }
 
 /// Reads file content into buffer.

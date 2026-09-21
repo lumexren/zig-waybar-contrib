@@ -25,7 +25,6 @@ const Io = std.Io;
 const Dir = Io.Dir;
 const path = Dir.path;
 const zon = std.zon;
-const fmt = std.fmt;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const process = std.process;
@@ -63,7 +62,7 @@ fn resolveModulePath(this: *Config, module_name: []const u8) !?[]u8 {
     const config_dir = try this.resolveConfigDir() orelse return null;
     defer this.allocator.free(config_dir);
 
-    const config_file = try fmt.allocPrint(this.allocator, "{s}.zon", .{module_name});
+    const config_file = try Allocator.print(this.allocator, "{s}.zon", .{module_name});
     defer this.allocator.free(config_file);
 
     return try path.join(this.allocator, &.{ config_dir, "zig-waybar-contrib", config_file });

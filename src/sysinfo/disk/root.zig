@@ -32,7 +32,6 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const os = std.os;
 const linux = os.linux;
-const fmt = std.fmt;
 const Io = std.Io;
 const Threaded = Io.Threaded;
 const Dir = Io.Dir;
