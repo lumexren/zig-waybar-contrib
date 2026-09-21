@@ -238,7 +238,7 @@ pub fn resolveIP(allocator: Allocator, io: Io, domain: []const u8) !?[]const u8 
 
         if (parseRecord(response[0..msg.data.len])) |maybe_ip| {
             if (maybe_ip) |ip| {
-                return try Allocator.print(allocator, "{d}.{d}.{d}.{d}", .{ ip[0], ip[1], ip[2], ip[3] });
+                return try allocator.print("{d}.{d}.{d}.{d}", .{ ip[0], ip[1], ip[2], ip[3] });
             }
         } else |_| continue;
     }

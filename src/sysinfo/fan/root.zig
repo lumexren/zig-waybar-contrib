@@ -125,7 +125,7 @@ fn readFanName(io: Io, allocator: Allocator, device_dir: Dir, input_name: []cons
         if (len > 0) {
             const dev_name = mem.trim(u8, buf[0..len], &ascii.whitespace);
             const fan_id = input_name[0 .. input_name.len - 6];
-            return Allocator.print(allocator, "{s} {s}", .{ dev_name, fan_id });
+            return allocator.print("{s} {s}", .{ dev_name, fan_id });
         }
     } else |_| {}
 

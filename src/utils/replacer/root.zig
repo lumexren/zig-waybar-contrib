@@ -98,7 +98,7 @@ pub fn addKeyAny(this: *Replacer, key: []const u8, value: anytype) !void {
     }
 
     // Fallback: format to a temporary string.
-    const str = try Allocator.print(this.allocator, "{any}", .{value});
+    const str = try this.allocator.print("{any}", .{value});
     defer this.free(str);
     return this.addKey(key, str);
 }

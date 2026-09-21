@@ -159,7 +159,7 @@ fn getCheckupPath(this: Updates) ![]u8 {
     }
 
     const uid = linux.geteuid();
-    return try Allocator.print(this.allocator, "/run/user/{d}/zwc-updates-check", .{uid});
+    return try this.allocator.print("/run/user/{d}/zwc-updates-check", .{uid});
 }
 
 fn getPacmanDatabasePath(this: Updates) ![]const u8 {
@@ -190,17 +190,17 @@ inline fn createDirectory(io: Io, path: []const u8) !void {
 }
 
 fn deleteLockFile(io: Io, allocator: Allocator, db_path: []const u8) !void {
-    const lock_path = try Allocator.print(allocator, "{s}/db.lck", .{db_path});
+    const lock_path = try allocator.print("{s}/db.lck", .{db_path});
     defer allocator.free(lock_path);
 
     Dir.deleteFileAbsolute(io, lock_path) catch {};
 }
 
 fn createLocalSymlink(io: Io, allocator: Allocator, db_path: []const u8, pacman_db: []const u8) !void {
-    const local_path = try Allocator.print(allocator, "{s}/local", .{db_path});
+    const local_path = try allocator.print("{s}/local", .{db_path});
     defer allocator.free(local_path);
 
-    const pacman_local = try Allocator.print(allocator, "{s}local", .{pacman_db});
+    const pacman_local = try allocator.print("{s}local", .{pacman_db});
     defer allocator.free(pacman_local);
 
     Dir.symLinkAbsolute(io, pacman_local, local_path, .{}) catch |err| switch (err) {
