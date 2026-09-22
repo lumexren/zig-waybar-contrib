@@ -48,9 +48,7 @@ pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
 /// Resolves XDG_CONFIG_HOME or falls back to $HOME/.config.
 /// Caller owns the returned slice and must free it.
 fn resolveConfigDir(this: *Config) !?[]u8 {
-    if (this.environ_map.get("XDG_CONFIG_HOME")) |dir| {
-        return try this.allocator.dupe(u8, dir);
-    }
+    if (this.environ_map.get("XDG_CONFIG_HOME")) |dir| return try this.allocator.dupe(u8, dir);
 
     const home = this.environ_map.get("HOME") orelse return null;
     return try path.join(this.allocator, &.{ home, ".config" });
