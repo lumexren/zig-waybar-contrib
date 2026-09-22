@@ -33,7 +33,7 @@ const GPath = Value.GPath;
 const GVariant = Value.GVariant;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
@@ -72,7 +72,7 @@ pub fn getBatteries(this: *Battery) ![]BatteryInfo {
         this.allocator.free(devices);
     }
 
-    var batteries: ArrayListUnmanaged(BatteryInfo) = .empty;
+    var batteries: ArrayList(BatteryInfo) = .empty;
     errdefer {
         for (batteries.items) |*b| b.deinit(this.allocator);
         batteries.deinit(this.allocator);

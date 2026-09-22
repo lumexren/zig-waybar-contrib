@@ -30,7 +30,7 @@ const Value = plume.Value;
 const GVariant = Value.GVariant;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
@@ -65,7 +65,7 @@ pub fn getAdapters(this: *Bluetooth) ![]AdapterInfo {
     var res = this.proxy.call("GetManagedObjects", .{}) catch return BluetoothError.ConnectionFailed;
     defer res.deinit();
 
-    var adapters: ArrayListUnmanaged(AdapterInfo) = .empty;
+    var adapters: ArrayList(AdapterInfo) = .empty;
     errdefer {
         for (adapters.items) |*a| a.deinit(this.allocator);
         adapters.deinit(this.allocator);
@@ -125,7 +125,7 @@ pub fn getDevices(this: *Bluetooth) ![]DeviceInfo {
     var res = this.proxy.call("GetManagedObjects", .{}) catch return BluetoothError.ConnectionFailed;
     defer res.deinit();
 
-    var devices: ArrayListUnmanaged(DeviceInfo) = .empty;
+    var devices: ArrayList(DeviceInfo) = .empty;
     errdefer {
         for (devices.items) |*d| d.deinit(this.allocator);
         devices.deinit(this.allocator);

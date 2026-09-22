@@ -24,14 +24,14 @@ const Field = @import("Field.zig");
 const Value = @import("Value.zig").Value;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const Io = std.Io;
 const debug = std.debug;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
 allocator: Allocator,
-fields: ArrayListUnmanaged(Field) = .empty,
+fields: ArrayList(Field) = .empty,
 counter: u64 = 0,
 
 /// Initializes a new JSON builder using the given allocator.

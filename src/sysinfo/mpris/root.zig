@@ -31,7 +31,7 @@ const GStr = Value.GStr;
 const GVariant = Value.GVariant;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const meta = std.meta;
 const mem = std.mem;
 const Allocator = mem.Allocator;
@@ -59,7 +59,7 @@ pub fn listPlayers(allocator: Allocator, connection: *Connection) ![][]const u8 
         allocator.free(names);
     }
 
-    var players: ArrayListUnmanaged([]const u8) = .empty;
+    var players: ArrayList([]const u8) = .empty;
     errdefer {
         for (players.items) |p| allocator.free(p);
         players.deinit(allocator);

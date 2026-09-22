@@ -34,7 +34,7 @@ const Io = std.Io;
 const Threaded = Io.Threaded;
 const Dir = Io.Dir;
 const Allocator = mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 const STAT_BUFFER_SIZE: usize = 16 * 1024;
 const SYSFS_PATH_MAX: usize = 96;
@@ -47,7 +47,7 @@ prev_cores: []Sample = &.{},
 overall: f64 = 0.0,
 avg: f64 = 0.0,
 cores: []CoreInfo = &.{},
-scratch_samples: ArrayListUnmanaged(Sample) = .empty,
+scratch_samples: ArrayList(Sample) = .empty,
 
 pub fn init(io: Io, allocator: Allocator) CPU {
     return .{ .io = io, .allocator = allocator };

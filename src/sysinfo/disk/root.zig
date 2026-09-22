@@ -27,7 +27,7 @@ const stfs = @import("bindings").statvfs;
 
 const std = @import("std");
 const StaticStringMap = std.StaticStringMap;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const os = std.os;
@@ -136,7 +136,7 @@ pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
     var buffer: [MOUNTS_BUFFER_SIZE]u8 = undefined;
     const bytes_read = file.readStreaming(io, &.{buffer[0..]}) catch return DiskError.StatvfsFailed;
 
-    var filesystems: ArrayListUnmanaged(MountedFilesystem) = .empty;
+    var filesystems: ArrayList(MountedFilesystem) = .empty;
     errdefer freeMountedFilesystems(allocator, filesystems.items);
 
     var lines = mem.splitScalar(u8, buffer[0..bytes_read], '\n');
