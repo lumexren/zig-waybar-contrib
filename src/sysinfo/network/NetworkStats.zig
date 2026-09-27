@@ -25,7 +25,7 @@ tx_bytes: u64,
 timestamp: i64,
 
 /// Calculate rates (bytes/sec) between two samples.
-pub fn calculateRates(old: @This(), new: @This()) struct { download: f64, upload: f64, total: f64 } {
+pub fn calculateRates(old: NetworkStats, new: NetworkStats) struct { download: f64, upload: f64, total: f64 } {
     const dt = new.timestamp - old.timestamp;
     if (dt <= 0) return .{ .download = 0.0, .upload = 0.0, .total = 0.0 };
 
