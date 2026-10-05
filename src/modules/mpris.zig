@@ -36,6 +36,8 @@ const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 1,
+    player: ?[]const u8 = null,
+    ignored_players: ?[]const []const u8 = null,
     icon: []const u8 = "",
     icon_playing: []const u8 = "",
     icon_paused: []const u8 = "",
@@ -67,7 +69,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var connection: Connection = try .init(io, gpa, init.environ_map, .Session);
+    var connection: Connection = try .init(io, gpa, .Session, init.environ_map);
     defer connection.close();
 
     while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
@@ -76,7 +78,12 @@ pub fn main(init: process.Init) !void {
 
         try replacer.addCommonPlaceholders();
 
-        const player_info = mpris.getActivePlayer(gpa, &connection) catch |err| {
+        const player_info = mpris.getActivePlayerFiltered(
+            gpa,
+            &connection,
+            data.player,
+            data.ignored_players,
+        ) catch |err| {
             switch (err) {
                 mpris.MprisError.NoPlayers, mpris.MprisError.ConnectionFailed => {
                     try replacer.addKey("icon", data.icon);
@@ -87,6 +94,7 @@ pub fn main(init: process.Init) !void {
                     try json.write(stdout);
                     try stdout.flush();
 
+                    if (data.update_interval == 0) break;
                     continue;
                 },
                 else => return err,
@@ -120,25 +128,35 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("album", player_info.metadata.album orelse "Unknown");
         try replacer.addKey("art_url", player_info.metadata.art_url orelse "");
 
-        // Convert position and length from microseconds to MM:SS
-        const position_secs = @divFloor(player_info.position_us, 1_000_000);
-        const position_min = @divFloor(position_secs, 60);
+        // Convert position and length from microseconds to MM:SS or HH:MM:SS
+        const safe_position_us = if (player_info.position_us > 0) player_info.position_us else 0;
+        const position_secs = @divFloor(safe_position_us, 1_000_000);
+        const position_hours = @divFloor(position_secs, 3600);
+        const position_min = @mod(@divFloor(position_secs, 60), 60);
         const position_sec = @mod(position_secs, 60);
 
         var position_buf: [16]u8 = undefined;
-        const position_str = mem.print(&position_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(position_min)), @as(u64, @intCast(position_sec)) }) catch "00:00";
+        const position_str = if (position_hours > 0)
+            mem.print(&position_buf, "{d:0>2}:{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(position_hours)), @as(u64, @intCast(position_min)), @as(u64, @intCast(position_sec)) }) catch "00:00:00"
+        else
+            mem.print(&position_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(position_min)), @as(u64, @intCast(position_sec)) }) catch "00:00";
         try replacer.addKey("position", position_str);
         try replacer.addKeyAny("position_us", player_info.position_us);
 
-        if (player_info.metadata.length_us) |length_us| {
-            const length_secs = @divFloor(length_us, 1_000_000);
-            const length_min = @divFloor(length_secs, 60);
+        if (player_info.metadata.length_us) |raw_length_us| {
+            const safe_length_us = if (raw_length_us > 0) raw_length_us else 0;
+            const length_secs = @divFloor(safe_length_us, 1_000_000);
+            const length_hours = @divFloor(length_secs, 3600);
+            const length_min = @mod(@divFloor(length_secs, 60), 60);
             const length_sec = @mod(length_secs, 60);
 
             var length_buf: [16]u8 = undefined;
-            const length_str = mem.print(&length_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(length_min)), @as(u64, @intCast(length_sec)) }) catch "00:00";
+            const length_str = if (length_hours > 0)
+                mem.print(&length_buf, "{d:0>2}:{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(length_hours)), @as(u64, @intCast(length_min)), @as(u64, @intCast(length_sec)) }) catch "00:00:00"
+            else
+                mem.print(&length_buf, "{d:0>2}:{d:0>2}", .{ @as(u64, @intCast(length_min)), @as(u64, @intCast(length_sec)) }) catch "00:00";
             try replacer.addKey("length", length_str);
-            try replacer.addKeyAny("length_us", length_us);
+            try replacer.addKeyAny("length_us", raw_length_us);
         } else {
             try replacer.addKey("length", "--:--");
             try replacer.addKeyAny("length_us", @as(i64, 0));
@@ -152,11 +170,15 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("can_pause", player_info.can_pause);
         try replacer.addKeyAny("can_seek", player_info.can_seek);
 
-        var text_line = try replacer.render(data.text);
-        defer replacer.free(text_line);
+        const raw_text_line = try replacer.render(data.text);
+        defer replacer.free(raw_text_line);
 
-        if (data.text_max_length != 0 and text_line.len > data.text_max_length)
-            text_line = text_line[0..data.text_max_length];
+        var text_line = raw_text_line;
+        if (data.text_max_length != 0 and text_line.len > data.text_max_length) {
+            var cut: usize = data.text_max_length;
+            while (cut > 0 and (text_line[cut] & 0xC0) == 0x80) : (cut -= 1) {}
+            text_line = text_line[0..cut];
+        }
 
         const tooltip_line = try replacer.render(data.tooltip);
         defer replacer.free(tooltip_line);

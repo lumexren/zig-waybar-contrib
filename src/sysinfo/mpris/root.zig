@@ -92,69 +92,123 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
     const root_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, ROOT_IFACE);
     const player_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, PLAYER_IFACE);
 
-    // Identity
-    if (root_proxy.getProperty(GVariant, "Identity")) |v| {
-        var mv = v;
-        defer mv.deinit(allocator);
-        if (v == .string) info.identity = try allocator.dupe(u8, v.string.s);
-    } else |_| {}
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
 
-    // PlaybackStatus
-    if (player_proxy.getProperty(GVariant, "PlaybackStatus")) |v| {
-        var mv = v;
-        defer mv.deinit(allocator);
-        if (v == .string) {
-            if (mem.eql(u8, v.string.s, "Playing")) info.status = .playing else if (mem.eql(u8, v.string.s, "Paused")) info.status = .paused else if (mem.eql(u8, v.string.s, "Stopped")) info.status = .stopped;
-        }
-    } else |_| {}
+    // 1. Fetch Player properties via GetAll (single D-Bus roundtrip)
+    if (player_proxy.rawCall("org.freedesktop.DBus.Properties", "GetAll", .{
+        GStr.new(PLAYER_IFACE),
+    })) |*res| {
+        var call_res = res.*;
+        defer call_res.deinit();
 
-    // LoopStatus
-    if (player_proxy.getProperty(GVariant, "LoopStatus")) |v| {
-        var mv = v;
-        defer mv.deinit(allocator);
-        if (v == .string) {
-            if (mem.eql(u8, v.string.s, "None")) info.loop_status = .none else if (mem.eql(u8, v.string.s, "Track")) info.loop_status = .track else if (mem.eql(u8, v.string.s, "Playlist")) info.loop_status = .playlist;
-        }
-    } else |_| {}
+        const PropsMap = std.StringHashMap(GVariant);
+        var dec: plume.Decoder = .fromMessage(arena_alloc, call_res.message);
+        if (dec.decodeAlloc(PropsMap)) |dict| {
+            var it = dict.iterator();
+            while (it.next()) |entry| {
+                const key = entry.key_ptr.*;
+                const val = entry.value_ptr.*;
+                const inner = if (val == .variant) val.variant.* else val;
 
-    // Boolean caps
-    inline for (.{
-        .{ "Shuffle", "shuffle" },
-        .{ "CanControl", "can_control" },
-        .{ "CanGoNext", "can_go_next" },
-        .{ "CanGoPrevious", "can_go_previous" },
-        .{ "CanPlay", "can_play" },
-        .{ "CanPause", "can_pause" },
-        .{ "CanSeek", "can_seek" },
-    }) |pair| {
-        if (player_proxy.getProperty(GVariant, pair[0])) |v| {
+                if (mem.eql(u8, key, "PlaybackStatus")) {
+                    if (inner == .string) {
+                        if (mem.eql(u8, inner.string.s, "Playing")) {
+                            info.status = .playing;
+                        } else if (mem.eql(u8, inner.string.s, "Paused")) {
+                            info.status = .paused;
+                        } else if (mem.eql(u8, inner.string.s, "Stopped")) {
+                            info.status = .stopped;
+                        }
+                    }
+                } else if (mem.eql(u8, key, "LoopStatus")) {
+                    if (inner == .string) {
+                        if (mem.eql(u8, inner.string.s, "None")) {
+                            info.loop_status = .none;
+                        } else if (mem.eql(u8, inner.string.s, "Track")) {
+                            info.loop_status = .track;
+                        } else if (mem.eql(u8, inner.string.s, "Playlist")) {
+                            info.loop_status = .playlist;
+                        }
+                    }
+                } else if (mem.eql(u8, key, "Shuffle")) {
+                    if (inner == .boolean) info.shuffle = inner.boolean;
+                } else if (mem.eql(u8, key, "CanControl")) {
+                    if (inner == .boolean) info.can_control = inner.boolean;
+                } else if (mem.eql(u8, key, "CanGoNext")) {
+                    if (inner == .boolean) info.can_go_next = inner.boolean;
+                } else if (mem.eql(u8, key, "CanGoPrevious")) {
+                    if (inner == .boolean) info.can_go_previous = inner.boolean;
+                } else if (mem.eql(u8, key, "CanPlay")) {
+                    if (inner == .boolean) info.can_play = inner.boolean;
+                } else if (mem.eql(u8, key, "CanPause")) {
+                    if (inner == .boolean) info.can_pause = inner.boolean;
+                } else if (mem.eql(u8, key, "CanSeek")) {
+                    if (inner == .boolean) info.can_seek = inner.boolean;
+                } else if (mem.eql(u8, key, "Volume")) {
+                    switch (inner) {
+                        .double => |d| info.volume = d,
+                        .int64 => |d| info.volume = @floatFromInt(d),
+                        .uint64 => |d| info.volume = @floatFromInt(d),
+                        else => {},
+                    }
+                } else if (mem.eql(u8, key, "Position")) {
+                    switch (inner) {
+                        .int64 => |p| info.position_us = p,
+                        .uint64 => |p| info.position_us = @intCast(@min(p, @as(u64, std.math.maxInt(i64)))),
+                        else => {},
+                    }
+                } else if (mem.eql(u8, key, "Metadata")) {
+                    info.metadata = parseMetadata(allocator, inner);
+                }
+            }
+        } else |_| {}
+    } else |_| {
+        // Fallback for players not implementing GetAll
+        if (player_proxy.getProperty(GVariant, "PlaybackStatus")) |v| {
             var mv = v;
             defer mv.deinit(allocator);
-            if (v == .boolean) @field(info, pair[1]) = v.boolean;
+            if (v == .string) {
+                if (mem.eql(u8, v.string.s, "Playing")) info.status = .playing else if (mem.eql(u8, v.string.s, "Paused")) info.status = .paused else if (mem.eql(u8, v.string.s, "Stopped")) info.status = .stopped;
+            }
         } else |_| {}
+
+        info.metadata = getMetadataProperty(allocator, player_proxy);
     }
 
-    // Volume
-    if (player_proxy.getProperty(GVariant, "Volume")) |v| {
-        var mv = v;
-        defer mv.deinit(allocator);
-        if (v == .double) info.volume = v.double;
-    } else |_| {}
+    // 2. Fetch Root properties (Identity) via GetAll
+    if (root_proxy.rawCall("org.freedesktop.DBus.Properties", "GetAll", .{
+        GStr.new(ROOT_IFACE),
+    })) |*res| {
+        var call_res = res.*;
+        defer call_res.deinit();
 
-    // Position
-    if (player_proxy.getProperty(GVariant, "Position")) |v| {
-        var mv = v;
-        defer mv.deinit(allocator);
-        if (v == .int64) info.position_us = v.int64;
+        const PropsMap = std.StringHashMap(GVariant);
+        var dec: plume.Decoder = .fromMessage(arena_alloc, call_res.message);
+        if (dec.decodeAlloc(PropsMap)) |dict| {
+            if (dict.get("Identity")) |id_v| {
+                const inner = if (id_v == .variant) id_v.variant.* else id_v;
+                if (inner == .string) {
+                    info.identity = try allocator.dupe(u8, inner.string.s);
+                }
+            }
+        } else |_| {}
     } else |_| {}
-
-    // Metadata
-    info.metadata = getMetadataProperty(allocator, player_proxy);
 
     return info;
 }
 
 pub fn getActivePlayer(allocator: Allocator, connection: *Connection) !PlayerInfo {
+    return getActivePlayerFiltered(allocator, connection, null, null);
+}
+
+pub fn getActivePlayerFiltered(
+    allocator: Allocator,
+    connection: *Connection,
+    target_player: ?[]const u8,
+    ignored_players: ?[]const []const u8,
+) !PlayerInfo {
     const players = try listPlayers(allocator, connection);
     defer {
         for (players) |p| allocator.free(p);
@@ -163,29 +217,99 @@ pub fn getActivePlayer(allocator: Allocator, connection: *Connection) !PlayerInf
 
     if (players.len == 0) return MprisError.NoPlayers;
 
-    return getPlayerInfo(allocator, connection, players[0]);
+    var best_player: ?PlayerInfo = null;
+    errdefer if (best_player) |*bp| bp.deinit(allocator);
+
+    for (players) |bus_name| {
+        const player_name = if (bus_name.len > MPRIS_PREFIX.len)
+            bus_name[MPRIS_PREFIX.len..]
+        else
+            bus_name;
+
+        if (target_player) |target| {
+            if (!mem.eql(u8, player_name, target) and !mem.startsWith(u8, player_name, target)) {
+                continue;
+            }
+        }
+
+        if (ignored_players) |ignored| {
+            var skip = false;
+            for (ignored) |ig| {
+                if (mem.startsWith(u8, player_name, ig)) {
+                    skip = true;
+                    break;
+                }
+            }
+            if (skip) continue;
+        }
+
+        var info = getPlayerInfo(allocator, connection, bus_name) catch continue;
+
+        // Playing status takes immediate priority
+        if (info.status == .playing) {
+            if (best_player) |*bp| bp.deinit(allocator);
+            return info;
+        }
+
+        if (best_player == null) {
+            best_player = info;
+        } else {
+            const current_prio: u8 = switch (best_player.?.status) {
+                .playing => 3,
+                .paused => 2,
+                .stopped => if (best_player.?.metadata.title != null) 1 else 0,
+            };
+            const new_prio: u8 = switch (info.status) {
+                .playing => 3,
+                .paused => 2,
+                .stopped => if (info.metadata.title != null) 1 else 0,
+            };
+
+            if (new_prio > current_prio) {
+                best_player.?.deinit(allocator);
+                best_player = info;
+            } else {
+                info.deinit(allocator);
+            }
+        }
+    }
+
+    return best_player orelse MprisError.NoPlayers;
 }
 
-fn getMetadataProperty(allocator: Allocator, player_proxy: Proxy) Metadata {
+fn parseMetadata(allocator: Allocator, val: GVariant) Metadata {
     var metadata: Metadata = .{};
-
-    const v = player_proxy.getProperty(GVariant, "Metadata") catch return metadata;
-    var mv = v;
-    defer mv.deinit(allocator);
-
-    // Metadata is a{sv}
-    const dict = if (v == .variant) v.variant.* else v;
+    const dict = if (val == .variant) val.variant.* else val;
     if (dict != .dict) return metadata;
 
     var it = dict.dict.iterator();
     while (it.next()) |entry| {
         const key = entry.key_ptr.*;
-        const val = entry.value_ptr.*;
-        const inner = if (val == .variant) val.variant.* else val;
+        const v = entry.value_ptr.*;
+        const inner = if (v == .variant) v.variant.* else v;
 
         if (mem.eql(u8, key, "xesam:title")) {
             if (inner == .string) metadata.title = allocator.dupe(u8, inner.string.s) catch null;
         } else if (mem.eql(u8, key, "xesam:artist")) {
+            if (inner == .array and inner.array.len > 0) {
+                var joined: ArrayList(u8) = .empty;
+                errdefer joined.deinit(allocator);
+                for (inner.array) |elem| {
+                    const s = if (elem == .variant) elem.variant.* else elem;
+                    if (s == .string) {
+                        if (joined.items.len > 0) joined.appendSlice(allocator, ", ") catch break;
+                        joined.appendSlice(allocator, s.string.s) catch break;
+                    }
+                }
+                if (joined.items.len > 0) {
+                    metadata.artist = joined.toOwnedSlice(allocator) catch null;
+                } else {
+                    joined.deinit(allocator);
+                }
+            } else if (inner == .string) {
+                metadata.artist = allocator.dupe(u8, inner.string.s) catch null;
+            }
+        } else if (mem.eql(u8, key, "xesam:albumArtist") and metadata.artist == null) {
             if (inner == .array and inner.array.len > 0) {
                 const first = inner.array[0];
                 const s = if (first == .variant) first.variant.* else first;
@@ -195,19 +319,43 @@ fn getMetadataProperty(allocator: Allocator, player_proxy: Proxy) Metadata {
             }
         } else if (mem.eql(u8, key, "xesam:album")) {
             if (inner == .string) metadata.album = allocator.dupe(u8, inner.string.s) catch null;
-        } else if (mem.eql(u8, key, "mpris:artUrl")) {
-            if (inner == .string) metadata.art_url = allocator.dupe(u8, inner.string.s) catch null;
+        } else if (mem.eql(u8, key, "mpris:artUrl") or mem.eql(u8, key, "xesam:artUrl") or mem.eql(u8, key, "xesam:url")) {
+            if (inner == .string and metadata.art_url == null) metadata.art_url = allocator.dupe(u8, inner.string.s) catch null;
         } else if (mem.eql(u8, key, "mpris:trackid")) {
             if (inner == .string or inner == .object_path) {
                 const s = if (inner == .object_path) inner.object_path.s else inner.string.s;
                 metadata.track_id = allocator.dupe(u8, s) catch null;
             }
         } else if (mem.eql(u8, key, "mpris:length")) {
-            if (inner == .int64) metadata.length_us = inner.int64;
+            switch (inner) {
+                .int64 => |l| metadata.length_us = l,
+                .uint64 => |l| metadata.length_us = @intCast(@min(l, @as(u64, std.math.maxInt(i64)))),
+                .int32 => |l| metadata.length_us = l,
+                .uint32 => |l| metadata.length_us = l,
+                else => {},
+            }
         }
     }
 
     return metadata;
+}
+
+fn getMetadataProperty(allocator: Allocator, player_proxy: Proxy) Metadata {
+    const metadata: Metadata = .{};
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    var res = player_proxy.rawCall("org.freedesktop.DBus.Properties", "Get", .{
+        GStr.new(player_proxy.interface),
+        GStr.new("Metadata"),
+    }) catch return metadata;
+    defer res.deinit();
+
+    var dec: plume.Decoder = .fromMessage(arena.allocator(), res.message);
+    const v = dec.decodeAlloc(GVariant) catch return metadata;
+
+    return parseMetadata(allocator, v);
 }
 
 // Tests
@@ -255,4 +403,29 @@ test "PlayerInfo.deinit" {
     };
 
     info.deinit(allocator);
+}
+
+test "parseMetadata with uint64 length and multiple artists" {
+    const allocator = testing.allocator;
+
+    var dict = std.StringHashMap(GVariant).init(allocator);
+    defer dict.deinit();
+
+    try dict.put("xesam:title", .{ .string = .{ .s = "The Catalyst" } });
+    try dict.put("xesam:album", .{ .string = .{ .s = "A Thousand Suns" } });
+    try dict.put("mpris:length", .{ .uint64 = 339853000 });
+
+    var artists = [_]GVariant{
+        .{ .string = .{ .s = "Linkin Park" } },
+        .{ .string = .{ .s = "Chester Bennington" } },
+    };
+    try dict.put("xesam:artist", .{ .array = &artists });
+
+    var m = parseMetadata(allocator, .{ .dict = dict });
+    defer m.deinit(allocator);
+
+    try testing.expectEqualStrings("The Catalyst", m.title.?);
+    try testing.expectEqualStrings("A Thousand Suns", m.album.?);
+    try testing.expectEqualStrings("Linkin Park, Chester Bennington", m.artist.?);
+    try testing.expectEqual(@as(?i64, 339853000), m.length_us);
 }

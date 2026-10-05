@@ -82,6 +82,7 @@ pub fn main(init: process.Init) !void {
     defer replacer.deinit();
 
     var resolved = try sysinfolib.resolveIP(gpa, io, data.target_domain);
+    defer if (resolved) |res| gpa.free(res);
     var last_update_ts: i64 = Clock.now(.boot, io).toSeconds();
 
     const local_addr: IpAddress = try IpAddress.parseIp4("0.0.0.0", 0);
@@ -104,6 +105,7 @@ pub fn main(init: process.Init) !void {
 
         if (resolved == null or (now_s - last_update_ts) >= data.target_domain_ip_update_interval) {
             if (try sysinfolib.resolveIP(gpa, io, data.target_domain)) |res| {
+                if (resolved) |old_res| gpa.free(old_res);
                 resolved = res;
                 last_update_ts = now_s;
 
@@ -115,7 +117,10 @@ pub fn main(init: process.Init) !void {
             }
         }
 
-        const target = target_addr orelse continue;
+        const target = target_addr orelse {
+            if (data.update_interval == 0) break;
+            continue;
+        };
 
         const seconds_until_ip_update = data.target_domain_ip_update_interval - (now_s - last_update_ts);
 
@@ -127,6 +132,7 @@ pub fn main(init: process.Init) !void {
             try json.setClass("critical");
             try json.write(stdout);
             try stdout.flush();
+            if (data.update_interval == 0) break;
             continue;
         };
 

@@ -85,7 +85,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    var connection: Connection = try .init(io, gpa, .System, init.environ_map);
     defer connection.close();
 
     var battery_sys: sysinfo = .init(io, gpa, &connection);
@@ -102,7 +102,10 @@ pub fn main(init: process.Init) !void {
             try json.write(stdout);
             try stdout.flush();
 
-            if (err == sysinfo.BatteryError.NotFound) continue;
+            if (err == sysinfo.BatteryError.NotFound) {
+                if (data.update_interval == 0) break;
+                continue;
+            }
             return err;
         };
 
@@ -114,6 +117,7 @@ pub fn main(init: process.Init) !void {
             try json.setClass("unknown");
             try json.write(stdout);
             try stdout.flush();
+            if (data.update_interval == 0) break;
             continue;
         }
 

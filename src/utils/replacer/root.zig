@@ -209,7 +209,7 @@ pub fn render(this: *const Replacer, template: []const u8) ![]u8 {
 
         if (this.strict) return ReplacerError.PlaceholderNotFound;
 
-        try result.append(this.allocator, c);
+        try result.appendSlice(this.allocator, template[i .. i + close + 2]);
         i += close + 2;
     }
 
@@ -369,4 +369,29 @@ fn appendFloat(writer: *Writer, f: f64, spec: ?[]const u8) !void {
     } else |_| {}
 
     try writer.print("{d}", .{f});
+}
+
+test "Replacer basic and unresolved placeholder passthrough" {
+    const testing = std.testing;
+    var replacer = Replacer.init(testing.allocator);
+    defer replacer.deinit();
+
+    try replacer.addKey("name", "Waybar");
+    try replacer.addKeyAny("count", @as(i64, 42));
+
+    const rendered = try replacer.render("Hello {name}! Unresolved: {foo} Count: {count}");
+    defer replacer.free(rendered);
+
+    try testing.expectEqualStrings("Hello Waybar! Unresolved: {foo} Count: 42", rendered);
+}
+
+test "Replacer strict mode fails on unresolved placeholder" {
+    const testing = std.testing;
+    var replacer = Replacer.init(testing.allocator);
+    defer replacer.deinit();
+    replacer.setStrict(true);
+
+    try replacer.addKey("name", "Waybar");
+
+    try testing.expectError(ReplacerError.PlaceholderNotFound, replacer.render("Hello {unknown}"));
 }

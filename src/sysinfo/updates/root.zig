@@ -122,7 +122,7 @@ fn fetchUpdates(this: Updates) ![]u8 {
     var arg_buffer: [4][]const u8 = undefined;
     const child_argv = this.manager.buildArgv(&arg_buffer, pacman_db);
 
-    var child = try process.spawn(this.io, .{ .argv = child_argv, .stdout = .pipe, .stderr = .pipe });
+    var child = try process.spawn(this.io, .{ .argv = child_argv, .stdout = .pipe, .stderr = .ignore });
 
     const stdout = try uProcess.readAll(this.io, this.allocator, child.stdout.?);
     errdefer this.allocator.free(stdout);
@@ -130,7 +130,7 @@ fn fetchUpdates(this: Updates) ![]u8 {
     const term = try child.wait(this.io);
     if (term != .exited) {
         this.allocator.free(stdout);
-        return &.{};
+        return try this.allocator.alloc(u8, 0);
     }
 
     return stdout;

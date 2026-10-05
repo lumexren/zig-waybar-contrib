@@ -125,11 +125,8 @@ pub fn fetchRootDiskInfo() DiskError!DiskInfo {
     return fetchDiskInfo("/");
 }
 
-/// Fetches information about all mounted real filesystems.
-pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
-
+/// Fetches information about all mounted real filesystems using the provided Io context.
+pub fn fetchMountedFilesystemsIo(io: Io, allocator: Allocator) ![]MountedFilesystem {
     var file = Dir.openFileAbsolute(io, MOUNTS_PATH, .{ .mode = .read_only }) catch return DiskError.StatvfsFailed;
     defer file.close(io);
 
@@ -186,6 +183,12 @@ pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
     }
 
     return filesystems.toOwnedSlice(allocator);
+}
+
+/// Fetches information about all mounted real filesystems.
+pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
+    var threaded: Threaded = .init_single_threaded;
+    return fetchMountedFilesystemsIo(threaded.io(), allocator);
 }
 
 /// Frees memory allocated by `fetchMountedFilesystems`.

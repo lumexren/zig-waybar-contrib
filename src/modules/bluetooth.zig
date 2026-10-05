@@ -64,7 +64,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    var connection: Connection = try .init(io, gpa, .System, init.environ_map);
     defer connection.close();
 
     var bluetooth_sys: sysinfo = .init(io, gpa, &connection);
@@ -81,7 +81,10 @@ pub fn main(init: process.Init) !void {
             try json.write(stdout);
             try stdout.flush();
 
-            if (err == sysinfo.BluetoothError.NoAdapter or err == sysinfo.BluetoothError.ConnectionFailed or err == sysinfo.BluetoothError.InvalidResponse) continue;
+            if (err == sysinfo.BluetoothError.NoAdapter or err == sysinfo.BluetoothError.ConnectionFailed or err == sysinfo.BluetoothError.InvalidResponse) {
+                if (data.update_interval == 0) break;
+                continue;
+            }
             return err;
         };
 
@@ -96,6 +99,7 @@ pub fn main(init: process.Init) !void {
             try json.setClass("disabled");
             try json.write(stdout);
             try stdout.flush();
+            if (data.update_interval == 0) break;
             continue;
         }
 
@@ -125,6 +129,7 @@ pub fn main(init: process.Init) !void {
             try replacer.addKeyAny("device_battery", device.battery orelse @as(u8, 0));
 
             const line = try replacer.render(data.device_format);
+            defer replacer.free(line);
             if (device_list.items.len > 0) try device_list.appendSlice(gpa, "\n");
             try device_list.appendSlice(gpa, line);
         }

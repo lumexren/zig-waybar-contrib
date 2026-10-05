@@ -61,7 +61,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var connection: Connection = try .init(io, gpa, init.environ_map, .System);
+    var connection: Connection = try .init(io, gpa, .System, init.environ_map);
     defer connection.close();
 
     var backlight: Backlight = try .init(io, gpa, &connection);
@@ -78,7 +78,10 @@ pub fn main(init: process.Init) !void {
             try json.write(stdout);
             try stdout.flush();
 
-            if (err == error.NotFound) continue;
+            if (err == error.NotFound) {
+                if (data.update_interval == 0) break;
+                continue;
+            }
             return err;
         };
 

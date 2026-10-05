@@ -62,14 +62,35 @@ pub fn main(init: process.Init) !void {
     defer replacer.deinit();
 
     var module: sysinfo = .init(gpa);
-    try module.initialize();
-    defer module.shutdown();
+    const initialized = blk: {
+        module.initialize() catch break :blk false;
+        break :blk true;
+    };
+    defer if (initialized) module.shutdown();
 
     while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
-        const gpu_info: sysinfo.GPUInfo = try module.getInfo();
+        if (!initialized) {
+            try json.set("text", "No GPU");
+            try json.set("tooltip", "No supported GPU detected");
+            try json.setClass("disabled");
+            try json.write(stdout);
+            try stdout.flush();
+            if (data.update_interval == 0) break;
+            continue;
+        }
+
+        const gpu_info: sysinfo.GPUInfo = module.getInfo() catch {
+            try json.set("text", "No GPU");
+            try json.set("tooltip", "Failed to query GPU info");
+            try json.setClass("disabled");
+            try json.write(stdout);
+            try stdout.flush();
+            if (data.update_interval == 0) break;
+            continue;
+        };
 
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", data.icon);

@@ -25,6 +25,7 @@ const Io = std.Io;
 const Dir = Io.Dir;
 const path = Dir.path;
 const zon = std.zon;
+const heap = std.heap;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const process = std.process;
@@ -34,14 +35,14 @@ const Map = Environ.Map;
 io: Io,
 environ_map: *Map,
 allocator: Allocator,
-is_allocated: bool = false,
+arena: ?heap.ArenaAllocator = null,
 
 pub fn init(io: Io, environ_map: *Map, allocator: Allocator) Config {
     return .{
         .io = io,
         .environ_map = environ_map,
         .allocator = allocator,
-        .is_allocated = false,
+        .arena = null,
     };
 }
 
@@ -77,19 +78,24 @@ pub fn exists(this: *Config, module_name: []const u8) bool {
     return true;
 }
 
-/// Frees the allocated fields of a parsed configuration struct.
-pub fn free(this: *Config, config: anytype) void {
-    if (this.is_allocated) {
-        zon.parse.free(this.allocator, config);
-        this.is_allocated = false;
+/// Frees any allocated memory from parsed configurations.
+pub fn deinit(this: *Config) void {
+    if (this.arena) |*arena| {
+        arena.deinit();
+        this.arena = null;
     }
+}
+
+/// Frees the allocated fields of a parsed configuration struct.
+pub fn free(this: *Config, _: anytype) void {
+    this.deinit();
 }
 
 /// Strictly loads a typed config struct `T`. Falls back to `T{}` on any error.
 /// Caller is responsible for calling `free()` on success if `T` contains allocated fields.
 pub fn load(this: *Config, module_name: []const u8, comptime T: type) T {
     return this.loadExact(module_name, T) catch {
-        this.is_allocated = false;
+        this.deinit();
         return T{};
     };
 }
@@ -109,7 +115,22 @@ pub fn loadExact(this: *Config, module_name: []const u8, comptime T: type) !T {
     var reader = file.reader(this.io, &.{});
     try reader.interface.readSliceAll(buffer);
 
-    const res = try zon.parse.fromSliceAlloc(T, this.allocator, buffer, null, .{ .ignore_unknown_fields = true, .free_on_error = true });
-    this.is_allocated = true;
+    var arena: heap.ArenaAllocator = .init(this.allocator);
+    errdefer arena.deinit();
+
+    var diag: zon.parse.Diagnostics = undefined;
+
+    const res = try zon.parse.fromSlice(T, .{
+        .gpa = this.allocator,
+        .arena = arena.allocator(),
+        .source = buffer,
+        .diagnostics = &diag,
+        .ignore_unknown_fields = true,
+    });
+
+    if (this.arena) |*old_arena| {
+        old_arena.deinit();
+    }
+    this.arena = arena;
     return res;
 }

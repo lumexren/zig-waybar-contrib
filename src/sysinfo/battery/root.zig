@@ -117,13 +117,13 @@ fn getDeviceInfo(this: *Battery, path: []const u8) !BatteryInfo {
     if (dev_proxy.getProperty(GVariant, "Type")) |v| {
         var mut = v;
         defer mut.deinit(this.allocator);
-        if (v == .uint32) info.device_type = @enumFromInt(v.uint32);
+        if (v == .uint32) info.device_type = @fromBackingInt(@intCast(v.uint32));
     } else |_| {}
 
     if (dev_proxy.getProperty(GVariant, "State")) |v| {
         var mut = v;
         defer mut.deinit(this.allocator);
-        if (v == .uint32) info.state = @enumFromInt(@min(v.uint32, 6));
+        if (v == .uint32) info.state = @fromBackingInt(@intCast(@min(v.uint32, 6)));
     } else |_| {}
 
     if (dev_proxy.getProperty(GVariant, "Percentage")) |v| {

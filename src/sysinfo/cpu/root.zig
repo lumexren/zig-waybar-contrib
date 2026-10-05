@@ -159,7 +159,7 @@ pub inline fn parseLine(line: []const u8) CPUError!Sample {
     var it = mem.tokenizeScalar(u8, line, ' ');
     _ = it.next() orelse return CPUError.UnexpectedFormat;
 
-    var fields: [8]u64 = @splat(8);
+    var fields: [8]u64 = @splat(0);
     var idx: usize = 0;
 
     while (it.next()) |tok| : (idx += 1) {

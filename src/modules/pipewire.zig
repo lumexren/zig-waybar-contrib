@@ -61,7 +61,7 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var connection: Connection = try .init(io, gpa, init.environ_map, .Session);
+    var connection: Connection = try .init(io, gpa, .Session, init.environ_map);
     defer connection.close();
 
     var pipewire: Pipewire = .init(io, init.environ_map, gpa, &connection);

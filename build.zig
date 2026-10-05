@@ -62,6 +62,11 @@ pub fn build(b: *Build) void {
         .fast => .full,
     };
 
+    const strip: bool = switch (lto) {
+        .none => false,
+        else => true,
+    };
+
     const rocm_path = b.option([]const u8, "rocm-path", "Path to ROCm") orelse "/opt/rocm";
     const cuda_path = b.option([]const u8, "cuda-path", "Path to CUDA") orelse "/opt/cuda/targets/x86_64-linux";
 
@@ -115,7 +120,7 @@ pub fn build(b: *Build) void {
             .target = target,
             .optimize = optimize,
             .link_libc = cfg.libc,
-            .strip = true,
+            .strip = strip,
             .imports = &.{
                 .{ .name = "bindings", .module = bindings },
                 .{ .name = "sysinfo", .module = sysinfo_mod },
