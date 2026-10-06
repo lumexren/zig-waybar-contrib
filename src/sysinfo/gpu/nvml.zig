@@ -23,51 +23,131 @@ pub const GPUError = @import("GPUError.zig").GPUError;
 pub const GPUInfo = @import("GPUInfo.zig");
 pub const GPUMemoryInfo = @import("GPUMemoryInfo.zig");
 
+const std = @import("std");
+const mem = std.mem;
+const DynLib = std.DynLib;
 const smi = @import("bindings").nvml;
 
+lib: ?DynLib = null,
 handle: smi.nvmlDevice_t = null,
+device_index: u32 = 0,
+
+fn_nvmlInit: ?*const fn () callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlShutdown: ?*const fn () callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetCount: ?*const fn (*c_uint) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetHandleByIndex: ?*const fn (c_uint, *smi.nvmlDevice_t) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetUtilizationRates: ?*const fn (smi.nvmlDevice_t, *smi.nvmlUtilization_t) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetTemperature: ?*const fn (smi.nvmlDevice_t, smi.nvmlTemperatureSensors_t, *c_uint) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetMemoryInfo: ?*const fn (smi.nvmlDevice_t, *smi.nvmlMemory_t) callconv(.c) smi.nvmlReturn_t = null,
+
+fn_nvmlDeviceGetName: ?*const fn (smi.nvmlDevice_t, [*]u8, c_uint) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetFanSpeed: ?*const fn (smi.nvmlDevice_t, *c_uint) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetPowerUsage: ?*const fn (smi.nvmlDevice_t, *c_uint) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetEnforcedPowerLimit: ?*const fn (smi.nvmlDevice_t, *c_uint) callconv(.c) smi.nvmlReturn_t = null,
+fn_nvmlDeviceGetClockInfo: ?*const fn (smi.nvmlDevice_t, smi.nvmlClockType_t, *c_uint) callconv(.c) smi.nvmlReturn_t = null,
 
 pub inline fn init(_: anytype) Backend {
     return .{};
 }
 
-pub inline fn shutdown(_: *Backend) void {
-    _ = smi.nvmlShutdown();
+pub fn shutdown(this: *Backend) void {
+    if (this.fn_nvmlShutdown) |shut| {
+        _ = shut();
+    }
+    if (this.lib) |*l| {
+        l.close();
+    }
+    this.* = .{};
 }
 
-pub fn initialize(this: *Backend) !void {
-    if (smi.nvmlInit() != smi.NVML_SUCCESS) return GPUError.InitFailed;
+pub fn initialize(this: *Backend, device_index: u32) !void {
+    var lib = (DynLib.open("libnvidia-ml.so.1") catch DynLib.open("libnvidia-ml.so")) catch return GPUError.LibraryNotFound;
+    errdefer lib.close();
 
-    var device_count: c_uint = 0;
-    if (smi.nvmlDeviceGetCount(&device_count) != smi.NVML_SUCCESS or device_count == 0) return GPUError.NoDevices;
+    const fn_init = lib.lookup(*const fn () callconv(.c) smi.nvmlReturn_t, "nvmlInit") orelse return GPUError.HandleFailed;
+    const fn_shut = lib.lookup(*const fn () callconv(.c) smi.nvmlReturn_t, "nvmlShutdown") orelse return GPUError.HandleFailed;
+    const fn_cnt = lib.lookup(*const fn (*c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetCount") orelse return GPUError.HandleFailed;
+    const fn_hdl = lib.lookup(*const fn (c_uint, *smi.nvmlDevice_t) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetHandleByIndex") orelse return GPUError.HandleFailed;
+    const fn_util = lib.lookup(*const fn (smi.nvmlDevice_t, *smi.nvmlUtilization_t) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetUtilizationRates") orelse return GPUError.HandleFailed;
+    const fn_temp = lib.lookup(*const fn (smi.nvmlDevice_t, smi.nvmlTemperatureSensors_t, *c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetTemperature") orelse return GPUError.HandleFailed;
+    const fn_mem = lib.lookup(*const fn (smi.nvmlDevice_t, *smi.nvmlMemory_t) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetMemoryInfo") orelse return GPUError.HandleFailed;
 
-    var handle: smi.nvmlDevice_t = undefined;
-    if (smi.nvmlDeviceGetHandleByIndex(0, &handle) != smi.NVML_SUCCESS) return GPUError.HandleFailed;
+    if (fn_init() != smi.NVML_SUCCESS) return GPUError.InitFailed;
+    errdefer _ = fn_shut();
 
+    var count: c_uint = 0;
+    if (fn_cnt(&count) != smi.NVML_SUCCESS or count == 0) return GPUError.NoDevices;
+    if (device_index >= count) return GPUError.DeviceNotFound;
+
+    var handle: smi.nvmlDevice_t = null;
+    if (fn_hdl(device_index, &handle) != smi.NVML_SUCCESS) return GPUError.HandleFailed;
+
+    this.lib = lib;
     this.handle = handle;
+    this.device_index = device_index;
+
+    this.fn_nvmlInit = fn_init;
+    this.fn_nvmlShutdown = fn_shut;
+    this.fn_nvmlDeviceGetCount = fn_cnt;
+    this.fn_nvmlDeviceGetHandleByIndex = fn_hdl;
+    this.fn_nvmlDeviceGetUtilizationRates = fn_util;
+    this.fn_nvmlDeviceGetTemperature = fn_temp;
+    this.fn_nvmlDeviceGetMemoryInfo = fn_mem;
+
+    this.fn_nvmlDeviceGetName = lib.lookup(*const fn (smi.nvmlDevice_t, [*]u8, c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetName");
+    this.fn_nvmlDeviceGetFanSpeed = lib.lookup(*const fn (smi.nvmlDevice_t, *c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetFanSpeed");
+    this.fn_nvmlDeviceGetPowerUsage = lib.lookup(*const fn (smi.nvmlDevice_t, *c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetPowerUsage");
+    this.fn_nvmlDeviceGetEnforcedPowerLimit = lib.lookup(*const fn (smi.nvmlDevice_t, *c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetEnforcedPowerLimit");
+    this.fn_nvmlDeviceGetClockInfo = lib.lookup(*const fn (smi.nvmlDevice_t, smi.nvmlClockType_t, *c_uint) callconv(.c) smi.nvmlReturn_t, "nvmlDeviceGetClockInfo");
 }
 
 pub fn getInfo(this: *Backend) !GPUInfo {
+    const handle = this.handle orelse return GPUError.NoDevices;
+
     var util: smi.nvmlUtilization_t = undefined;
-    _ = smi.nvmlDeviceGetUtilizationRates(this.handle, &util);
+    if (this.fn_nvmlDeviceGetUtilizationRates.?(handle, &util) != smi.NVML_SUCCESS) return GPUError.QueryFailed;
 
     var raw_temp: c_uint = 0;
-    _ = smi.nvmlDeviceGetTemperature(this.handle, smi.NVML_TEMPERATURE_GPU, &raw_temp);
+    if (this.fn_nvmlDeviceGetTemperature.?(handle, smi.NVML_TEMPERATURE_GPU, &raw_temp) != smi.NVML_SUCCESS) return GPUError.QueryFailed;
 
     var mem_info: smi.nvmlMemory_t = undefined;
-    _ = smi.nvmlDeviceGetMemoryInfo(this.handle, &mem_info);
+    if (this.fn_nvmlDeviceGetMemoryInfo.?(handle, &mem_info) != smi.NVML_SUCCESS) return GPUError.QueryFailed;
 
-    var fan_speed: c_uint = 0;
-    const fan_ok = smi.nvmlDeviceGetFanSpeed(this.handle, &fan_speed) == smi.NVML_SUCCESS;
-
-    return .{
+    var info: GPUInfo = .{
         .gpu_busy = util.gpu,
         .temperature = @floatFromInt(raw_temp),
-        .pwm = if (fan_ok) fan_speed else 0,
         .memory_info = .{
             .free = mem_info.free,
             .total = mem_info.total,
             .used = mem_info.used,
         },
+        .backend_name = "NVML",
     };
+
+    if (this.fn_nvmlDeviceGetName) |getName| {
+        var name_buf: [96]u8 = undefined;
+        if (getName(handle, &name_buf, name_buf.len) == smi.NVML_SUCCESS) info.setName(mem.sliceTo(&name_buf, 0));
+    }
+
+    if (this.fn_nvmlDeviceGetFanSpeed) |getFan| {
+        var fan_speed: c_uint = 0;
+        if (getFan(handle, &fan_speed) == smi.NVML_SUCCESS) info.pwm = fan_speed;
+    }
+
+    if (this.fn_nvmlDeviceGetPowerUsage) |getPwr| {
+        var pwr_mw: c_uint = 0;
+        if (getPwr(handle, &pwr_mw) == smi.NVML_SUCCESS) info.power_usage = @as(f32, @floatFromInt(pwr_mw)) / 1000.0;
+    }
+
+    if (this.fn_nvmlDeviceGetEnforcedPowerLimit) |getLimit| {
+        var limit_mw: c_uint = 0;
+        if (getLimit(handle, &limit_mw) == smi.NVML_SUCCESS) info.power_limit = @as(f32, @floatFromInt(limit_mw)) / 1000.0;
+    }
+
+    if (this.fn_nvmlDeviceGetClockInfo) |getClock| {
+        var clock_mhz: c_uint = 0;
+        if (getClock(handle, smi.NVML_CLOCK_GRAPHICS, &clock_mhz) == smi.NVML_SUCCESS) info.clock_speed = clock_mhz;
+    }
+
+    return info;
 }

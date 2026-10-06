@@ -24,6 +24,16 @@ const Allocator = mem.Allocator;
 const utils = @import("utils");
 const Replacer = utils.Replacer;
 const runner = @import("../runner.zig");
+const reporter_mod = @import("../reporter.zig");
+const Reporter = reporter_mod.Reporter;
+
+pub const BENCHMARKS = [_][]const u8{
+    "replacer_population",
+    "replacer_render_format_string",
+    "replacer_render_units_speed",
+    "replacer_reuse_with_clear",
+    "replacer_complex_template",
+};
 
 fn benchReplacerPopulation(allocator: Allocator, _: void) !void {
     var replacer = Replacer.init(allocator);
@@ -80,28 +90,54 @@ fn benchReplacerReuse(allocator: Allocator, ctx: ReusedReplacerContext) !void {
     defer ctx.replacer.free(rendered);
 }
 
-pub fn runBenchmarks(allocator: Allocator, filter: ?[]const u8) !void {
-    const opts: runner.BenchmarkOptions = .{};
+fn benchReplacerComplexTemplate(allocator: Allocator, _: void) !void {
+    var replacer = Replacer.init(allocator);
+    defer replacer.deinit();
 
-    if (filter == null or mem.find(u8, "replacer_population", filter.?) != null) {
-        const r1 = try runner.run(allocator, "replacer_population", opts, benchReplacerPopulation, {});
-        runner.printResult(r1);
+    try replacer.addCommonPlaceholders();
+    try replacer.addKey("device", "nvme0n1");
+    try replacer.addKey("mount", "/home");
+    try replacer.addKeyAny("read_bytes", @as(i64, 1024 * 1024 * 850));
+    try replacer.addKeyAny("write_bytes", @as(i64, 1024 * 1024 * 240));
+    try replacer.addKeyAny("read_rate", @as(f64, 1024 * 1024 * 45.5));
+    try replacer.addKeyAny("write_rate", @as(f64, 1024 * 1024 * 12.3));
+    try replacer.addKeyAny("disk_used_pct", @as(i64, 68));
+    try replacer.addKeyAny("free_space", @as(i64, 1024 * 1024 * 1024 * 120));
+
+    const rendered = try replacer.render("Disk {device} ({mount}): {disk_used_pct:'%'} {dot} R: {read_rate:^1}/s {dot} W: {write_rate:^1}/s {dot} Free: {free_space:.1}");
+    defer replacer.free(rendered);
+}
+
+fn shouldRun(name: []const u8, filter: ?[]const u8) bool {
+    const f = filter orelse return true;
+    return mem.find(u8, name, f) != null or mem.eql(u8, f, "replacer");
+}
+
+pub fn runBenchmarks(allocator: Allocator, reporter: *Reporter, writer: anytype, options: runner.BenchmarkOptions, filter: ?[]const u8) !void {
+    if (shouldRun("replacer_population", filter)) {
+        const r = try runner.run(allocator, "replacer_population", options, benchReplacerPopulation, {});
+        try reporter.report(writer, r);
     }
 
-    if (filter == null or mem.find(u8, "replacer_render_format_string", filter.?) != null) {
-        const r2 = try runner.run(allocator, "replacer_render_format_string", opts, benchReplacerRenderText, {});
-        runner.printResult(r2);
+    if (shouldRun("replacer_render_format_string", filter)) {
+        const r = try runner.run(allocator, "replacer_render_format_string", options, benchReplacerRenderText, {});
+        try reporter.report(writer, r);
     }
 
-    if (filter == null or mem.find(u8, "replacer_render_units_speed", filter.?) != null) {
-        const r3 = try runner.run(allocator, "replacer_render_units_speed", opts, benchReplacerRenderUnits, {});
-        runner.printResult(r3);
+    if (shouldRun("replacer_render_units_speed", filter)) {
+        const r = try runner.run(allocator, "replacer_render_units_speed", options, benchReplacerRenderUnits, {});
+        try reporter.report(writer, r);
     }
 
-    if (filter == null or mem.find(u8, "replacer_reuse_with_clear", filter.?) != null) {
+    if (shouldRun("replacer_reuse_with_clear", filter)) {
         var reused = Replacer.init(allocator);
         defer reused.deinit();
-        const r4 = try runner.run(allocator, "replacer_reuse_with_clear", opts, benchReplacerReuse, ReusedReplacerContext{ .replacer = &reused });
-        runner.printResult(r4);
+        const r = try runner.run(allocator, "replacer_reuse_with_clear", options, benchReplacerReuse, ReusedReplacerContext{ .replacer = &reused });
+        try reporter.report(writer, r);
+    }
+
+    if (shouldRun("replacer_complex_template", filter)) {
+        const r = try runner.run(allocator, "replacer_complex_template", options, benchReplacerComplexTemplate, {});
+        try reporter.report(writer, r);
     }
 }

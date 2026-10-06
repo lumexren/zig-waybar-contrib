@@ -115,6 +115,8 @@ The `text` and `tooltip` options support the following placeholders:
 | `{adapter_discoverable}`| Discoverable state (true/false)     |
 | `{device_count}`       | Number of connected devices          |
 | `{devices}`            | List of connected devices            |
+| `{battery}`            | Primary connected device battery (%) |
+| `{device_battery}`     | Primary connected device battery (%) |
 
 **Device List Format (`device_format`):**
 
@@ -170,6 +172,9 @@ The `text` and `tooltip` options support the following placeholders:
 | `{frequency_max}`      | Global maximum frequency (cpufreq)     |
 | `{frequency_max_unit}` | Unit for max frequency                 |
 | `{core_count}`         | Total number of CPU cores              |
+| `{load_1}`             | 1-minute load average                  |
+| `{load_5}`             | 5-minute load average                  |
+| `{load_15}`            | 15-minute load average                 |
 
 **Tooltip:**
 
@@ -199,6 +204,8 @@ Monitors disk usage and space statistics.
     .update_interval = 30,
     // Path to monitor (default: root filesystem)
     .path = "/",
+    // Block device for I/O monitoring (optional, e.g., "sda", "/dev/nvme0n1", or null for all)
+    .device = null,
     // Show all mounted filesystems in tooltip
     .show_all_mounts = false,
     // Warning threshold percentage
@@ -233,6 +240,10 @@ The `text` and `tooltip` options support the following placeholders:
 | `{inodes_used}`          | Used inodes                 |
 | `{inodes_free}`          | Free inodes                 |
 | `{inodes_percentage_used}` | Inode usage percentage    |
+| `{read_speed}`           | Disk read speed (`^N` fmt)  |
+| `{write_speed}`          | Disk write speed (`^N` fmt) |
+| `{total_speed}`          | Total I/O speed (`^N` fmt)  |
+| `{io_speed}`             | Total I/O speed (`^N` fmt)  |
 
 **Mount Tooltip (when `show_all_mounts = true`):**
 | Placeholder        | Description                    |
@@ -286,21 +297,24 @@ The `text` and `tooltip` options support the following placeholders:
 
 ### **GPU**
 
-> [!NOTE]
-> This module requires `amdsmi` for AMD GPUs or `cuda` for NVIDIA GPUs.<br>
-> Intel GPUs are not supported.
->
-> If no GPU library is found, the module will not work.
-
-Monitors GPU usage, temperature, and VRAM statistics.
+Monitors GPU usage, temperature, fan speed, power, clocks, and VRAM statistics.
 
 - **Platforms:** Any Linux
+- **Backends:**
+  - **NVIDIA:** Automated runtime dynamic loading via NVML (`libnvidia-ml.so` / `libnvidia-ml.so.1`) with zero build-time CUDA dependency.
+  - **AMD:** Automated runtime dynamic loading via AMD-SMI (`libamd_smi.so`) or native DRM sysfs (`amdgpu`).
+  - **Intel:** Native DRM sysfs (`i915` / `xe`).
+  - **Generic Linux:** DRM sysfs (`/sys/class/drm/card*`).
 
 **Configuration (`~/.config/zig-waybar-contrib/gpu.zon`):**
 ```zig
 .{
     // Check interval in seconds
     .update_interval = 1,
+    // Backend selection: "auto" (default), "nvidia" / "nvml", "amd" / "amdsmi", or "drm"
+    .backend = "auto",
+    // Device/card index for multi-GPU systems (default: 0)
+    .device_index = 0,
     // Warning threshold percentage
     .warning_threshold = 75,
     // Critical threshold percentage
@@ -310,7 +324,7 @@ Monitors GPU usage, temperature, and VRAM statistics.
     // Custom text format (default shown)
     .text = "{icon}  {usage_percentage:'%'} {dot} {temperature:'°C'}",
     // Custom tooltip format (default shown)
-    .tooltip = "PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2}",
+    .tooltip = "{device_name:nl}PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2} ({vram_percentage:'%'})",
 }
 ```
 
@@ -318,15 +332,21 @@ Monitors GPU usage, temperature, and VRAM statistics.
 
 The `text` and `tooltip` options support the following placeholders:
 
-| Placeholder          | Description           |
-| :------------------- | :-------------------- |
-| `{icon}`             | Module icon           |
-| `{usage_percentage}` | GPU usage percentage  |
-| `{temperature}`      | GPU temperature (°C)  |
-| `{pwm_percentage}`   | Fan speed PWM (%)     |
-| `{vram_total}`       | Total VRAM size       |
-| `{vram_usage}`       | Used VRAM size        |
-| `{vram_free}`        | Free VRAM size        |
+| Placeholder          | Description                                    |
+| :------------------- | :--------------------------------------------- |
+| `{icon}`             | Module icon                                    |
+| `{device_name}`      | GPU model name (e.g., NVIDIA GeForce RTX 3060) |
+| `{usage_percentage}` | GPU core usage percentage (0–100)              |
+| `{temperature}`      | GPU temperature (°C)                           |
+| `{pwm_percentage}`   | Fan speed PWM percentage (%)                   |
+| `{vram_total}`       | Total VRAM size (supports `:.2` byte format)   |
+| `{vram_usage}`       | Used VRAM size (supports `:.2` byte format)    |
+| `{vram_free}`        | Free VRAM size (supports `:.2` byte format)     |
+| `{vram_percentage}`  | VRAM usage percentage (0–100)                  |
+| `{power_usage}`      | Current power usage in Watts (W)               |
+| `{power_limit}`      | Enforced power limit in Watts (W)              |
+| `{clock_speed}`      | Graphics clock frequency in MHz                |
+| `{backend}`          | Active backend name (NVML, AMD-SMI, or DRM)    |
 
 ---
 
@@ -443,6 +463,8 @@ Displays media player information using the MPRIS2 standard.
     .text = "{icon}  {title} {dot} {artist}",
     // Max length of text
     .text_max_length = 256,
+    // Length of visual progress bar (in characters)
+    .progress_bar_length = 10,
     // Custom tooltip format (default shown)
     .tooltip = "{player_name}: {status:nl:title} - {artist:nl}Album: {album:nl:position} / {length}",
     // Text to show when no player is found
@@ -471,6 +493,9 @@ The `text` and `tooltip` options support the following placeholders:
 | `{position_us}`     | Track position in microseconds         |
 | `{length}`          | Formatted track length (MM:SS)         |
 | `{length_us}`       | Track length in microseconds           |
+| `{progress_bar}`    | Visual progress bar (e.g., `=====>----`)|
+| `{progress_percentage}` | Progress percentage (0-100)        |
+| `{position_percentage}` | Progress percentage (0-100)        |
 | `{can_control}`     | Player control capability              |
 | `{can_go_next}`     | Can skip to next track                 |
 | `{can_go_previous}` | Can skip to previous track             |
@@ -482,7 +507,7 @@ The `text` and `tooltip` options support the following placeholders:
 
 ### **Network**
 
-Monitors network traffic and speed.
+Monitors network traffic, interface details, and wireless connection status.
 
 - **Platforms:** Any Linux
 
@@ -510,6 +535,10 @@ The `text` and `tooltip` options support the following placeholders:
 | `{interface}`      | Network interface name               |
 | `{gateway}`        | Gateway IP address                   |
 | `{local_ip}`       | Local IP address                     |
+| `{ssid}`           | Wireless network SSID                |
+| `{signal_strength}`| Wireless signal percentage (0-100%)  |
+| `{signal_dbm}`     | Wireless signal level in dBm         |
+| `{is_wireless}`    | Boolean indicating wireless interface|
 | `{download_speed}` | Download speed (supports `^N` fmt)   |
 | `{upload_speed}`   | Upload speed (supports `^N` fmt)     |
 | `{total_speed}`    | Total speed (supports `^N` fmt)      |
@@ -567,8 +596,8 @@ The `text` and `tooltip` options support the following placeholders:
 
 Tracks available system package updates.
 
-- **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux
-- **Managers:** pacman, apt, dnf, zypper, xbps
+- **Platforms:** Arch Linux, Debian, Fedora, OpenSUSE, Void Linux, Flatpak
+- **Managers:** pacman, yay, paru, apt, dnf, zypper, xbps, flatpak
 
 **Configuration (`~/.config/zig-waybar-contrib/updates.zon`):**
 ```zig
@@ -683,3 +712,42 @@ Instead of writing multiple standalone placeholders back-to-back, you can chain 
 * **Literal Suffixing:** Seamlessly attach units or structural symbols using single quotes.
   * `{frequency:2:'Hz'}` → `4200Hz`
   * `{cpu_brand:' | ':cpu_usage:'%'}` → `AMD | 85%`
+
+---
+
+### **Instant Refresh & Waybar Signals**
+
+All continuous modules use Linux `signalfd` with non-blocking polling, which enables immediate re-evaluation upon receiving external signals with zero CPU overhead while sleeping.
+
+Modules listen for:
+- Standard user signals: `SIGUSR1`, `SIGUSR2`
+- Linux real-time signals: `SIGRTMIN` through `SIGRTMAX` (signals `32` to `64`)
+
+#### **Waybar Configuration Example:**
+
+You can configure Waybar's native `"signal"` or `"on-click"` directives to instantly refresh a module:
+
+```jsonc
+// In ~/.config/waybar/config.jsonc:
+"custom/updates": {
+    "exec": "waybar-module-updates",
+    "return-type": "json",
+    "signal": 1, // Waybar will send SIGRTMIN+1
+    "on-click": "pkill -SIGRTMIN+1 waybar-module-updates"
+},
+"custom/pipewire": {
+    "exec": "waybar-module-pipewire",
+    "return-type": "json",
+    "signal": 2,
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+}
+```
+
+You can also trigger an immediate refresh from scripts, keybindings, or shell commands:
+```bash
+# Using SIGUSR1
+pkill -SIGUSR1 waybar-module-cpu
+
+# Using Waybar RT signals
+pkill -SIGRTMIN+1 waybar-module-updates
+```

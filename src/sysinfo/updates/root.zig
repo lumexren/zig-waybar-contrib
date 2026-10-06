@@ -378,3 +378,39 @@ test "parseUpdates xbps" {
     try testing.expectEqualStrings("dash", updates[6].pkg_name);
     try testing.expectEqualStrings("0.5.12_2", updates[6].new_version);
 }
+
+test "parseUpdates yay and paru" {
+    const output =
+        \\visual-studio-code-bin 1.96.2-1 -> 1.96.3-1
+        \\spotify 1:1.2.53.440-1 -> 1:1.2.56.502-1
+        \\
+    ;
+
+    const yay_updates = try testParseUpdates(testing.allocator, .yay, output);
+    defer testing.allocator.free(yay_updates);
+
+    try testing.expectEqual(@as(usize, 2), yay_updates.len);
+    try testing.expectEqualStrings("visual-studio-code-bin", yay_updates[0].pkg_name);
+    try testing.expectEqualStrings("1.96.3-1", yay_updates[0].new_version);
+    try testing.expectEqualStrings("spotify", yay_updates[1].pkg_name);
+    try testing.expectEqualStrings("1:1.2.56.502-1", yay_updates[1].new_version);
+
+    const paru_updates = try testParseUpdates(testing.allocator, .paru, output);
+    defer testing.allocator.free(paru_updates);
+
+    try testing.expectEqual(@as(usize, 2), paru_updates.len);
+    try testing.expectEqualStrings("spotify", paru_updates[1].pkg_name);
+}
+
+test "parseUpdates flatpak" {
+    const output = "org.mozilla.firefox\t134.0.2\norg.signal.Signal\t7.37.0\n";
+
+    const updates = try testParseUpdates(testing.allocator, .flatpak, output);
+    defer testing.allocator.free(updates);
+
+    try testing.expectEqual(@as(usize, 2), updates.len);
+    try testing.expectEqualStrings("org.mozilla.firefox", updates[0].pkg_name);
+    try testing.expectEqualStrings("134.0.2", updates[0].new_version);
+    try testing.expectEqualStrings("org.signal.Signal", updates[1].pkg_name);
+    try testing.expectEqualStrings("7.37.0", updates[1].new_version);
+}

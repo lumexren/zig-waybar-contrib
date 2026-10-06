@@ -33,6 +33,14 @@ pub fn init() !Watcher {
     var mask: posix.sigset_t = mem.zeroes(posix.sigset_t);
     posix.sigaddset(&mask, posix.SIG.USR1);
     posix.sigaddset(&mask, posix.SIG.USR2);
+
+    // Block Linux real-time signals to support Waybar's native "signal": N (SIGRTMIN+N).
+    // Under glibc (when link_libc is true), signals 32 and 33 are reserved for NPTL and
+    // passing them to sigaddset returns EINVAL, causing a panic.
+    const builtin = @import("builtin");
+    const start_rt: u32 = if (builtin.link_libc) 34 else 32;
+    var sig_num: u32 = start_rt;
+    while (sig_num <= 64) : (sig_num += 1) posix.sigaddset(&mask, @fromBackingInt(@intCast(sig_num)));
     posix.sigprocmask(posix.SIG.BLOCK, &mask, null);
 
     const sfd = try posix.signalfd(-1, &mask, linux.SFD.NONBLOCK | linux.SFD.CLOEXEC);
@@ -84,4 +92,9 @@ test "Watcher wake on signal" {
     try posix.raise(posix.SIG.USR1);
     const woke_by_signal = watcher.waitMs(1000);
     try testing.expect(woke_by_signal);
+
+    // Sending real-time signal (SIGRTMIN+1: 35) also causes waitMs to return true
+    try posix.raise(@fromBackingInt(@intCast(35)));
+    const woke_by_rtsig = watcher.waitMs(1000);
+    try testing.expect(woke_by_rtsig);
 }

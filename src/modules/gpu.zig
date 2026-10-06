@@ -24,7 +24,6 @@ const utils = @import("utils");
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
-const ArrayList = std.ArrayList;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -35,9 +34,11 @@ pub const ModuleConfig = struct {
     update_interval: i64 = 1,
     warning_threshold: ?f64 = 75.0,
     critical_threshold: ?f64 = 90.0,
+    backend: ?[]const u8 = null,
+    device_index: ?u32 = null,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {usage_percentage:'%'} {dot} {temperature:'°C'}",
-    tooltip: []const u8 = "PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2}",
+    tooltip: []const u8 = "{device_name:nl}PWM {dot} {pwm_percentage:'%':nl}VRAM Total {dot} {vram_total:.0:nl}VRAM Free {dot} {vram_free:.2:nl}VRAM Usage {dot} {vram_usage:.2} ({vram_percentage:'%'})",
 };
 
 pub fn main(init: process.Init) !void {
@@ -61,12 +62,20 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    var module: sysinfo = .init(gpa);
+    var module: sysinfo.GPU = .initWithIo(io, gpa);
+    defer module.deinit();
+
+    if (data.backend) |b_str| {
+        module.setBackend(sysinfo.BackendType.fromString(b_str));
+    }
+    if (data.device_index) |idx| {
+        module.setDeviceIndex(idx);
+    }
+
     const initialized = blk: {
         module.initialize() catch break :blk false;
         break :blk true;
     };
-    defer if (initialized) module.shutdown();
 
     while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
@@ -100,6 +109,32 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("vram_total", gpu_info.memory_info.total);
         try replacer.addKeyAny("vram_usage", gpu_info.memory_info.used);
         try replacer.addKeyAny("vram_free", gpu_info.memory_info.free);
+        try replacer.addKeyAny("vram_percentage", gpu_info.memory_info.percentage());
+        try replacer.addKey("backend", gpu_info.backend_name);
+
+        if (gpu_info.getName()) |name| {
+            try replacer.addKey("device_name", name);
+        } else {
+            try replacer.addKey("device_name", "GPU");
+        }
+
+        if (gpu_info.power_usage) |pwr| {
+            try replacer.addKeyAny("power_usage", pwr);
+        } else {
+            try replacer.addKey("power_usage", "N/A");
+        }
+
+        if (gpu_info.power_limit) |limit| {
+            try replacer.addKeyAny("power_limit", limit);
+        } else {
+            try replacer.addKey("power_limit", "N/A");
+        }
+
+        if (gpu_info.clock_speed) |clk| {
+            try replacer.addKeyAny("clock_speed", clk);
+        } else {
+            try replacer.addKey("clock_speed", "N/A");
+        }
 
         const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
@@ -131,6 +166,8 @@ pub fn main(init: process.Init) !void {
             } else {
                 try json.setClass("normal");
             }
+        } else {
+            try json.setClass("normal");
         }
 
         try json.write(stdout);

@@ -36,13 +36,20 @@ pub const nvmlMemory_t = extern struct {
     used: u64,
 };
 
+pub const nvmlClockType_t = c_int;
+pub const NVML_CLOCK_GRAPHICS: nvmlClockType_t = 0;
+
 pub extern "nvidia-ml" fn nvmlInit() nvmlReturn_t;
 pub extern "nvidia-ml" fn nvmlShutdown() nvmlReturn_t;
 
 pub extern "nvidia-ml" fn nvmlDeviceGetCount(deviceCount: *c_uint) nvmlReturn_t;
 pub extern "nvidia-ml" fn nvmlDeviceGetHandleByIndex(index: c_uint, device: *nvmlDevice_t) nvmlReturn_t;
+pub extern "nvidia-ml" fn nvmlDeviceGetName(device: nvmlDevice_t, name: [*]u8, length: c_uint) nvmlReturn_t;
 
 pub extern "nvidia-ml" fn nvmlDeviceGetUtilizationRates(device: nvmlDevice_t, utilization: *nvmlUtilization_t) nvmlReturn_t;
 pub extern "nvidia-ml" fn nvmlDeviceGetTemperature(device: nvmlDevice_t, sensorType: nvmlTemperatureSensors_t, temp: *c_uint) nvmlReturn_t;
 pub extern "nvidia-ml" fn nvmlDeviceGetMemoryInfo(device: nvmlDevice_t, memory: *nvmlMemory_t) nvmlReturn_t;
 pub extern "nvidia-ml" fn nvmlDeviceGetFanSpeed(device: nvmlDevice_t, speed: *c_uint) nvmlReturn_t;
+pub extern "nvidia-ml" fn nvmlDeviceGetPowerUsage(device: nvmlDevice_t, power: *c_uint) nvmlReturn_t;
+pub extern "nvidia-ml" fn nvmlDeviceGetEnforcedPowerLimit(device: nvmlDevice_t, limit: *c_uint) nvmlReturn_t;
+pub extern "nvidia-ml" fn nvmlDeviceGetClockInfo(device: nvmlDevice_t, clockType: nvmlClockType_t, clockMHz: *c_uint) nvmlReturn_t;

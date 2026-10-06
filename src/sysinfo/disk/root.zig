@@ -23,12 +23,31 @@ pub const DiskInfo = @import("DiskInfo.zig");
 pub const formatBytes = @import("DiskInfo.zig").formatBytes;
 pub const MountedFilesystem = @import("MountedFilesystem.zig");
 
+pub const DiskIOStats = struct {
+    read_bytes: u64 = 0,
+    write_bytes: u64 = 0,
+    timestamp: i64 = 0,
+
+    pub fn calculateRates(old: DiskIOStats, new: DiskIOStats) struct { read: f64, write: f64, total: f64 } {
+        const dt = new.timestamp - old.timestamp;
+        if (dt <= 0) return .{ .read = 0.0, .write = 0.0, .total = 0.0 };
+
+        const t: f64 = @floatFromInt(dt);
+        const r: f64 = @floatFromInt(new.read_bytes -| old.read_bytes);
+        const w: f64 = @floatFromInt(new.write_bytes -| old.write_bytes);
+
+        return .{ .read = r / t, .write = w / t, .total = (r + w) / t };
+    }
+};
+
 const stfs = @import("bindings").statvfs;
 
 const std = @import("std");
 const StaticStringMap = std.StaticStringMap;
 const ArrayList = std.ArrayList;
 const mem = std.mem;
+const ascii = std.ascii;
+const fmt = std.fmt;
 const Allocator = mem.Allocator;
 const os = std.os;
 const linux = os.linux;
@@ -37,6 +56,7 @@ const Threaded = Io.Threaded;
 const Dir = Io.Dir;
 
 const MOUNTS_PATH = "/proc/mounts";
+const DISKSTATS_PATH = "/proc/diskstats";
 const MOUNTS_BUFFER_SIZE = 16 * 1024;
 
 /// Filesystem types to ignore (virtual/pseudo filesystems).
@@ -123,6 +143,70 @@ pub fn fetchDiskInfo(path: []const u8) DiskError!DiskInfo {
 /// Fetches disk info for the root filesystem ("/").
 pub fn fetchRootDiskInfo() DiskError!DiskInfo {
     return fetchDiskInfo("/");
+}
+
+/// Fetches disk I/O stats from /proc/diskstats for target device or all physical disks.
+pub fn getDiskIOStats(io: Io, target_device: ?[]const u8, timestamp: i64) !DiskIOStats {
+    var buffer: [16 * 1024]u8 = undefined;
+    var file = try Dir.openFileAbsolute(io, DISKSTATS_PATH, .{ .mode = .read_only });
+    defer file.close(io);
+
+    var reader = file.reader(io, &.{});
+    const bytes_read = try reader.interface.readSliceShort(&buffer);
+    if (bytes_read == 0) return .{ .read_bytes = 0, .write_bytes = 0, .timestamp = timestamp };
+
+    return parseDiskStats(buffer[0..bytes_read], target_device, timestamp);
+}
+
+pub fn parseDiskStats(content: []const u8, target_device: ?[]const u8, timestamp: i64) DiskIOStats {
+    var lines = mem.splitScalar(u8, content, '\n');
+    var total_read_bytes: u64 = 0;
+    var total_write_bytes: u64 = 0;
+
+    const clean_target = if (target_device) |td| blk: {
+        var t = td;
+        if (mem.startsWith(u8, t, "/dev/")) t = t[5..];
+        break :blk if (t.len > 0) t else null;
+    } else null;
+
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var it = mem.tokenizeAny(u8, line, " \t");
+        _ = it.next() orelse continue; // major
+        _ = it.next() orelse continue; // minor
+        const dev_name = it.next() orelse continue;
+
+        if (clean_target) |t| {
+            if (!mem.eql(u8, dev_name, t)) continue;
+        } else {
+            if (mem.startsWith(u8, dev_name, "loop") or mem.startsWith(u8, dev_name, "zram") or mem.startsWith(u8, dev_name, "dm-")) continue;
+            if ((mem.startsWith(u8, dev_name, "sd") or mem.startsWith(u8, dev_name, "vd") or mem.startsWith(u8, dev_name, "hd")) and ascii.isDigit(dev_name[dev_name.len - 1])) continue;
+            if (mem.startsWith(u8, dev_name, "nvme") and mem.find(u8, dev_name, "p") != null) continue;
+            if (mem.startsWith(u8, dev_name, "mmcblk") and mem.find(u8, dev_name, "p") != null) continue;
+        }
+
+        _ = it.next() orelse continue; // reads completed
+        _ = it.next() orelse continue; // reads merged
+        const sectors_read_str = it.next() orelse continue;
+        _ = it.next() orelse continue; // time reading
+        _ = it.next() orelse continue; // writes completed
+        _ = it.next() orelse continue; // writes merged
+        const sectors_written_str = it.next() orelse continue;
+
+        const sectors_read = fmt.parseInt(u64, sectors_read_str, 10) catch continue;
+        const sectors_written = fmt.parseInt(u64, sectors_written_str, 10) catch continue;
+
+        total_read_bytes += sectors_read * 512;
+        total_write_bytes += sectors_written * 512;
+
+        if (clean_target != null) break;
+    }
+
+    return .{
+        .read_bytes = total_read_bytes,
+        .write_bytes = total_write_bytes,
+        .timestamp = timestamp,
+    };
 }
 
 /// Fetches information about all mounted real filesystems using the provided Io context.
@@ -286,4 +370,35 @@ test "fetchMountedFilesystems" {
         try testing.expect(fs.fs_type.len > 0);
         try testing.expect(fs.disk_info.total > 0);
     }
+}
+
+test "parseDiskStats and calculateRates" {
+    const content =
+        \\   8       0 sda 100 0 2000 50 200 0 4000 60 0 10 20
+        \\   8       1 sda1 100 0 2000 50 200 0 4000 60 0 10 20
+        \\ 259       0 nvme0n1 50 0 1000 20 100 0 2000 30 0 5 10
+        \\
+    ;
+
+    // Test specific device
+    const sda_stats = parseDiskStats(content, "/dev/sda", 10);
+    try testing.expectEqual(@as(u64, 2000 * 512), sda_stats.read_bytes);
+    try testing.expectEqual(@as(u64, 4000 * 512), sda_stats.write_bytes);
+    try testing.expectEqual(@as(i64, 10), sda_stats.timestamp);
+
+    // Test all devices (sda + nvme0n1, skipping partition sda1)
+    const all_stats = parseDiskStats(content, null, 10);
+    try testing.expectEqual(@as(u64, 3000 * 512), all_stats.read_bytes);
+    try testing.expectEqual(@as(u64, 6000 * 512), all_stats.write_bytes);
+
+    // Test rate calculation
+    const sda_stats_next: DiskIOStats = .{
+        .read_bytes = 2000 * 512 + 1024 * 1024,
+        .write_bytes = 4000 * 512 + 2 * 1024 * 1024,
+        .timestamp = 11,
+    };
+    const rates = DiskIOStats.calculateRates(sda_stats, sda_stats_next);
+    try testing.expectApproxEqAbs(@as(f64, 1024 * 1024), rates.read, 1.0);
+    try testing.expectApproxEqAbs(@as(f64, 2 * 1024 * 1024), rates.write, 1.0);
+    try testing.expectApproxEqAbs(@as(f64, 3 * 1024 * 1024), rates.total, 1.0);
 }

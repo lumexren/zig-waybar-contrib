@@ -23,6 +23,18 @@ pub const RouteInfo = @import("RouteInfo.zig");
 pub const NetworkStats = @import("NetworkStats.zig");
 pub const Header = @import("Header.zig");
 
+pub const WifiInfo = struct {
+    ssid: ?[]const u8 = null,
+    signal_strength: u8 = 0,
+    signal_dbm: ?i32 = null,
+    is_wireless: bool = false,
+
+    pub fn deinit(this: *WifiInfo, allocator: Allocator) void {
+        if (this.ssid) |s| allocator.free(s);
+        this.* = undefined;
+    }
+};
+
 const std = @import("std");
 const mem = std.mem;
 const fmt = std.fmt;
@@ -32,8 +44,22 @@ const Dir = Io.Dir;
 const linux = std.os.linux;
 
 const SIOCGIFADDR: u32 = 0x8915;
+const SIOCGIWESSID: u32 = 0x8B1B;
 const ROUTE_PATH = "/proc/net/route";
 const DEV_PATH = "/proc/net/dev";
+const WIRELESS_PATH = "/proc/net/wireless";
+
+const iw_point = extern struct {
+    pointer: ?*anyopaque,
+    length: u16,
+    flags: u16,
+};
+
+const iwreq = extern struct {
+    name: [16]u8 = @splat(0),
+    point: iw_point,
+    pad: [4]u8 = @splat(0),
+};
 
 /// Formats an IPv4 address from 4 bytes.
 fn formatIPv4(allocator: Allocator, bytes: [4]u8) ![]const u8 {
@@ -96,6 +122,77 @@ pub fn getLocalIP(allocator: Allocator, interface: []const u8) ![]const u8 {
 
     const addr: *const linux.sockaddr.in = @ptrCast(@alignCast(&ifr.ifru.addr));
     return formatIPv4(allocator, @bitCast(addr.addr));
+}
+
+/// Get WiFi information (SSID, signal strength, signal level) for a given interface.
+pub fn getWifiInfo(io: Io, allocator: Allocator, interface: []const u8) WifiInfo {
+    var info = WifiInfo{};
+
+    // First check /proc/net/wireless for link quality and signal level
+    var buffer: [2048]u8 = undefined;
+    if (readFile(io, WIRELESS_PATH, &buffer)) |content| {
+        parseWirelessStats(content, interface, &info);
+    } else |_| {}
+
+    // Check SSID via SIOCGIWESSID ioctl
+    const sock_result = linux.socket(linux.AF.INET, linux.SOCK.DGRAM, 0);
+    if (sock_result >= 0) {
+        const sock: linux.fd_t = @intCast(sock_result);
+        defer _ = linux.close(sock);
+
+        var essid_buf: [33]u8 = @splat(0);
+        var req: iwreq = .{
+            .point = .{
+                .pointer = &essid_buf,
+                .length = 32,
+                .flags = 0,
+            },
+        };
+        const len = @min(interface.len, 15);
+        @memcpy(req.name[0..len], interface[0..len]);
+
+        if (linux.ioctl(sock, SIOCGIWESSID, @intFromPtr(&req)) == 0) {
+            info.is_wireless = true;
+            const ssid_len = @min(req.point.length, 32);
+            const trimmed = mem.trim(u8, essid_buf[0..ssid_len], "\x00 \t\n\r");
+            if (trimmed.len > 0) {
+                info.ssid = allocator.dupe(u8, trimmed) catch null;
+            }
+        }
+    }
+
+    return info;
+}
+
+pub fn parseWirelessStats(content: []const u8, interface: []const u8, info: *WifiInfo) void {
+    var lines = mem.splitScalar(u8, content, '\n');
+    _ = lines.next();
+    _ = lines.next();
+
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        const colon = mem.findScalar(u8, line, ':') orelse continue;
+        const iface = mem.trim(u8, line[0..colon], " \t");
+        if (!mem.eql(u8, iface, interface)) continue;
+
+        info.is_wireless = true;
+
+        var fields = mem.tokenizeAny(u8, line[colon + 1 ..], " \t");
+        _ = fields.next(); // status
+        if (fields.next()) |link_str| {
+            const link_clean = mem.trimEnd(u8, link_str, ".");
+            if (fmt.parseInt(u32, link_clean, 10)) |link| {
+                info.signal_strength = if (link <= 70) @intCast(@min(100, (link * 100) / 70)) else if (link <= 100) @intCast(link) else 100;
+            } else |_| {}
+        }
+        if (fields.next()) |level_str| {
+            const link_clean = mem.trimEnd(u8, level_str, ".");
+            if (fmt.parseInt(i32, link_clean, 10)) |level| {
+                info.signal_dbm = level;
+            } else |_| {}
+        }
+        break;
+    }
 }
 
 /// Read network statistics from /proc/net/dev.
@@ -228,4 +325,22 @@ test "getNetworkStats - invalid interface" {
         NetworkError.InterfaceNotFound,
         getNetworkStats(threaded.io(), "nonexistent", 0),
     );
+}
+
+test "parseWirelessStats" {
+    const content =
+        \\Inter-| sta-|   Quality        |   Discarded packets               | Missed | WE
+        \\ face | tus | link level noise |  nwid  crypt   frag  retry   misc | beacon | 22
+        \\ wlp3s0: 0000   56.  -54.  -256.        0      0      0      0      0        0
+        \\
+    ;
+    var info = WifiInfo{};
+    parseWirelessStats(content, "wlp3s0", &info);
+    try testing.expect(info.is_wireless);
+    try testing.expectEqual(@as(u8, 80), info.signal_strength);
+    try testing.expectEqual(@as(?i32, -54), info.signal_dbm);
+
+    var info_eth = WifiInfo{};
+    parseWirelessStats(content, "enp4s0", &info_eth);
+    try testing.expect(!info_eth.is_wireless);
 }

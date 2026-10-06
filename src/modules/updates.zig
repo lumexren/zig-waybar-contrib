@@ -46,9 +46,12 @@ pub const ModuleConfig = struct {
 fn getManager(name: []const u8) Updates.PackageManager {
     if (mem.eql(u8, name, "apt")) return .apt;
     if (mem.eql(u8, name, "pacman")) return .pacman;
+    if (mem.eql(u8, name, "yay")) return .yay;
+    if (mem.eql(u8, name, "paru")) return .paru;
     if (mem.eql(u8, name, "dnf")) return .dnf;
     if (mem.eql(u8, name, "zypper")) return .zypper;
     if (mem.eql(u8, name, "xbps")) return .xbps;
+    if (mem.eql(u8, name, "flatpak")) return .flatpak;
 
     std.debug.panic("updates: {s} manager is not supported.", .{name});
 }

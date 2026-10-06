@@ -23,7 +23,8 @@ pub const Memory = @import("memory/root.zig");
 pub const Fan = @import("fan/root.zig");
 pub const network = @import("network/root.zig");
 pub const Updates = @import("updates/root.zig");
-pub const gpu = @import("gpu/root.zig").SMI;
+pub const gpu = @import("gpu/root.zig");
+pub const GPU = @import("gpu/root.zig").GPU;
 pub const mpris = @import("mpris/root.zig");
 pub const battery = @import("battery/root.zig");
 pub const Backlight = @import("backlight/root.zig");
@@ -39,6 +40,7 @@ test {
     _ = @import("network/root.zig");
     _ = @import("network/lib.zig");
     _ = @import("updates/root.zig");
+    _ = @import("gpu/root.zig");
     _ = @import("mpris/root.zig");
     _ = @import("battery/root.zig");
     _ = @import("backlight/root.zig");

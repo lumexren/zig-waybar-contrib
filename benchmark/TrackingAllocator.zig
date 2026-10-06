@@ -32,6 +32,7 @@ current_allocated: usize = 0,
 peak_allocated: usize = 0,
 alloc_count: usize = 0,
 free_count: usize = 0,
+realloc_count: usize = 0,
 
 pub fn init(parent: Allocator) TrackingAllocator {
     return .{ .parent_allocator = parent };
@@ -51,13 +52,36 @@ pub fn reset(this: *TrackingAllocator) void {
     this.peak_allocated = 0;
     this.alloc_count = 0;
     this.free_count = 0;
+    this.realloc_count = 0;
 }
 
 pub fn leakedBytes(this: *const TrackingAllocator) usize {
-    if (this.total_allocated > this.total_freed) {
-        return this.total_allocated - this.total_freed;
-    }
+    if (this.total_allocated > this.total_freed) return this.total_allocated - this.total_freed;
     return 0;
+}
+
+pub fn hasLeaks(this: *const TrackingAllocator) bool {
+    return this.leakedBytes() > 0;
+}
+
+pub fn allocsPerOp(this: *const TrackingAllocator, iters: u64) f64 {
+    if (iters == 0) return 0.0;
+    return @as(f64, @floatFromInt(this.alloc_count)) / @as(f64, @floatFromInt(iters));
+}
+
+pub fn freesPerOp(this: *const TrackingAllocator, iters: u64) f64 {
+    if (iters == 0) return 0.0;
+    return @as(f64, @floatFromInt(this.free_count)) / @as(f64, @floatFromInt(iters));
+}
+
+pub fn reallocsPerOp(this: *const TrackingAllocator, iters: u64) f64 {
+    if (iters == 0) return 0.0;
+    return @as(f64, @floatFromInt(this.realloc_count)) / @as(f64, @floatFromInt(iters));
+}
+
+pub fn bytesPerOp(this: *const TrackingAllocator, iters: u64) f64 {
+    if (iters == 0) return 0.0;
+    return @as(f64, @floatFromInt(this.total_allocated)) / @as(f64, @floatFromInt(iters));
 }
 
 fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*]u8 {
@@ -66,29 +90,28 @@ fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*
     this.total_allocated += len;
     this.current_allocated += len;
     this.alloc_count += 1;
-    if (this.current_allocated > this.peak_allocated) {
-        this.peak_allocated = this.current_allocated;
-    }
+    if (this.current_allocated > this.peak_allocated)  this.peak_allocated = this.current_allocated;
     return result;
 }
 
 fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, ret_addr: usize) bool {
     const this: *TrackingAllocator = @ptrCast(@alignCast(ctx));
     if (this.parent_allocator.rawResize(buf, buf_align, new_len, ret_addr)) {
+        this.realloc_count += 1;
         if (new_len > buf.len) {
             const diff = new_len - buf.len;
             this.total_allocated += diff;
             this.current_allocated += diff;
-            if (this.current_allocated > this.peak_allocated) {
-                this.peak_allocated = this.current_allocated;
-            }
+            if (this.current_allocated > this.peak_allocated) this.peak_allocated = this.current_allocated;
         } else {
             const diff = buf.len - new_len;
             this.total_freed += diff;
             this.current_allocated -= diff;
         }
+
         return true;
     }
+
     return false;
 }
 
@@ -96,19 +119,19 @@ fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, re
     const this: *TrackingAllocator = @ptrCast(@alignCast(ctx));
     const result = this.parent_allocator.rawRemap(memory, alignment, new_len, ret_addr);
     if (result != null) {
+        this.realloc_count += 1;
         if (new_len > memory.len) {
             const diff = new_len - memory.len;
             this.total_allocated += diff;
             this.current_allocated += diff;
-            if (this.current_allocated > this.peak_allocated) {
-                this.peak_allocated = this.current_allocated;
-            }
+            if (this.current_allocated > this.peak_allocated) this.peak_allocated = this.current_allocated;
         } else if (new_len < memory.len) {
             const diff = memory.len - new_len;
             this.total_freed += diff;
             this.current_allocated -= diff;
         }
     }
+    
     return result;
 }
 
@@ -118,4 +141,24 @@ fn free(ctx: *anyopaque, buf: []u8, buf_align: Alignment, ret_addr: usize) void 
     this.total_freed += buf.len;
     this.current_allocated -= buf.len;
     this.free_count += 1;
+}
+
+test "TrackingAllocator basic tracking" {
+    const testing = std.testing;
+    var tracker: TrackingAllocator = .init(testing.allocator);
+    const a = tracker.allocator();
+
+    const slice = try a.alloc(u8, 128);
+    try testing.expectEqual(@as(usize, 128), tracker.total_allocated);
+    try testing.expectEqual(@as(usize, 128), tracker.current_allocated);
+    try testing.expectEqual(@as(usize, 128), tracker.peak_allocated);
+    try testing.expectEqual(@as(usize, 1), tracker.alloc_count);
+    try testing.expect(tracker.hasLeaks());
+
+    a.free(slice);
+    try testing.expectEqual(@as(usize, 128), tracker.total_freed);
+    try testing.expectEqual(@as(usize, 0), tracker.current_allocated);
+    try testing.expectEqual(@as(usize, 1), tracker.free_count);
+    try testing.expect(!tracker.hasLeaks());
+    try testing.expectEqual(@as(usize, 0), tracker.leakedBytes());
 }
