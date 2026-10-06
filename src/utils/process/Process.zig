@@ -42,17 +42,17 @@ pid: linux.pid_t,
 
 /// Send a real-time signal at SIGRTMIN + `offset`.
 pub inline fn sendRtSignal(this: Process, offset: u8) !void {
-    try posix.kill(this.pid, @enumFromInt(linux.sigrtmin() + @as(i32, offset)));
+    try posix.kill(this.pid, @fromBackingInt(@intCast(linux.sigrtmin() + @as(i32, offset))));
 }
 
 /// Send a real-time signal at SIGRTMAX - `offset`.
 pub inline fn sendRtMaxSignal(this: Process, offset: u8) !void {
-    try posix.kill(this.pid, @enumFromInt(linux.sigrtmax() - @as(i32, offset)));
+    try posix.kill(this.pid, @fromBackingInt(@intCast(linux.sigrtmax() - @as(i32, offset))));
 }
 
 /// Send an arbitrary signal number to the process.
 pub inline fn sendSignal(this: Process, sig: i32) !void {
-    try posix.kill(this.pid, @enumFromInt(sig));
+    try posix.kill(this.pid, @fromBackingInt(@intCast(sig)));
 }
 
 /// Request graceful termination (SIGTERM).

@@ -74,6 +74,7 @@ pub fn main(init: process.Init) !void {
             try json.setClass("critical");
             try json.write(stdout);
             try stdout.flush();
+            if (data.update_interval == 0) break;
             continue;
         };
 
@@ -94,10 +95,11 @@ pub fn main(init: process.Init) !void {
         defer replacer.free(text_line);
 
         if (data.show_all_mounts) {
-            const filesystems = sysinfo.fetchMountedFilesystems(gpa) catch {
+            const filesystems = sysinfo.fetchMountedFilesystemsIo(io, gpa) catch {
                 try json.set("tooltip", @as([]const u8, "Failed to read mounted filesystems"));
                 try json.write(stdout);
                 try stdout.flush();
+                if (data.update_interval == 0) break;
                 continue;
             };
             defer sysinfo.freeMountedFilesystems(gpa, filesystems);

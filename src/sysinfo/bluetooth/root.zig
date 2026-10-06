@@ -27,10 +27,13 @@ const plume = @import("plume");
 const Connection = plume.Connection;
 const Proxy = plume.Proxy;
 const Value = plume.Value;
+const GPath = Value.GPath;
 const GVariant = Value.GVariant;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
+const AutoHashMap = std.AutoHashMap;
+const StringHashMap = std.StringHashMap;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
@@ -60,39 +63,46 @@ pub fn deinit(this: *Bluetooth) void {
     this.* = undefined;
 }
 
+const GPathContext = struct {
+    pub fn hash(self: @This(), s: GPath) u64 {
+        _ = self;
+        return std.hash.Wyhash.hash(0, s.s);
+    }
+    pub fn eql(self: @This(), a: GPath, b: GPath) bool {
+        _ = self;
+        return mem.eql(u8, a.s, b.s);
+    }
+};
+
+const ManagedObjects = std.HashMap(GPath, StringHashMap(StringHashMap(GVariant)), GPathContext, std.hash_map.default_max_load_percentage);
+
 /// Get all Bluetooth adapters via bluez ObjectManager
 pub fn getAdapters(this: *Bluetooth) ![]AdapterInfo {
     var res = this.proxy.call("GetManagedObjects", .{}) catch return BluetoothError.ConnectionFailed;
     defer res.deinit();
 
-    var adapters: ArrayListUnmanaged(AdapterInfo) = .empty;
+    var adapters: ArrayList(AdapterInfo) = .empty;
     errdefer {
         for (adapters.items) |*a| a.deinit(this.allocator);
         adapters.deinit(this.allocator);
     }
 
-    var dec = res.reader();
-    var obj_var = dec.readDynamicVariant(dec.signature, true) catch return BluetoothError.InvalidResponse;
-    defer obj_var.deinit(this.allocator);
+    var arena: std.heap.ArenaAllocator = .init(this.allocator);
+    defer arena.deinit();
 
-    if (obj_var != .dict) return BluetoothError.InvalidResponse;
-    var it = obj_var.dict.iterator();
+    var dec: plume.Decoder = .fromMessage(arena.allocator(), res.message);
+    var objects = dec.decodeAlloc(ManagedObjects) catch return BluetoothError.InvalidResponse;
+
+    var it = objects.iterator();
     while (it.next()) |entry| {
-        const path = entry.key_ptr.*;
-        const ifaces_var = entry.value_ptr.*;
-        if (ifaces_var != .dict) continue;
+        const path = entry.key_ptr.s;
+        var iface_map = entry.value_ptr.*;
 
-        var iface_it = ifaces_var.dict.iterator();
-        var found = false;
-        var adapter = AdapterInfo{ .path = try this.allocator.dupe(u8, path) };
-        errdefer adapter.deinit(this.allocator);
+        if (iface_map.get(ADAPTER_IFACE)) |props| {
+            var adapter = AdapterInfo{ .path = try this.allocator.dupe(u8, path) };
+            errdefer adapter.deinit(this.allocator);
 
-        while (iface_it.next()) |iface_entry| {
-            if (!mem.eql(u8, iface_entry.key_ptr.*, ADAPTER_IFACE)) continue;
-            found = true;
-            const props = iface_entry.value_ptr.*;
-            if (props != .dict) continue;
-            var prop_it = props.dict.iterator();
+            var prop_it = props.iterator();
             while (prop_it.next()) |prop| {
                 const v = prop.value_ptr.*;
                 const inner = if (v == .variant) v.variant.* else v;
@@ -108,12 +118,8 @@ pub fn getAdapters(this: *Bluetooth) ![]AdapterInfo {
                     if (inner == .boolean) adapter.discovering = inner.boolean;
                 }
             }
-        }
 
-        if (found) {
             try adapters.append(this.allocator, adapter);
-        } else {
-            adapter.deinit(this.allocator);
         }
     }
 
@@ -125,60 +131,53 @@ pub fn getDevices(this: *Bluetooth) ![]DeviceInfo {
     var res = this.proxy.call("GetManagedObjects", .{}) catch return BluetoothError.ConnectionFailed;
     defer res.deinit();
 
-    var devices: ArrayListUnmanaged(DeviceInfo) = .empty;
+    var devices: ArrayList(DeviceInfo) = .empty;
     errdefer {
         for (devices.items) |*d| d.deinit(this.allocator);
         devices.deinit(this.allocator);
     }
 
-    var dec = res.reader();
-    var obj_var = dec.readDynamicVariant(dec.signature, true) catch return BluetoothError.InvalidResponse;
-    defer obj_var.deinit(this.allocator);
+    var arena: std.heap.ArenaAllocator = .init(this.allocator);
+    defer arena.deinit();
 
-    if (obj_var != .dict) return BluetoothError.InvalidResponse;
-    var it = obj_var.dict.iterator();
+    var dec: plume.Decoder = .fromMessage(arena.allocator(), res.message);
+    var objects = dec.decodeAlloc(ManagedObjects) catch return BluetoothError.InvalidResponse;
+
+    var it = objects.iterator();
     while (it.next()) |entry| {
-        const path = entry.key_ptr.*;
-        const ifaces_var = entry.value_ptr.*;
-        if (ifaces_var != .dict) continue;
+        const path = entry.key_ptr.s;
+        var iface_map = entry.value_ptr.*;
 
-        var iface_it = ifaces_var.dict.iterator();
-        var found = false;
-        var device = DeviceInfo{ .path = try this.allocator.dupe(u8, path) };
-        errdefer device.deinit(this.allocator);
+        if (iface_map.get(DEVICE_IFACE)) |props| {
+            var device = DeviceInfo{ .path = try this.allocator.dupe(u8, path) };
+            errdefer device.deinit(this.allocator);
 
-        while (iface_it.next()) |iface_entry| {
-            if (mem.eql(u8, iface_entry.key_ptr.*, DEVICE_IFACE)) {
-                found = true;
-                const props = iface_entry.value_ptr.*;
-                if (props != .dict) continue;
-                var prop_it = props.dict.iterator();
-                while (prop_it.next()) |prop| {
-                    const v = prop.value_ptr.*;
-                    const inner = if (v == .variant) v.variant.* else v;
-                    if (mem.eql(u8, prop.key_ptr.*, "Address")) {
-                        if (inner == .string) device.address = try this.allocator.dupe(u8, inner.string.s);
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Name")) {
-                        if (inner == .string) device.name = try this.allocator.dupe(u8, inner.string.s);
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Alias")) {
-                        if (inner == .string) device.alias = try this.allocator.dupe(u8, inner.string.s);
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Icon")) {
-                        if (inner == .string) device.icon = try this.allocator.dupe(u8, inner.string.s);
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Paired")) {
-                        if (inner == .boolean) device.paired = inner.boolean;
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Connected")) {
-                        if (inner == .boolean) device.connected = inner.boolean;
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Trusted")) {
-                        if (inner == .boolean) device.trusted = inner.boolean;
-                    } else if (mem.eql(u8, prop.key_ptr.*, "Blocked")) {
-                        if (inner == .boolean) device.blocked = inner.boolean;
-                    }
+            var prop_it = props.iterator();
+            while (prop_it.next()) |prop| {
+                const v = prop.value_ptr.*;
+                const inner = if (v == .variant) v.variant.* else v;
+                if (mem.eql(u8, prop.key_ptr.*, "Address")) {
+                    if (inner == .string) device.address = try this.allocator.dupe(u8, inner.string.s);
+                } else if (mem.eql(u8, prop.key_ptr.*, "Name")) {
+                    if (inner == .string) device.name = try this.allocator.dupe(u8, inner.string.s);
+                } else if (mem.eql(u8, prop.key_ptr.*, "Alias")) {
+                    if (inner == .string) device.alias = try this.allocator.dupe(u8, inner.string.s);
+                } else if (mem.eql(u8, prop.key_ptr.*, "Icon")) {
+                    if (inner == .string) device.icon = try this.allocator.dupe(u8, inner.string.s);
+                } else if (mem.eql(u8, prop.key_ptr.*, "Paired")) {
+                    if (inner == .boolean) device.paired = inner.boolean;
+                } else if (mem.eql(u8, prop.key_ptr.*, "Connected")) {
+                    if (inner == .boolean) device.connected = inner.boolean;
+                } else if (mem.eql(u8, prop.key_ptr.*, "Trusted")) {
+                    if (inner == .boolean) device.trusted = inner.boolean;
+                } else if (mem.eql(u8, prop.key_ptr.*, "Blocked")) {
+                    if (inner == .boolean) device.blocked = inner.boolean;
                 }
-            } else if (mem.eql(u8, iface_entry.key_ptr.*, BATTERY_IFACE)) {
-                const props = iface_entry.value_ptr.*;
-                if (props != .dict) continue;
-                var prop_it = props.dict.iterator();
-                while (prop_it.next()) |prop| {
+            }
+
+            if (iface_map.get(BATTERY_IFACE)) |bat_props| {
+                var bat_it = bat_props.iterator();
+                while (bat_it.next()) |prop| {
                     if (mem.eql(u8, prop.key_ptr.*, "Percentage")) {
                         const v = prop.value_ptr.*;
                         const inner = if (v == .variant) v.variant.* else v;
@@ -192,12 +191,8 @@ pub fn getDevices(this: *Bluetooth) ![]DeviceInfo {
                     }
                 }
             }
-        }
 
-        if (found) {
             try devices.append(this.allocator, device);
-        } else {
-            device.deinit(this.allocator);
         }
     }
 
@@ -248,7 +243,7 @@ test "live bluetooth dbus" {
     var environ_map: std.process.Environ.Map = .init(testing.allocator);
     defer environ_map.deinit();
 
-    var conn = Connection.init(io, testing.allocator, &environ_map, .System) catch |err| {
+    var conn = Connection.init(io, testing.allocator, .System, &environ_map) catch |err| {
         std.debug.print("\nConnection error: {any}\n", .{err});
         return;
     };

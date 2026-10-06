@@ -27,14 +27,12 @@ pub fn init(_: anytype) Backend {
     return .{};
 }
 
-pub fn shutdown(_: *Backend) void {
-    @panic("not implemented");
-}
+pub fn shutdown(_: *Backend) void {}
 
 pub fn initialize(_: *Backend) !void {
-    @panic("not implemented");
+    return GPUError.NoDevices;
 }
 
 pub fn getInfo(_: *Backend) !GPUInfo {
-    return .{};
+    return GPUError.NoDevices;
 }

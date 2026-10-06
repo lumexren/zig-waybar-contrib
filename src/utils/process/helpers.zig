@@ -152,13 +152,12 @@ pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name:
     const path_value = environ_map.get("PATH") orelse return null;
 
     var it = mem.splitScalar(u8, path_value, ':');
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
 
     while (it.next()) |dir| {
         if (dir.len == 0) continue;
 
-        const full_path = allocator.print("{s}/{s}", .{ dir, exe_name }) catch continue;
-        defer allocator.free(full_path);
-
+        const full_path = mem.print(&path_buf, "{s}/{s}", .{ dir, exe_name }) catch continue;
         if (Dir.accessAbsolute(io, full_path, .{ .execute = true })) {
             return try allocator.dupe(u8, full_path);
         } else |_| {}

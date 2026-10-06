@@ -27,7 +27,7 @@ const stfs = @import("bindings").statvfs;
 
 const std = @import("std");
 const StaticStringMap = std.StaticStringMap;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const os = std.os;
@@ -125,18 +125,15 @@ pub fn fetchRootDiskInfo() DiskError!DiskInfo {
     return fetchDiskInfo("/");
 }
 
-/// Fetches information about all mounted real filesystems.
-pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
-
+/// Fetches information about all mounted real filesystems using the provided Io context.
+pub fn fetchMountedFilesystemsIo(io: Io, allocator: Allocator) ![]MountedFilesystem {
     var file = Dir.openFileAbsolute(io, MOUNTS_PATH, .{ .mode = .read_only }) catch return DiskError.StatvfsFailed;
     defer file.close(io);
 
     var buffer: [MOUNTS_BUFFER_SIZE]u8 = undefined;
     const bytes_read = file.readStreaming(io, &.{buffer[0..]}) catch return DiskError.StatvfsFailed;
 
-    var filesystems: ArrayListUnmanaged(MountedFilesystem) = .empty;
+    var filesystems: ArrayList(MountedFilesystem) = .empty;
     errdefer freeMountedFilesystems(allocator, filesystems.items);
 
     var lines = mem.splitScalar(u8, buffer[0..bytes_read], '\n');
@@ -186,6 +183,12 @@ pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
     }
 
     return filesystems.toOwnedSlice(allocator);
+}
+
+/// Fetches information about all mounted real filesystems.
+pub fn fetchMountedFilesystems(allocator: Allocator) ![]MountedFilesystem {
+    var threaded: Threaded = .init_single_threaded;
+    return fetchMountedFilesystemsIo(threaded.io(), allocator);
 }
 
 /// Frees memory allocated by `fetchMountedFilesystems`.

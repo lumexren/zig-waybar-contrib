@@ -71,25 +71,41 @@ pub const VolumeState = struct {
     muted: bool,
 };
 
-/// Parse `wpctl get-volume` output. Format: "Volume: 0.65" or "Volume: 0.35 [MUTED]"
+/// Parse `wpctl get-volume` or `pactl get-sink-volume` output.
 pub fn parseVolumeOutput(output: []const u8) !VolumeState {
     const trimmed = mem.trim(u8, output, &ascii.whitespace);
     if (trimmed.len == 0) return PipewireError.ParseError;
 
-    const is_muted = mem.find(u8, trimmed, "[MUTED]") != null;
+    const is_muted = mem.find(u8, trimmed, "[MUTED]") != null or mem.find(u8, trimmed, "Mute: yes") != null;
 
-    if (mem.find(u8, trimmed, "Volume:")) |idx| {
-        const after_vol = trimmed[idx + "Volume:".len ..];
-        var tokens = mem.tokenizeAny(u8, after_vol, " \t\r\n/[%]");
-        if (tokens.next()) |tok| {
-            const raw_val = fmt.parseFloat(f64, tok) catch return PipewireError.ParseError;
-            const raw_vol = if (raw_val <= 2.0) raw_val else raw_val / 100.0;
+    if (mem.find(u8, trimmed, "%")) |pct_idx| {
+        var start = pct_idx;
+        while (start > 0 and trimmed[start - 1] != ' ' and trimmed[start - 1] != '/' and trimmed[start - 1] != '\t') : (start -= 1) {}
+        const pct_str = mem.trim(u8, trimmed[start..pct_idx], &ascii.whitespace);
+        if (fmt.parseFloat(f64, pct_str)) |val| {
+            const raw_vol = val / 100.0;
             const vol_percent: u8 = @intCast(@min(@as(u64, @intFromFloat(@round(raw_vol * 100.0))), 100));
             return .{
                 .volume = vol_percent,
                 .raw_volume = raw_vol,
                 .muted = is_muted,
             };
+        } else |_| {}
+    }
+
+    if (mem.find(u8, trimmed, "Volume:")) |idx| {
+        const after_vol = trimmed[idx + "Volume:".len ..];
+        var tokens = mem.tokenizeAny(u8, after_vol, " \t\r\n/[%]");
+        while (tokens.next()) |tok| {
+            if (fmt.parseFloat(f64, tok)) |raw_val| {
+                const raw_vol = if (raw_val <= 2.0) raw_val else raw_val / 100.0;
+                const vol_percent: u8 = @intCast(@min(@as(u64, @intFromFloat(@round(raw_vol * 100.0))), 100));
+                return .{
+                    .volume = vol_percent,
+                    .raw_volume = raw_vol,
+                    .muted = is_muted,
+                };
+            } else |_| {}
         }
     }
 
@@ -206,6 +222,13 @@ test "parseVolumeOutput wpctl zero muted" {
     const res = try parseVolumeOutput(input);
     try testing.expectEqual(@as(u8, 0), res.volume);
     try testing.expectEqual(true, res.muted);
+}
+
+test "parseVolumeOutput pactl active" {
+    const input = "Volume: front-left: 26214 /  40% / -23,88 dB,   front-right: 26214 /  40% / -23,88 dB\n        balance 0,00";
+    const res = try parseVolumeOutput(input);
+    try testing.expectEqual(@as(u8, 40), res.volume);
+    try testing.expectEqual(false, res.muted);
 }
 
 test "parseNodeDescription" {

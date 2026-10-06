@@ -1,4 +1,4 @@
-name: Pre-Release
+name: Staging Release
 
 permissions:
   contents: write
@@ -27,7 +27,10 @@ jobs:
       - name: Install Zig
         uses: https://codeberg.org/mlugg/setup-zig@v2
         with:
-          version: master
+          version-file: .zigversion
+
+      - name: Run Tests
+        run: zig build test
 
       - name: Build debug
         run: |
@@ -42,27 +45,38 @@ jobs:
       - name: Set Version
         id: version
         run: |
-          DATE_PREFIX="$(date +'%y.%m.%d')"
-          TAG_PREFIX="pre-${DATE_PREFIX}"
-
-          LAST_REL=$(git tag -l "${TAG_PREFIX}.*" | sed -E "s/^${TAG_PREFIX}\.//" | sort -n | tail -n1)
-
-          if [[ -z "$LAST_REL" ]]; then
-            REL=1
-          else
-            REL=$((LAST_REL + 1))
+          BASE_VERSION=$(grep -oP '\.version\s*=\s*"\K[0-9]+\.[0-9]+\.[0-9]+' build.zig.zon)
+          if [ -z "$BASE_VERSION" ]; then
+            echo "Error: Base version not found in build.zig.zon"
+            exit 1
           fi
 
-          VERSION="${TAG_PREFIX}.${REL}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          LAST_STABLE_TAG=$(git tag -l '[0-9]*.[0-9]*.[0-9]*' | grep -v '-' | sort -V | tail -n1 || true)
+
+          if [ -n "$LAST_STABLE_TAG" ]; then
+            COMMITS=$(git rev-list --count "${LAST_STABLE_TAG}"..HEAD)
+          else
+            COMMITS=$(git rev-list --count HEAD)
+          fi
+
+          VERSION="${BASE_VERSION}-staging.${COMMITS}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Create and Push Git Tag
         env:
+          EMAIL: ${{ secrets.EMAIL }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          git config user.name "forgejo-actions"
-          git config user.email "actions@codeberg.org"
+          sed -i "s/\.version = \"[^\"]*\"/\.version = \"${VERSION}\"/" build.zig.zon
+
+          git config user.name "erenvly"
+          git config user.email "${EMAIL}"
           git remote set-url origin "https://x-access-token:${{ github.token }}@codeberg.org/${{ github.repository }}.git"
+
+          if ! git diff --quiet build.zig.zon; then
+            git commit -am "chore(release): bump version to ${VERSION} [skip ci]"
+            git push origin staging
+          fi
 
           if git rev-parse "$VERSION" >/dev/null 2>&1; then
             echo "Tag $VERSION already exists, skipping."
@@ -72,13 +86,11 @@ jobs:
           fi
 
       - name: Generate Changelog
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")"
 
           if [[ -z "$PREVIOUS_TAG" ]]; then
-            echo "Initial release." > release_notes.md
+            echo "Initial staging release." > release_notes.md
           else
             echo "### Changes since $PREVIOUS_TAG" > release_notes.md
             git log "${PREVIOUS_TAG}..HEAD" --oneline --format="- %s (%h)" >> release_notes.md

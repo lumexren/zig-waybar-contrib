@@ -33,7 +33,7 @@ const GPath = Value.GPath;
 const GVariant = Value.GVariant;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
@@ -72,7 +72,7 @@ pub fn getBatteries(this: *Battery) ![]BatteryInfo {
         this.allocator.free(devices);
     }
 
-    var batteries: ArrayListUnmanaged(BatteryInfo) = .empty;
+    var batteries: ArrayList(BatteryInfo) = .empty;
     errdefer {
         for (batteries.items) |*b| b.deinit(this.allocator);
         batteries.deinit(this.allocator);
@@ -117,13 +117,13 @@ fn getDeviceInfo(this: *Battery, path: []const u8) !BatteryInfo {
     if (dev_proxy.getProperty(GVariant, "Type")) |v| {
         var mut = v;
         defer mut.deinit(this.allocator);
-        if (v == .uint32) info.device_type = @enumFromInt(v.uint32);
+        if (v == .uint32) info.device_type = @fromBackingInt(@intCast(v.uint32));
     } else |_| {}
 
     if (dev_proxy.getProperty(GVariant, "State")) |v| {
         var mut = v;
         defer mut.deinit(this.allocator);
-        if (v == .uint32) info.state = @enumFromInt(@min(v.uint32, 6));
+        if (v == .uint32) info.state = @fromBackingInt(@intCast(@min(v.uint32, 6)));
     } else |_| {}
 
     if (dev_proxy.getProperty(GVariant, "Percentage")) |v| {

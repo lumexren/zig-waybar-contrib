@@ -24,14 +24,14 @@ const Field = @import("Field.zig");
 const Value = @import("Value.zig").Value;
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const Io = std.Io;
 const debug = std.debug;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
 allocator: Allocator,
-fields: ArrayListUnmanaged(Field) = .empty,
+fields: ArrayList(Field) = .empty,
 counter: u64 = 0,
 
 /// Initializes a new JSON builder using the given allocator.
@@ -297,6 +297,9 @@ pub fn writeEscaped(writer: *Io.Writer, str: []const u8) !void {
             '\n' => try writer.writeAll("\\n"),
             '\r' => try writer.writeAll("\\r"),
             '\t' => try writer.writeAll("\\t"),
+            0x08 => try writer.writeAll("\\b"),
+            0x0C => try writer.writeAll("\\f"),
+            0x00...0x07, 0x0B, 0x0E...0x1F => try writer.print("\\u{x:0>4}", .{c}),
             else => try writer.writeByte(c),
         }
     }
@@ -321,4 +324,12 @@ test "Json class and string array serialization" {
     var fbs2 = Io.Writer.fixed(&buf);
     try json.write(&fbs2);
     try testing.expectEqualStrings("{\"class\":[\"warning\",\"critical\"]}\n", fbs2.buffered());
+}
+
+test "Json writeEscaped control characters" {
+    const testing = std.testing;
+    var buf: [256]u8 = undefined;
+    var writer = Io.Writer.fixed(&buf);
+    try writeEscaped(&writer, "hello\nworld\r\"test\"\t\x08\x0c\x01\x1f");
+    try testing.expectEqualStrings("hello\\nworld\\r\\\"test\\\"\\t\\b\\f\\u0001\\u001f", writer.buffered());
 }

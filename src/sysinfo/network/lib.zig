@@ -21,7 +21,7 @@ pub const NetworkError = @import("NetworkError.zig").NetworkError;
 pub const Header = @import("Header.zig");
 
 const std = @import("std");
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
@@ -56,7 +56,7 @@ fn getFallbackServers(allocator: Allocator) ![][]const u8 {
 }
 
 fn parseResolvConf(allocator: Allocator, content: []const u8) ![][]const u8 {
-    var servers: ArrayListUnmanaged([]const u8) = .empty;
+    var servers: ArrayList([]const u8) = .empty;
     errdefer {
         for (servers.items) |s| allocator.free(s);
         servers.deinit(allocator);

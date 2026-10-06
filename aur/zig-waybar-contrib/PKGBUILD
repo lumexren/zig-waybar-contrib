@@ -2,6 +2,7 @@
 
 _pkgbase="zig-waybar-contrib"
 pkgname="${_pkgbase}"
+epoch=1
 pkgver=0.0.0
 pkgrel=1
 pkgdesc='High-performance Waybar modules written in Zig for efficient system monitoring (Stable binary version)'
@@ -9,7 +10,7 @@ arch=('x86_64')
 url="https://codeberg.org/erenvly/$_pkgbase"
 license=('GPL3')
 provides=("${_pkgbase}=$pkgver")
-conflicts=("${_pkgbase}-beta-bin")
+conflicts=("$_pkgbase")
 optdepends=(
   'fakeroot: updates module'
 )

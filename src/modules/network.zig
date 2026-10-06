@@ -59,27 +59,64 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
-    const route = sysinfo.getDefaultRoute(io, gpa) catch {
-        try json.set("text", @as([]const u8, "Disconnected"));
-        try json.set("tooltip", @as([]const u8, "No active network route"));
-        try json.setClass("disconnected");
-        try json.write(stdout);
-        try stdout.flush();
-        return;
+    var current_route: ?sysinfo.RouteInfo = sysinfo.getDefaultRoute(io, gpa) catch null;
+    defer if (current_route) |r| {
+        gpa.free(r.interface);
+        gpa.free(r.gateway);
     };
-    const local_ip = sysinfo.getLocalIP(gpa, route.interface) catch "0.0.0.0";
+
+    var current_local_ip: ?[]const u8 = if (current_route) |r| sysinfo.getLocalIP(gpa, r.interface) catch null else null;
+    defer if (current_local_ip) |ip| gpa.free(ip);
 
     const initial_time = Clock.now(.boot, io);
-    var prev_stats = sysinfo.getNetworkStats(io, route.interface, initial_time.toSeconds()) catch sysinfo.NetworkStats{ .rx_bytes = 0, .tx_bytes = 0, .timestamp = initial_time.toSeconds() };
+    var prev_stats: sysinfo.NetworkStats = if (current_route) |r|
+        sysinfo.getNetworkStats(io, r.interface, initial_time.toSeconds()) catch sysinfo.NetworkStats{ .rx_bytes = 0, .tx_bytes = 0, .timestamp = initial_time.toSeconds() }
+    else
+        sysinfo.NetworkStats{ .rx_bytes = 0, .tx_bytes = 0, .timestamp = initial_time.toSeconds() };
 
     while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
+        if (current_route == null) {
+            current_route = sysinfo.getDefaultRoute(io, gpa) catch null;
+            if (current_route) |r| {
+                if (current_local_ip) |ip| gpa.free(ip);
+                current_local_ip = sysinfo.getLocalIP(gpa, r.interface) catch null;
+                const now_t = Clock.now(.boot, io).toSeconds();
+                prev_stats = sysinfo.getNetworkStats(io, r.interface, now_t) catch sysinfo.NetworkStats{ .rx_bytes = 0, .tx_bytes = 0, .timestamp = now_t };
+            }
+        }
+
+        const route = current_route orelse {
+            try json.set("text", @as([]const u8, "Disconnected"));
+            try json.set("tooltip", @as([]const u8, "No active network route"));
+            try json.setClass("disconnected");
+            try json.write(stdout);
+            try stdout.flush();
+            if (data.update_interval == 0) break;
+            continue;
+        };
+
         const current_time = Clock.now(.boot, io);
         const timestamp = current_time.toSeconds();
 
-        const current_stats = sysinfo.getNetworkStats(io, route.interface, timestamp) catch continue;
+        const current_stats = sysinfo.getNetworkStats(io, route.interface, timestamp) catch {
+            gpa.free(route.interface);
+            gpa.free(route.gateway);
+            current_route = null;
+            if (current_local_ip) |ip| {
+                gpa.free(ip);
+                current_local_ip = null;
+            }
+            try json.set("text", @as([]const u8, "Disconnected"));
+            try json.set("tooltip", @as([]const u8, "Network interface offline"));
+            try json.setClass("disconnected");
+            try json.write(stdout);
+            try stdout.flush();
+            if (data.update_interval == 0) break;
+            continue;
+        };
 
         const rates = sysinfo.NetworkStats.calculateRates(prev_stats, current_stats);
         prev_stats = current_stats;
@@ -88,7 +125,7 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("icon", data.icon);
         try replacer.addKey("interface", route.interface);
         try replacer.addKey("gateway", route.gateway);
-        try replacer.addKey("local_ip", local_ip);
+        try replacer.addKey("local_ip", current_local_ip orelse "0.0.0.0");
         try replacer.addKeyAny("download_speed", rates.download);
         try replacer.addKeyAny("upload_speed", rates.upload);
         try replacer.addKeyAny("total_speed", rates.total);

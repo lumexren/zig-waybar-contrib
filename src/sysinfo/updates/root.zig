@@ -28,7 +28,7 @@ const uProcess = @import("utils").Process;
 const findExecutable = uProcess.findExecutable;
 
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const Io = std.Io;
 const Dir = Io.Dir;
 const ascii = std.ascii;
@@ -46,7 +46,7 @@ io: Io,
 environ_map: *Map,
 allocator: Allocator,
 manager: PackageManager,
-updates: ArrayListUnmanaged(UpdateInfo) = .empty,
+updates: ArrayList(UpdateInfo) = .empty,
 raw_output: ?[]u8 = null,
 count: usize = 0,
 
@@ -122,7 +122,7 @@ fn fetchUpdates(this: Updates) ![]u8 {
     var arg_buffer: [4][]const u8 = undefined;
     const child_argv = this.manager.buildArgv(&arg_buffer, pacman_db);
 
-    var child = try process.spawn(this.io, .{ .argv = child_argv, .stdout = .pipe, .stderr = .pipe });
+    var child = try process.spawn(this.io, .{ .argv = child_argv, .stdout = .pipe, .stderr = .ignore });
 
     const stdout = try uProcess.readAll(this.io, this.allocator, child.stdout.?);
     errdefer this.allocator.free(stdout);
@@ -130,7 +130,7 @@ fn fetchUpdates(this: Updates) ![]u8 {
     const term = try child.wait(this.io);
     if (term != .exited) {
         this.allocator.free(stdout);
-        return &.{};
+        return try this.allocator.alloc(u8, 0);
     }
 
     return stdout;
@@ -211,7 +211,7 @@ fn createLocalSymlink(io: Io, allocator: Allocator, db_path: []const u8, pacman_
 
 // Helper test function
 fn testParseUpdates(allocator: Allocator, manager: PackageManager, output: []const u8) ![]UpdateInfo {
-    var list: ArrayListUnmanaged(UpdateInfo) = .empty;
+    var list: ArrayList(UpdateInfo) = .empty;
     var lines = mem.splitScalar(u8, output, '\n');
     var skip_count: usize = if (manager == .zypper) 2 else 0;
 

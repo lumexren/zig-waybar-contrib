@@ -34,7 +34,7 @@ const Io = std.Io;
 const Threaded = Io.Threaded;
 const Dir = Io.Dir;
 const Allocator = mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 const STAT_BUFFER_SIZE: usize = 16 * 1024;
 const SYSFS_PATH_MAX: usize = 96;
@@ -47,7 +47,7 @@ prev_cores: []Sample = &.{},
 overall: f64 = 0.0,
 avg: f64 = 0.0,
 cores: []CoreInfo = &.{},
-scratch_samples: ArrayListUnmanaged(Sample) = .empty,
+scratch_samples: ArrayList(Sample) = .empty,
 
 pub fn init(io: Io, allocator: Allocator) CPU {
     return .{ .io = io, .allocator = allocator };
@@ -159,7 +159,7 @@ pub inline fn parseLine(line: []const u8) CPUError!Sample {
     var it = mem.tokenizeScalar(u8, line, ' ');
     _ = it.next() orelse return CPUError.UnexpectedFormat;
 
-    var fields: [8]u64 = @splat(8);
+    var fields: [8]u64 = @splat(0);
     var idx: usize = 0;
 
     while (it.next()) |tok| : (idx += 1) {
