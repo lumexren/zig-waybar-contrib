@@ -40,9 +40,7 @@ pub fn init() !Watcher {
     const builtin = @import("builtin");
     const start_rt: u32 = if (builtin.link_libc) 34 else 32;
     var sig_num: u32 = start_rt;
-    while (sig_num <= 64) : (sig_num += 1) {
-        posix.sigaddset(&mask, @fromBackingInt(@intCast(sig_num)));
-    }
+    while (sig_num <= 64) : (sig_num += 1) posix.sigaddset(&mask, @fromBackingInt(@intCast(sig_num)));
     posix.sigprocmask(posix.SIG.BLOCK, &mask, null);
 
     const sfd = try posix.signalfd(-1, &mask, linux.SFD.NONBLOCK | linux.SFD.CLOEXEC);
