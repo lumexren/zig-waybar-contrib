@@ -56,9 +56,7 @@ pub fn reset(this: *TrackingAllocator) void {
 }
 
 pub fn leakedBytes(this: *const TrackingAllocator) usize {
-    if (this.total_allocated > this.total_freed) {
-        return this.total_allocated - this.total_freed;
-    }
+    if (this.total_allocated > this.total_freed) return this.total_allocated - this.total_freed;
     return 0;
 }
 
@@ -92,9 +90,7 @@ fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*
     this.total_allocated += len;
     this.current_allocated += len;
     this.alloc_count += 1;
-    if (this.current_allocated > this.peak_allocated) {
-        this.peak_allocated = this.current_allocated;
-    }
+    if (this.current_allocated > this.peak_allocated)  this.peak_allocated = this.current_allocated;
     return result;
 }
 
@@ -106,16 +102,16 @@ fn resize(ctx: *anyopaque, buf: []u8, buf_align: Alignment, new_len: usize, ret_
             const diff = new_len - buf.len;
             this.total_allocated += diff;
             this.current_allocated += diff;
-            if (this.current_allocated > this.peak_allocated) {
-                this.peak_allocated = this.current_allocated;
-            }
+            if (this.current_allocated > this.peak_allocated) this.peak_allocated = this.current_allocated;
         } else {
             const diff = buf.len - new_len;
             this.total_freed += diff;
             this.current_allocated -= diff;
         }
+
         return true;
     }
+
     return false;
 }
 
@@ -128,15 +124,14 @@ fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, re
             const diff = new_len - memory.len;
             this.total_allocated += diff;
             this.current_allocated += diff;
-            if (this.current_allocated > this.peak_allocated) {
-                this.peak_allocated = this.current_allocated;
-            }
+            if (this.current_allocated > this.peak_allocated) this.peak_allocated = this.current_allocated;
         } else if (new_len < memory.len) {
             const diff = memory.len - new_len;
             this.total_freed += diff;
             this.current_allocated -= diff;
         }
     }
+    
     return result;
 }
 

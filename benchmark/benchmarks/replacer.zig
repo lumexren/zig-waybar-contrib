@@ -104,9 +104,7 @@ fn benchReplacerComplexTemplate(allocator: Allocator, _: void) !void {
     try replacer.addKeyAny("disk_used_pct", @as(i64, 68));
     try replacer.addKeyAny("free_space", @as(i64, 1024 * 1024 * 1024 * 120));
 
-    const rendered = try replacer.render(
-        "Disk {device} ({mount}): {disk_used_pct:'%'} {dot} R: {read_rate:^1}/s {dot} W: {write_rate:^1}/s {dot} Free: {free_space:.1}",
-    );
+    const rendered = try replacer.render("Disk {device} ({mount}): {disk_used_pct:'%'} {dot} R: {read_rate:^1}/s {dot} W: {write_rate:^1}/s {dot} Free: {free_space:.1}");
     defer replacer.free(rendered);
 }
 

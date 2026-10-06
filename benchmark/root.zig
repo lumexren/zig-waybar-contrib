@@ -80,9 +80,7 @@ fn printBenchmarkList(writer: anytype) !void {
 
     for (suites) |suite| {
         try writer.print("  [{s}]\n", .{suite.name});
-        for (suite.benches) |b| {
-            try writer.print("    - {s}\n", .{b});
-        }
+        for (suite.benches) |b| try writer.print("    - {s}\n", .{b});
         try writer.print("\n", .{});
     }
 }
@@ -180,14 +178,11 @@ pub fn main(init: std.process.Init) !void {
     };
 
     if (filter) |f| {
-        if (format == .table or format == .verbose) {
-            try stdout.print("Filter: \"{s}\"\n", .{f});
-        }
+        if (format == .table or format == .verbose) try stdout.print("Filter: \"{s}\"\n", .{f});
     }
 
     try reporter.printHeader(stdout);
 
-    // Run suites
     try bench_json.runBenchmarks(gpa, &reporter, stdout, options, filter);
     try bench_replacer.runBenchmarks(gpa, &reporter, stdout, options, filter);
     try bench_sysinfo.runBenchmarks(gpa, io, &reporter, stdout, options, filter);
@@ -197,9 +192,7 @@ pub fn main(init: std.process.Init) !void {
     try reporter.printFooter(stdout);
     try stdout.flush();
 
-    if (fail_on_leak and reporter.leaks_count > 0) {
-        return error.BenchmarkMemoryLeakDetected;
-    }
+    if (fail_on_leak and reporter.leaks_count > 0) return error.BenchmarkMemoryLeakDetected;
 }
 
 test {

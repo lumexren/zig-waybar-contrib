@@ -42,22 +42,13 @@ pub fn getMonotonicNs() u64 {
     return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
 }
 
-pub fn run(
-    base_allocator: Allocator,
-    name: []const u8,
-    options: BenchmarkOptions,
-    comptime func: anytype,
-    context: anytype,
-) !Result {
+pub fn run(base_allocator: Allocator, name: []const u8, options: BenchmarkOptions, comptime func: anytype, context: anytype) !Result {
     var tracker: TrackingAllocator = .init(base_allocator);
     const alloc = tracker.allocator();
 
-    // 1. Warmup phase & duration estimation
     const warmup_iters = @max(options.warmup_iterations, 3);
     const warmup_start = getMonotonicNs();
-    for (0..warmup_iters) |_| {
-        try func(alloc, context);
-    }
+    for (0..warmup_iters) |_| try func(alloc, context);
     const warmup_elapsed = getMonotonicNs() - warmup_start;
     tracker.reset();
 
@@ -66,14 +57,10 @@ pub fn run(
     else
         1000.0;
 
-    // 2. Determine batch size
-    // For fast micro-benchmarks (<10µs), time batches of iterations
-    // so clock_gettime syscall overhead (~25ns) doesn't distort results.
     const batch_size: u64 = if (options.batch_size) |b|
         @max(b, 1)
     else blk: {
         if (est_single_ns < 10_000.0) {
-            // Target per sample interval ~ 1ms or target_duration / max_samples
             const target_sample_ns = @as(f64, @floatFromInt(options.target_duration_ns)) / @as(f64, @floatFromInt(options.max_samples));
             const desired = target_sample_ns / est_single_ns;
             const b = @as(u64, @intFromFloat(@max(10.0, desired)));
@@ -83,7 +70,6 @@ pub fn run(
         }
     };
 
-    // 3. Sampling phase
     var samples: ArrayList(f64) = .empty;
     defer samples.deinit(base_allocator);
 
@@ -93,9 +79,8 @@ pub fn run(
 
     while (true) {
         const sample_start = getMonotonicNs();
-        for (0..batch_size) |_| {
-            try func(alloc, context);
-        }
+        for (0..batch_size) |_| try func(alloc, context);
+
         const sample_end = getMonotonicNs();
         const dt = sample_end - sample_start;
 
@@ -112,15 +97,11 @@ pub fn run(
             if (samples.items.len >= options.max_samples) break;
         }
 
-        // Failsafe limit
         if (current_elapsed >= options.target_duration_ns * 4) break;
     }
 
-    if (samples.items.len == 0) {
-        return error.NoSamplesCollected;
-    }
+    if (samples.items.len == 0) return error.NoSamplesCollected;
 
-    // 4. Statistical analysis
     mem.sort(f64, samples.items, {}, std.sort.asc(f64));
 
     const sample_count = samples.items.len;
@@ -135,9 +116,8 @@ pub fn run(
     const p99_ns = samples.items[p99_idx];
 
     var sum_ns: f64 = 0.0;
-    for (samples.items) |s| {
-        sum_ns += s;
-    }
+    for (samples.items) |s| sum_ns += s;
+
     const mean_ns = sum_ns / @as(f64, @floatFromInt(sample_count));
 
     var variance_sum: f64 = 0.0;
@@ -145,6 +125,7 @@ pub fn run(
         const diff = s - mean_ns;
         variance_sum += diff * diff;
     }
+
     const variance = variance_sum / @as(f64, @floatFromInt(sample_count));
     const stddev_ns = @sqrt(variance);
 

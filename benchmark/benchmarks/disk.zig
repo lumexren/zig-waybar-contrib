@@ -109,16 +109,10 @@ fn benchDiskStatvfsRoot(allocator: Allocator, _: void) !void {
 
 fn shouldRun(name: []const u8, filter: ?[]const u8) bool {
     const f = filter orelse return true;
-    return mem.indexOf(u8, name, f) != null or mem.eql(u8, f, "disk");
+    return mem.find(u8, name, f) != null or mem.eql(u8, f, "disk");
 }
 
-pub fn runBenchmarks(
-    allocator: Allocator,
-    reporter: *Reporter,
-    writer: anytype,
-    options: runner.BenchmarkOptions,
-    filter: ?[]const u8,
-) !void {
+pub fn runBenchmarks(allocator: Allocator, reporter: *Reporter, writer: anytype, options: runner.BenchmarkOptions, filter: ?[]const u8) !void {
     if (shouldRun("disk_stats_parse_all", filter)) {
         const r = try runner.run(allocator, "disk_stats_parse_all", options, benchDiskStatsParseAll, {});
         try reporter.report(writer, r);

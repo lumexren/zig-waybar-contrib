@@ -158,7 +158,7 @@ fn benchConfigParseCustom(allocator: Allocator, _: void) !void {
 
 fn shouldRun(name: []const u8, filter: ?[]const u8) bool {
     const f = filter orelse return true;
-    return mem.indexOf(u8, name, f) != null or mem.eql(u8, f, "config");
+    return mem.find(u8, name, f) != null or mem.eql(u8, f, "config");
 }
 
 pub fn runBenchmarks(

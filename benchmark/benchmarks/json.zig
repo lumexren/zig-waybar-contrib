@@ -125,16 +125,10 @@ fn benchJsonWriteEscaped(allocator: Allocator, _: void) !void {
 
 fn shouldRun(name: []const u8, filter: ?[]const u8) bool {
     const f = filter orelse return true;
-    return mem.indexOf(u8, name, f) != null or mem.eql(u8, f, "json");
+    return mem.find(u8, name, f) != null or mem.eql(u8, f, "json");
 }
 
-pub fn runBenchmarks(
-    allocator: Allocator,
-    reporter: *Reporter,
-    writer: anytype,
-    options: runner.BenchmarkOptions,
-    filter: ?[]const u8,
-) !void {
+pub fn runBenchmarks(allocator: Allocator, reporter: *Reporter, writer: anytype, options: runner.BenchmarkOptions, filter: ?[]const u8) !void {
     if (shouldRun("json_basic_set_and_deinit", filter)) {
         const r = try runner.run(allocator, "json_basic_set_and_deinit", options, benchJsonBasic, {});
         try reporter.report(writer, r);

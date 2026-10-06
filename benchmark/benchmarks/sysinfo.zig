@@ -122,17 +122,10 @@ fn benchWirelessStatsParse(allocator: Allocator, _: void) !void {
 
 fn shouldRun(name: []const u8, filter: ?[]const u8) bool {
     const f = filter orelse return true;
-    return mem.indexOf(u8, name, f) != null or mem.eql(u8, f, "sysinfo");
+    return mem.find(u8, name, f) != null or mem.eql(u8, f, "sysinfo");
 }
 
-pub fn runBenchmarks(
-    allocator: Allocator,
-    io: Io,
-    reporter: *Reporter,
-    writer: anytype,
-    options: runner.BenchmarkOptions,
-    filter: ?[]const u8,
-) !void {
+pub fn runBenchmarks(allocator: Allocator, io: Io, reporter: *Reporter, writer: anytype, options: runner.BenchmarkOptions, filter: ?[]const u8) !void {
     const ctx = SysinfoBenchContext{ .io = io };
 
     if (shouldRun("sysinfo_memory_update", filter)) {

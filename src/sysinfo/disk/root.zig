@@ -181,8 +181,8 @@ pub fn parseDiskStats(content: []const u8, target_device: ?[]const u8, timestamp
         } else {
             if (mem.startsWith(u8, dev_name, "loop") or mem.startsWith(u8, dev_name, "zram") or mem.startsWith(u8, dev_name, "dm-")) continue;
             if ((mem.startsWith(u8, dev_name, "sd") or mem.startsWith(u8, dev_name, "vd") or mem.startsWith(u8, dev_name, "hd")) and ascii.isDigit(dev_name[dev_name.len - 1])) continue;
-            if (mem.startsWith(u8, dev_name, "nvme") and mem.indexOf(u8, dev_name, "p") != null) continue;
-            if (mem.startsWith(u8, dev_name, "mmcblk") and mem.indexOf(u8, dev_name, "p") != null) continue;
+            if (mem.startsWith(u8, dev_name, "nvme") and mem.find(u8, dev_name, "p") != null) continue;
+            if (mem.startsWith(u8, dev_name, "mmcblk") and mem.find(u8, dev_name, "p") != null) continue;
         }
 
         _ = it.next() orelse continue; // reads completed
