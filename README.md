@@ -24,6 +24,7 @@
 ## Features
 
 - **Blazingly Fast** - Minimal startup time and runtime overhead with zero idle CPU polling
+- **Instant Refresh** - Zero-CPU wakeups via Linux signalfd supporting Waybar's native realtime signals (`SIGRTMIN+N`) and `SIGUSR1`
 - **Memory Safe** - Leveraging Zig's safety features to prevent common crashes and leaks
 - **Zero Dependencies** - Statically linked binaries that run anywhere without runtime interpreters
 - **Deeply Configurable** - Simple, type-safe configuration using Zig Object Notation (`.zon`)
@@ -34,19 +35,19 @@
 
 | Module | Description |
 |:-------|:------------|
-| **CPU** | Per-core CPU usage and frequency |
+| **CPU** | Per-core CPU usage, frequency, and load averages |
 | **Memory** | RAM usage and swap statistics |
-| **Disk** | Disk usage with mount tooltip support |
-| **Network** | Traffic speed and interface info |
+| **Disk** | Disk usage, mount tooltips, and real-time I/O throughput |
+| **Network** | Traffic speed, interface info, and wireless signal/SSID |
 | **Ping** | ICMP latency with min/avg/max |
 | **Fan** | Fan speed monitoring |
-| **GPU** | Usage, temperature, VRAM (AMD/NVIDIA) |
-| **Bluetooth** | Adapter state and connected devices |
-| **PipeWire** | Master volume and mute (event-driven) |
+| **GPU** | Usage, temperature, VRAM (AMD/NVIDIA/Intel DRM) |
+| **Bluetooth** | Adapter state, connected devices, and battery level |
+| **PipeWire** | Master volume and mute (event-driven with instant refresh) |
 | **Backlight** | Backlight brightness |
 | **Battery** | Battery status and time remaining |
-| **MPRIS** | Media player information |
-| **Updates** | Package updates (pacman/apt/dnf/zypper/xbps) |
+| **MPRIS** | Media player information with visual progress bar |
+| **Updates** | Package updates (pacman/yay/paru/apt/dnf/zypper/xbps/flatpak) |
 
 See [MODULES](MODULES.md) for detailed documentation on each module.
 

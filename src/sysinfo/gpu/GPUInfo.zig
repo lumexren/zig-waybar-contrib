@@ -25,3 +25,20 @@ gpu_busy: u64 = 0,
 temperature: f32 = 0.0,
 pwm: u64 = 0,
 memory_info: GPUMemoryInfo = .{},
+name: [96]u8 = @splat(0),
+name_len: usize = 0,
+power_usage: ?f32 = null,
+power_limit: ?f32 = null,
+clock_speed: ?u64 = null,
+backend_name: []const u8 = "None",
+
+pub fn getName(this: *const GPUInfo) ?[]const u8 {
+    if (this.name_len > 0) return this.name[0..this.name_len];
+    return null;
+}
+
+pub fn setName(this: *GPUInfo, n: []const u8) void {
+    const copy_len = @min(n.len, this.name.len);
+    @memcpy(this.name[0..copy_len], n[0..copy_len]);
+    this.name_len = copy_len;
+}

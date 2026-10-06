@@ -70,6 +70,9 @@ pub fn main(init: process.Init) !void {
     // Initial render
     renderOutput(stdout, gpa, &data, &json, &replacer, &pipewire) catch {};
 
+    var watcher = try Watcher.init();
+    defer watcher.deinit();
+
     // Event-driven: subscribe to pactl subscribe / pw-mon event stream
     var child = pipewire.subscribeViaProcess() catch null;
     defer if (child) |*c| {
@@ -81,15 +84,36 @@ pub fn main(init: process.Init) !void {
         if (c.stdout) |pipe_file| {
             var line_buf: [1024]u8 = undefined;
             while (true) {
-                const len = pipe_file.readStreaming(io, &.{line_buf[0..]}) catch break;
-                if (len == 0) break;
-                renderOutput(stdout, gpa, &data, &json, &replacer, &pipewire) catch {};
+                var fds = [_]std.posix.pollfd{
+                    .{ .fd = pipe_file.handle, .events = std.posix.POLL.IN, .revents = 0 },
+                    .{ .fd = watcher.sfd, .events = std.posix.POLL.IN, .revents = 0 },
+                };
+
+                const ret = std.posix.poll(&fds, -1) catch break;
+                if (ret <= 0) break;
+
+                var should_render = false;
+
+                if ((fds[1].revents & std.posix.POLL.IN) != 0) {
+                    var siginfo: std.os.linux.signalfd_siginfo = undefined;
+                    _ = std.os.linux.read(watcher.sfd, @ptrCast(&siginfo), @sizeOf(std.os.linux.signalfd_siginfo));
+                    should_render = true;
+                }
+
+                if ((fds[0].revents & std.posix.POLL.IN) != 0) {
+                    const len = pipe_file.readStreaming(io, &.{line_buf[0..]}) catch break;
+                    if (len == 0) break;
+                    should_render = true;
+                } else if ((fds[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0) {
+                    break;
+                }
+
+                if (should_render) {
+                    renderOutput(stdout, gpa, &data, &json, &replacer, &pipewire) catch {};
+                }
             }
         }
     }
-
-    var watcher = try Watcher.init();
-    defer watcher.deinit();
 
     // Fallback polling if event stream closed unexpectedly
     while (true) : (_ = watcher.waitSeconds(1)) {
