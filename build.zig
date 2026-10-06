@@ -25,7 +25,7 @@ const process = std.process;
 const Build = std.Build;
 const LtoMode = std.zig.LtoMode;
 
-const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 0 };
+const Version: std.SemanticVersion = .{ .major = 2, .minor = 0, .patch = 0 };
 
 const ModuleConfig = struct {
     name: []const u8,
