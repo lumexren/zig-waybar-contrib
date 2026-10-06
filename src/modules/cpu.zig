@@ -99,6 +99,9 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("frequency_max", if (global_freq_max.value.fraction) global_freq_max.value.raw else @as(f64, @floatFromInt(global_freq_max.value.rounded)));
         try replacer.addKeyAny("frequency_max_unit", global_freq_max.unit);
         try replacer.addKeyAny("core_count", cpu.cores.len);
+        try replacer.addKeyAny("load_1", cpu.load_avg.one);
+        try replacer.addKeyAny("load_5", cpu.load_avg.five);
+        try replacer.addKeyAny("load_15", cpu.load_avg.fifteen);
 
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(gpa);

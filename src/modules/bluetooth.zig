@@ -113,8 +113,14 @@ pub fn main(init: process.Init) !void {
         const devices = maybe_devices orelse &[_]sysinfo.DeviceInfo{};
 
         var connected_count: usize = 0;
+        var first_device_battery: ?u8 = null;
         for (devices) |d| {
-            if (d.connected) connected_count += 1;
+            if (d.connected) {
+                connected_count += 1;
+                if (first_device_battery == null and d.battery != null) {
+                    first_device_battery = d.battery;
+                }
+            }
         }
 
         var device_list: ArrayList(u8) = .empty;
@@ -126,7 +132,11 @@ pub fn main(init: process.Init) !void {
             try replacer.addKey("device_name", device.name orelse "Unknown");
             try replacer.addKey("device_alias", device.alias orelse device.name orelse "Unknown");
             try replacer.addKeyAny("device_connected", device.connected);
-            try replacer.addKeyAny("device_battery", device.battery orelse @as(u8, 0));
+            if (device.battery) |bat| {
+                try replacer.addKeyAny("device_battery", bat);
+            } else {
+                try replacer.addKey("device_battery", "");
+            }
 
             const line = try replacer.render(data.device_format);
             defer replacer.free(line);
@@ -142,6 +152,13 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("adapter_powered", adapter.powered);
         try replacer.addKeyAny("adapter_discoverable", adapter.discoverable);
         try replacer.addKeyAny("device_count", connected_count);
+        if (first_device_battery) |bat| {
+            try replacer.addKeyAny("battery", bat);
+            try replacer.addKeyAny("device_battery", bat);
+        } else {
+            try replacer.addKey("battery", "");
+            try replacer.addKey("device_battery", "");
+        }
         try replacer.addKey("devices", if (device_list.items.len > 0) device_list.items else "No connected devices");
 
         const text_line = try replacer.render(data.text);
@@ -152,6 +169,9 @@ pub fn main(init: process.Init) !void {
 
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
+        if (first_device_battery) |bat| {
+            try json.set("percentage", bat);
+        }
 
         if (!adapter.powered) {
             try json.setClass("off");

@@ -54,10 +54,19 @@
     "restart-interval": 10,
     "return-type": "json"
   },
+  "custom/pipewire": {
+    "exec": "/usr/bin/waybar-module-pipewire",
+    "restart-interval": 10,
+    "return-type": "json",
+    "signal": 2,
+    "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+  },
   "custom/updates": {
     "escape": true,
     "exec": "/usr/bin/waybar-module-updates",
     "restart-interval": 10,
-    "return-type": "json"
+    "return-type": "json",
+    "signal": 1,
+    "on-click": "pkill -SIGRTMIN+1 waybar-module-updates"
   }
 }

@@ -121,11 +121,18 @@ pub fn main(init: process.Init) !void {
         const rates = sysinfo.NetworkStats.calculateRates(prev_stats, current_stats);
         prev_stats = current_stats;
 
+        var wifi_info = sysinfo.getWifiInfo(io, gpa, route.interface);
+        defer wifi_info.deinit(gpa);
+
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", data.icon);
         try replacer.addKey("interface", route.interface);
         try replacer.addKey("gateway", route.gateway);
         try replacer.addKey("local_ip", current_local_ip orelse "0.0.0.0");
+        try replacer.addKey("ssid", wifi_info.ssid orelse "");
+        try replacer.addKeyAny("signal_strength", wifi_info.signal_strength);
+        try replacer.addKeyAny("signal_dbm", wifi_info.signal_dbm orelse @as(i32, 0));
+        try replacer.addKeyAny("is_wireless", wifi_info.is_wireless);
         try replacer.addKeyAny("download_speed", rates.download);
         try replacer.addKeyAny("upload_speed", rates.upload);
         try replacer.addKeyAny("total_speed", rates.total);
@@ -138,6 +145,9 @@ pub fn main(init: process.Init) !void {
 
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
+        if (wifi_info.is_wireless) {
+            try json.set("percentage", wifi_info.signal_strength);
+        }
         try json.setClass("connected");
 
         try json.write(stdout);

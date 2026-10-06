@@ -128,9 +128,8 @@ pub fn loadExact(this: *Config, module_name: []const u8, comptime T: type) !T {
         .ignore_unknown_fields = true,
     });
 
-    if (this.arena) |*old_arena| {
-        old_arena.deinit();
-    }
+    if (this.arena) |*old_arena| old_arena.deinit();
     this.arena = arena;
+
     return res;
 }

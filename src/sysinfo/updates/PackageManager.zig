@@ -24,11 +24,14 @@ const ascii = std.ascii;
 const mem = std.mem;
 
 pub const PackageManager = enum {
-    apt,
     pacman,
+    yay,
+    paru,
+    apt,
     dnf,
     zypper,
     xbps,
+    flatpak,
 
     pub fn name(this: PackageManager) []const u8 {
         return @tagName(this);
@@ -53,12 +56,24 @@ pub const PackageManager = enum {
                 buffer[0..2].* = .{ "pacman", "-Qu" };
                 return buffer[0..2];
             },
+            .yay => {
+                buffer[0..2].* = .{ "yay", "-Qua" };
+                return buffer[0..2];
+            },
+            .paru => {
+                buffer[0..2].* = .{ "paru", "-Qua" };
+                return buffer[0..2];
+            },
             .zypper => {
                 buffer[0..3].* = .{ "zypper", "--non-interactive", "lu" };
                 return buffer[0..3];
             },
             .xbps => {
                 buffer[0..4].* = .{ "xbps-install", "--dry-run", "--sync", "--update" };
+                return buffer[0..4];
+            },
+            .flatpak => {
+                buffer[0..4].* = .{ "flatpak", "remote-ls", "--updates", "--columns=application,version" };
                 return buffer[0..4];
             },
         }
@@ -90,13 +105,18 @@ pub const PackageManager = enum {
                 const dot_idx = mem.findScalarLast(u8, pkg_name_full, '.') orelse pkg_name_full.len;
                 pkg_name = pkg_name_full[0..dot_idx];
             },
-            .pacman => {
+            .pacman, .yay, .paru => {
                 const arrow_idx = mem.find(u8, trimmed, "->") orelse return null;
                 const left_part = mem.trim(u8, trimmed[0..arrow_idx], &ascii.whitespace);
                 new_version = mem.trim(u8, trimmed[arrow_idx + 2 ..], &ascii.whitespace);
 
                 const last_space = mem.findScalarLast(u8, left_part, ' ') orelse return null;
                 pkg_name = left_part[0..last_space];
+            },
+            .flatpak => {
+                var it = mem.tokenizeAny(u8, trimmed, " \t");
+                pkg_name = it.next() orelse return null;
+                new_version = it.next() orelse return null;
             },
             .zypper => {
                 if (trimmed[0] == '-' or ascii.startsWithIgnoreCase(trimmed, "S |")) return null;

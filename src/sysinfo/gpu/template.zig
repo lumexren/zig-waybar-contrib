@@ -22,17 +22,27 @@ const Backend = @This();
 pub const GPUError = @import("GPUError.zig").GPUError;
 pub const GPUInfo = @import("GPUInfo.zig");
 pub const GPUMemoryInfo = @import("GPUMemoryInfo.zig");
+const DRM = @import("drm.zig");
+
+const std = @import("std");
+const Io = std.Io;
+
+drm_backend: DRM = .{},
 
 pub fn init(_: anytype) Backend {
     return .{};
 }
 
-pub fn shutdown(_: *Backend) void {}
-
-pub fn initialize(_: *Backend) !void {
-    return GPUError.NoDevices;
+pub fn shutdown(this: *Backend) void {
+    this.drm_backend.shutdown();
 }
 
-pub fn getInfo(_: *Backend) !GPUInfo {
-    return GPUError.NoDevices;
+pub fn initialize(this: *Backend) !void {
+    var threaded: Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    return this.drm_backend.initialize(io, null);
+}
+
+pub fn getInfo(this: *Backend) !GPUInfo {
+    return this.drm_backend.getInfo();
 }

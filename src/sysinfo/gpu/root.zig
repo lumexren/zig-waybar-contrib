@@ -20,15 +20,180 @@
 pub const GPUError = @import("GPUError.zig").GPUError;
 pub const GPUMemoryInfo = @import("GPUMemoryInfo.zig");
 pub const GPUInfo = @import("GPUInfo.zig");
+pub const nvml = @import("nvml.zig");
+pub const amdsmi = @import("amdsmi.zig");
+pub const drm = @import("drm.zig");
 
-const bo = @import("build_options");
+const std = @import("std");
+const ascii = std.ascii;
+const mem = std.mem;
+const Allocator = mem.Allocator;
+const Io = std.Io;
 
-pub const SMI = blk: {
-    if (bo.has_amdsmi) {
-        break :blk @import("amdsmi.zig");
-    } else if (bo.has_nvml) {
-        break :blk @import("nvml.zig");
-    } else {
-        break :blk @import("template.zig");
+pub const BackendType = enum {
+    auto,
+    nvml,
+    amdsmi,
+    drm,
+
+    pub fn fromString(str: []const u8) BackendType {
+        if (ascii.eqlIgnoreCase(str, "nvml") or ascii.eqlIgnoreCase(str, "nvidia")) {
+            return .nvml;
+        } else if (ascii.eqlIgnoreCase(str, "amdsmi") or ascii.eqlIgnoreCase(str, "amd") or ascii.eqlIgnoreCase(str, "rocm")) {
+            return .amdsmi;
+        } else if (ascii.eqlIgnoreCase(str, "drm") or ascii.eqlIgnoreCase(str, "sysfs")) {
+            return .drm;
+        }
+        return .auto;
     }
 };
+
+pub const GPU = struct {
+    pub const Backend = BackendType;
+
+    backend_type: BackendType = .auto,
+    device_index: ?u32 = null,
+    io: ?Io = null,
+    allocator: ?Allocator = null,
+
+    active_backend: ?ActiveBackend = null,
+
+    const ActiveBackend = union(enum) {
+        nvml: nvml,
+        amdsmi: amdsmi,
+        drm: drm,
+    };
+
+    pub fn init(allocator: anytype) GPU {
+        const T = @TypeOf(allocator);
+        if (T == Allocator) {
+            return .{ .allocator = allocator };
+        }
+        return .{};
+    }
+
+    pub fn initWithIo(io: Io, allocator: Allocator) GPU {
+        return .{
+            .io = io,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn setIo(this: *GPU, io: Io) void {
+        this.io = io;
+    }
+
+    pub fn setBackend(this: *GPU, backend: BackendType) void {
+        this.backend_type = backend;
+    }
+
+    pub fn setDeviceIndex(this: *GPU, index: ?u32) void {
+        this.device_index = index;
+    }
+
+    pub fn initialize(this: *GPU) !void {
+        var threaded: Io.Threaded = .init_single_threaded;
+        const io = this.io orelse threaded.io();
+        const dev_idx = this.device_index orelse 0;
+
+        switch (this.backend_type) {
+            .nvml => {
+                var backend: nvml = .init(this.allocator);
+                try backend.initialize(dev_idx);
+                this.active_backend = .{ .nvml = backend };
+            },
+            .amdsmi => {
+                var backend: amdsmi = .init(this.allocator);
+                try backend.initialize(dev_idx);
+                this.active_backend = .{ .amdsmi = backend };
+            },
+            .drm => {
+                var backend: drm = .init(this.allocator);
+                try backend.initialize(io, this.device_index);
+                this.active_backend = .{ .drm = backend };
+            },
+            .auto => {
+                // 1. Try NVML (NVIDIA)
+                var n: nvml = .init(this.allocator);
+                if (n.initialize(dev_idx)) |_| {
+                    this.active_backend = .{ .nvml = n };
+                    return;
+                } else |_| {
+                    n.shutdown();
+                }
+
+                // 2. Try AMD-SMI (AMD ROCm)
+                var a: amdsmi = .init(this.allocator);
+                if (a.initialize(dev_idx)) |_| {
+                    this.active_backend = .{ .amdsmi = a };
+                    return;
+                } else |_| {
+                    a.shutdown();
+                }
+
+                // 3. Try DRM sysfs (AMD/Intel/Generic DRM)
+                var d: drm = .init(this.allocator);
+                if (d.initialize(io, this.device_index)) |_| {
+                    this.active_backend = .{ .drm = d };
+                    return;
+                } else |_| {
+                    d.shutdown();
+                }
+
+                return GPUError.NoDevices;
+            },
+        }
+    }
+
+    pub fn getInfo(this: *GPU) !GPUInfo {
+        if (this.active_backend) |*backend| {
+            return switch (backend.*) {
+                .nvml => |*n| n.getInfo(),
+                .amdsmi => |*a| a.getInfo(),
+                .drm => |*d| d.getInfo(),
+            };
+        }
+        return GPUError.NoDevices;
+    }
+
+    pub fn shutdown(this: *GPU) void {
+        if (this.active_backend) |*backend| {
+            switch (backend.*) {
+                .nvml => |*n| n.shutdown(),
+                .amdsmi => |*a| a.shutdown(),
+                .drm => |*d| d.shutdown(),
+            }
+            this.active_backend = null;
+        }
+    }
+
+    pub fn deinit(this: *GPU) void {
+        this.shutdown();
+    }
+};
+
+pub const SMI = GPU;
+
+test "GPU BackendType fromString" {
+    try std.testing.expectEqual(BackendType.nvml, BackendType.fromString("nvml"));
+    try std.testing.expectEqual(BackendType.nvml, BackendType.fromString("nvidia"));
+    try std.testing.expectEqual(BackendType.amdsmi, BackendType.fromString("amdsmi"));
+    try std.testing.expectEqual(BackendType.amdsmi, BackendType.fromString("amd"));
+    try std.testing.expectEqual(BackendType.drm, BackendType.fromString("drm"));
+    try std.testing.expectEqual(BackendType.auto, BackendType.fromString("auto"));
+    try std.testing.expectEqual(BackendType.auto, BackendType.fromString("unknown"));
+}
+
+test "GPUInfo helpers" {
+    var info: GPUInfo = .{};
+    try std.testing.expect(info.getName() == null);
+    info.setName("GeForce RTX 3060");
+    try std.testing.expectEqualStrings("GeForce RTX 3060", info.getName().?);
+
+    var mem_info: GPUMemoryInfo = .{
+        .total = 1000,
+        .used = 250,
+        .free = 750,
+    };
+    try std.testing.expectEqual(@as(u64, 25), mem_info.percentage());
+}

@@ -21,11 +21,10 @@ const std = @import("std");
 const Io = std.Io;
 const Dir = Io.Dir;
 const Threaded = Io.Threaded;
-const process = std.process;
 const Build = std.Build;
 const LtoMode = std.zig.LtoMode;
 
-const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 0 };
+const Version: std.SemanticVersion = .{ .major = 2, .minor = 0, .patch = 0 };
 
 const ModuleConfig = struct {
     name: []const u8,
@@ -50,28 +49,37 @@ const modules = [_]ModuleConfig{
 };
 
 pub fn build(b: *Build) void {
-    var threaded: Threaded = .init_single_threaded;
-    const io = threaded.io();
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lto: LtoMode = switch (optimize) {
+    const default_lto: LtoMode = switch (optimize) {
         .debug, .safe => .none,
         .small => .thin,
         .fast => .full,
     };
 
-    const strip: bool = switch (lto) {
+    const lto = b.option(LtoMode, "lto", "Link Time Optimization mode (.none, .thin, .full)") orelse default_lto;
+
+    const default_strip: bool = switch (lto) {
         .none => false,
         else => true,
     };
 
+    const strip = b.option(bool, "strip", "Strip debug symbols from executables") orelse default_strip;
+
+    const bin_prefix = b.option([]const u8, "bin-prefix", "Prefix for installed executable names (e.g. 'waybar-module-')") orelse "";
+
+    const module_filter = b.option([]const u8, "module", "Build only the specified module (e.g. 'cpu', 'memory')");
+
+    const link_gpu = b.option(bool, "link-gpu", "Link GPU libraries (AMD-SMI / NVML) directly at compile time") orelse false;
     const rocm_path = b.option([]const u8, "rocm-path", "Path to ROCm") orelse "/opt/rocm";
     const cuda_path = b.option([]const u8, "cuda-path", "Path to CUDA") orelse "/opt/cuda/targets/x86_64-linux";
 
-    const has_amdsmi = fileExists(io, b.pathJoin(&.{ rocm_path, "lib", "libamd_smi.so" }));
-    const has_nvml = fileExists(io, b.pathJoin(&.{ cuda_path, "lib", "stubs", "libnvidia-ml.so" }));
+    var threaded: Threaded = .init_single_threaded;
+    const io = threaded.io();
+
+    const has_amdsmi = if (link_gpu) fileExists(io, b.pathJoin(&.{ rocm_path, "lib", "libamd_smi.so" })) else false;
+    const has_nvml = if (link_gpu) fileExists(io, b.pathJoin(&.{ cuda_path, "lib", "stubs", "libnvidia-ml.so" })) else false;
 
     const options = b.addOptions();
     options.addOption(bool, "has_amdsmi", has_amdsmi);
@@ -81,6 +89,7 @@ pub fn build(b: *Build) void {
 
     const plume_mod = b.dependency("plume", .{
         .target = target,
+        .optimize = optimize,
     }).module("plume");
 
     const bindings = b.addModule("bindings", .{
@@ -112,8 +121,23 @@ pub fn build(b: *Build) void {
     if (has_amdsmi) linkGpu(sysinfo_mod, rocm_path, "amd_smi");
     if (has_nvml) linkGpu(sysinfo_mod, cuda_path, "nvidia-ml");
 
+    const check_step = b.step("check", "Check for compilation errors without building artifacts");
+
+    const check_fmt = b.option(bool, "check-fmt", "Check formatting without modifying files") orelse false;
+    const fmt_step = b.step("fmt", "Format source files (or verify with -Dcheck-fmt=true)");
+    const fmt = b.addFmt(.{
+        .paths = &.{
+            b.path("src"),
+            b.path("benchmark"),
+            b.path("build.zig"),
+            b.path("build.zig.zon"),
+        },
+        .check = check_fmt,
+    });
+    fmt_step.dependOn(&fmt.step);
+
     for (modules) |cfg| {
-        if (target.query.abi == .musl and cfg.libc) continue;
+        if (target.result.abi.isMusl() and cfg.libc) continue;
 
         const mod = b.createModule(.{
             .root_source_file = b.path(cfg.path),
@@ -130,29 +154,65 @@ pub fn build(b: *Build) void {
             },
         });
 
+        const exe_name = if (bin_prefix.len > 0)
+            b.fmt("{s}{s}", .{ bin_prefix, cfg.name })
+        else
+            cfg.name;
+
         const exe = b.addExecutable(.{
-            .name = cfg.name,
+            .name = exe_name,
             .root_module = mod,
             .version = Version,
         });
 
         exe.lto = lto;
 
-        b.installArtifact(exe);
+        check_step.dependOn(&exe.step);
+
+        const mod_step = b.step(cfg.name, b.fmt("Build and install the {s} module", .{cfg.name}));
+        const install_mod = b.addInstallArtifact(exe, .{});
+        mod_step.dependOn(&install_mod.step);
+
+        const run_step = b.step(b.fmt("run-{s}", .{cfg.name}), b.fmt("Run the {s} module", .{cfg.name}));
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.addPassthruArgs();
+        run_step.dependOn(&run_cmd.step);
+
+        if (module_filter) |filter| {
+            if (std.mem.eql(u8, filter, cfg.name) or std.mem.eql(u8, filter, "all")) b.installArtifact(exe);
+        } else {
+            b.installArtifact(exe);
+        }
     }
 
-    const test_step = b.step("test", "Run unit tests");
+    // Unit tests
+    const test_filter = b.option([]const u8, "test-filter", "Filter unit tests by name");
+    const test_filters: []const []const u8 = if (test_filter) |f| &.{f} else &.{};
+
     const utils_tests = b.addTest(.{
         .root_module = utils_mod,
+        .filters = test_filters,
     });
     const run_utils_tests = b.addRunArtifact(utils_tests);
-    test_step.dependOn(&run_utils_tests.step);
 
     const sysinfo_tests = b.addTest(.{
         .root_module = sysinfo_mod,
+        .filters = test_filters,
     });
     const run_sysinfo_tests = b.addRunArtifact(sysinfo_tests);
+
+    check_step.dependOn(&utils_tests.step);
+    check_step.dependOn(&sysinfo_tests.step);
+
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_utils_tests.step);
     test_step.dependOn(&run_sysinfo_tests.step);
+
+    const test_utils_step = b.step("test-utils", "Run utils unit tests");
+    test_utils_step.dependOn(&run_utils_tests.step);
+
+    const test_sysinfo_step = b.step("test-sysinfo", "Run sysinfo unit tests");
+    test_sysinfo_step.dependOn(&run_sysinfo_tests.step);
 
     const bench_step = b.step("bench", "Run performance and memory benchmarks");
     const bench_filter = b.option([]const u8, "filter", "Filter benchmarks by name");
@@ -176,11 +236,19 @@ pub fn build(b: *Build) void {
     });
 
     bench_exe.lto = .full;
+    check_step.dependOn(&bench_exe.step);
+
+    const bench_tests = b.addTest(.{
+        .root_module = bench_mod,
+        .filters = test_filters,
+    });
+    const run_bench_tests = b.addRunArtifact(bench_tests);
+    check_step.dependOn(&bench_tests.step);
+    test_step.dependOn(&run_bench_tests.step);
 
     const run_bench = b.addRunArtifact(bench_exe);
-    if (bench_filter) |f| {
-        run_bench.addArg(f);
-    }
+    run_bench.addPassthruArgs();
+    if (bench_filter) |f| run_bench.addArg(f);
     bench_step.dependOn(&run_bench.step);
 }
 

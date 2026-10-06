@@ -25,6 +25,17 @@ const Allocator = mem.Allocator;
 const utils = @import("utils");
 const Json = utils.Json;
 const runner = @import("../runner.zig");
+const reporter_mod = @import("../reporter.zig");
+const Reporter = reporter_mod.Reporter;
+
+pub const BENCHMARKS = [_][]const u8{
+    "json_basic_set_and_deinit",
+    "json_formatted_strings",
+    "json_serialize_to_buffer",
+    "json_reuse_with_clear",
+    "json_complex_tooltip",
+    "json_write_escaped",
+};
 
 fn benchJsonBasic(allocator: Allocator, _: void) !void {
     var json = Json.init(allocator);
@@ -81,28 +92,72 @@ fn benchJsonReuseClear(allocator: Allocator, ctx: ReuseContext) !void {
     try ctx.json.write(&fbs);
 }
 
-pub fn runBenchmarks(allocator: Allocator, filter: ?[]const u8) !void {
-    const opts: runner.BenchmarkOptions = .{};
+fn benchJsonComplexTooltip(allocator: Allocator, _: void) !void {
+    var json = Json.init(allocator);
+    defer json.deinit();
 
-    if (filter == null or mem.find(u8, "json_basic_set_and_deinit", filter.?) != null) {
-        const r1 = try runner.run(allocator, "json_basic_set_and_deinit", opts, benchJsonBasic, {});
-        runner.printResult(r1);
+    try json.set("text", "  CPU 55% | 3.4 GHz | 62°C");
+    const classes = [_][]const u8{ "warning", "high-load", "throttling" };
+    try json.setClasses(&classes);
+    try json.set("percentage", @as(i64, 55));
+
+    inline for (0..8) |core_idx| {
+        try json.appendFmtNL("tooltip", "Core {d}: {d}% @ {d:.2} GHz (temp: {d}°C)", .{
+            core_idx,
+            40 + core_idx * 3,
+            3.2 + @as(f64, @floatFromInt(core_idx)) * 0.05,
+            55 + core_idx,
+        });
     }
 
-    if (filter == null or mem.find(u8, "json_formatted_strings", filter.?) != null) {
-        const r2 = try runner.run(allocator, "json_formatted_strings", opts, benchJsonFormatted, {});
-        runner.printResult(r2);
+    var buffer: [2048]u8 = undefined;
+    var fbs = Io.Writer.fixed(&buffer);
+    try json.write(&fbs);
+}
+
+fn benchJsonWriteEscaped(allocator: Allocator, _: void) !void {
+    _ = allocator;
+    const test_str = "Status: \"Running\"\nPath: /dev/sda1\tType: ext4\rDetails: \\root\\ \x08\x0c";
+    var buffer: [512]u8 = undefined;
+    var fbs = Io.Writer.fixed(&buffer);
+    try Json.writeEscaped(&fbs, test_str);
+}
+
+fn shouldRun(name: []const u8, filter: ?[]const u8) bool {
+    const f = filter orelse return true;
+    return mem.find(u8, name, f) != null or mem.eql(u8, f, "json");
+}
+
+pub fn runBenchmarks(allocator: Allocator, reporter: *Reporter, writer: anytype, options: runner.BenchmarkOptions, filter: ?[]const u8) !void {
+    if (shouldRun("json_basic_set_and_deinit", filter)) {
+        const r = try runner.run(allocator, "json_basic_set_and_deinit", options, benchJsonBasic, {});
+        try reporter.report(writer, r);
     }
 
-    if (filter == null or mem.find(u8, "json_serialize_to_buffer", filter.?) != null) {
-        const r3 = try runner.run(allocator, "json_serialize_to_buffer", opts, benchJsonSerialize, {});
-        runner.printResult(r3);
+    if (shouldRun("json_formatted_strings", filter)) {
+        const r = try runner.run(allocator, "json_formatted_strings", options, benchJsonFormatted, {});
+        try reporter.report(writer, r);
     }
 
-    if (filter == null or mem.find(u8, "json_reuse_with_clear", filter.?) != null) {
+    if (shouldRun("json_serialize_to_buffer", filter)) {
+        const r = try runner.run(allocator, "json_serialize_to_buffer", options, benchJsonSerialize, {});
+        try reporter.report(writer, r);
+    }
+
+    if (shouldRun("json_reuse_with_clear", filter)) {
         var reused_json = Json.init(allocator);
         defer reused_json.deinit();
-        const r4 = try runner.run(allocator, "json_reuse_with_clear", opts, benchJsonReuseClear, ReuseContext{ .json = &reused_json });
-        runner.printResult(r4);
+        const r = try runner.run(allocator, "json_reuse_with_clear", options, benchJsonReuseClear, ReuseContext{ .json = &reused_json });
+        try reporter.report(writer, r);
+    }
+
+    if (shouldRun("json_complex_tooltip", filter)) {
+        const r = try runner.run(allocator, "json_complex_tooltip", options, benchJsonComplexTooltip, {});
+        try reporter.report(writer, r);
+    }
+
+    if (shouldRun("json_write_escaped", filter)) {
+        const r = try runner.run(allocator, "json_write_escaped", options, benchJsonWriteEscaped, {});
+        try reporter.report(writer, r);
     }
 }

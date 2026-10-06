@@ -36,6 +36,7 @@ pub const ModuleConfig = struct {
     warning_threshold: ?u8 = 80,
     critical_threshold: ?u8 = 90,
     path: []const u8 = "/",
+    device: ?[]const u8 = null,
     show_all_mounts: bool = false,
     icon: []const u8 = "",
     text: []const u8 = "{icon}  {percentage_used:'%'} {dot} {used:.2}",
@@ -64,9 +65,18 @@ pub fn main(init: process.Init) !void {
     var replacer: Replacer = .init(gpa);
     defer replacer.deinit();
 
+    const initial_time = Io.Clock.now(.boot, io);
+    var prev_io_stats: sysinfo.DiskIOStats = sysinfo.getDiskIOStats(io, data.device, initial_time.toSeconds()) catch sysinfo.DiskIOStats{ .read_bytes = 0, .write_bytes = 0, .timestamp = initial_time.toSeconds() };
+
     while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
+
+        const current_time = Io.Clock.now(.boot, io);
+        const timestamp = current_time.toSeconds();
+        const current_io_stats = sysinfo.getDiskIOStats(io, data.device, timestamp) catch prev_io_stats;
+        const io_rates = sysinfo.DiskIOStats.calculateRates(prev_io_stats, current_io_stats);
+        prev_io_stats = current_io_stats;
 
         const disk_info = sysinfo.fetchDiskInfo(data.path) catch {
             try json.set("text", @as([]const u8, "Disk: Error"));
@@ -90,6 +100,10 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("inodes_used", disk_info.inodes_used);
         try replacer.addKeyAny("inodes_free", disk_info.inodes_free);
         try replacer.addKeyAny("inodes_percentage_used", disk_info.inodes_percentage_used);
+        try replacer.addKeyAny("read_speed", io_rates.read);
+        try replacer.addKeyAny("write_speed", io_rates.write);
+        try replacer.addKeyAny("total_speed", io_rates.total);
+        try replacer.addKeyAny("io_speed", io_rates.total);
 
         const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);

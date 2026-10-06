@@ -22,3 +22,8 @@ const GPUMemoryInfo = @This();
 total: u64 = 0,
 used: u64 = 0,
 free: u64 = 0,
+
+pub fn percentage(this: GPUMemoryInfo) u64 {
+    if (this.total == 0) return 0;
+    return @min(100, (this.used * 100) / this.total);
+}

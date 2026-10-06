@@ -18,7 +18,10 @@
 // along with this program. If not, see <https://gnu.org/licenses>.
 
 pub const GPUError = error{
+    NoDevices,
+    LibraryNotFound,
     HandleFailed,
     InitFailed,
-    NoDevices,
+    QueryFailed,
+    DeviceNotFound,
 };

@@ -25,6 +25,11 @@ pub const FrequencyValue = @import("FrequencyValue.zig");
 pub const Frequency = @import("Frequency.zig");
 pub const FrequencyRange = @import("FrequencyRange.zig");
 pub const CoreInfo = @import("CoreInfo.zig");
+pub const LoadAvg = struct {
+    one: f64 = 0.0,
+    five: f64 = 0.0,
+    fifteen: f64 = 0.0,
+};
 
 const std = @import("std");
 const mem = std.mem;
@@ -46,6 +51,7 @@ prev_overall: Sample = .{ .idle = 0, .total = 0 },
 prev_cores: []Sample = &.{},
 overall: f64 = 0.0,
 avg: f64 = 0.0,
+load_avg: LoadAvg = .{},
 cores: []CoreInfo = &.{},
 scratch_samples: ArrayList(Sample) = .empty,
 
@@ -73,6 +79,7 @@ pub fn update(this: *CPU) !void {
     this.overall = computeUsage(this.prev_overall, curr_overall);
     this.avg = this.computeAvg();
     this.updateFrequencies();
+    this.updateLoadAvg();
 
     this.prev_overall = curr_overall;
     @memcpy(this.prev_cores, this.scratch_samples.items);
@@ -80,6 +87,7 @@ pub fn update(this: *CPU) !void {
 
 fn initBaseline(this: *CPU) !void {
     try this.captureSnapshot(&this.prev_overall);
+    this.updateLoadAvg();
 
     const core_count = this.scratch_samples.items.len;
 
@@ -96,6 +104,31 @@ fn initBaseline(this: *CPU) !void {
     this.cores = cores;
 
     try this.io.sleep(.fromMilliseconds(BASELINE_SLEEP_MS), .boot);
+}
+
+fn updateLoadAvg(this: *CPU) void {
+    var file = Dir.openFileAbsolute(this.io, "/proc/loadavg", .{ .mode = .read_only }) catch return;
+    defer file.close(this.io);
+
+    var buffer: [64]u8 = undefined;
+    var reader = file.reader(this.io, &.{});
+    const bytes_read = reader.interface.readSliceShort(&buffer) catch return;
+    if (bytes_read == 0) return;
+
+    this.load_avg = parseLoadAvg(buffer[0..bytes_read]) catch return;
+}
+
+pub fn parseLoadAvg(line: []const u8) CPUError!LoadAvg {
+    var it = mem.tokenizeScalar(u8, line, ' ');
+    const s1 = it.next() orelse return CPUError.UnexpectedFormat;
+    const s5 = it.next() orelse return CPUError.UnexpectedFormat;
+    const s15 = it.next() orelse return CPUError.UnexpectedFormat;
+
+    const one = fmt.parseFloat(f64, s1) catch return CPUError.UnexpectedFormat;
+    const five = fmt.parseFloat(f64, s5) catch return CPUError.UnexpectedFormat;
+    const fifteen = fmt.parseFloat(f64, s15) catch return CPUError.UnexpectedFormat;
+
+    return .{ .one = one, .five = five, .fifteen = fifteen };
 }
 
 fn captureSnapshot(this: *CPU, overall: *Sample) !void {
@@ -309,4 +342,15 @@ test "calculateFrequency" {
     const f4 = calculateFrequency(800.0000001);
     try testing.expectEqualStrings("MHz", f4.unit);
     try testing.expectEqual(false, f4.value.fraction);
+}
+
+test "parseLoadAvg" {
+    const raw = "0.52 0.48 0.45 2/1234 56789\n";
+    const l = try parseLoadAvg(raw);
+    try testing.expectApproxEqAbs(@as(f64, 0.52), l.one, 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 0.48), l.five, 0.001);
+    try testing.expectApproxEqAbs(@as(f64, 0.45), l.fifteen, 0.001);
+
+    try testing.expectError(CPUError.UnexpectedFormat, parseLoadAvg("0.52"));
+    try testing.expectError(CPUError.UnexpectedFormat, parseLoadAvg("abc def ghi"));
 }

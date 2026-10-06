@@ -44,6 +44,7 @@ pub const ModuleConfig = struct {
     icon_stopped: []const u8 = "",
     text: []const u8 = "{icon}  {title} {dot} {artist}",
     text_max_length: u16 = 256,
+    progress_bar_length: usize = 10,
     tooltip: []const u8 = "{player_name}: {status:nl:title} - {artist:nl}Album: {album:nl:position} / {length}",
     no_player_text: []const u8 = "No player",
 };
@@ -143,8 +144,16 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("position", position_str);
         try replacer.addKeyAny("position_us", player_info.position_us);
 
+        var position_percentage: f64 = 0.0;
+        var progress_bar_buf: [64]u8 = undefined;
+        var progress_bar_str: []const u8 = "";
+
         if (player_info.metadata.length_us) |raw_length_us| {
             const safe_length_us = if (raw_length_us > 0) raw_length_us else 0;
+            if (safe_length_us > 0 and safe_position_us > 0) {
+                position_percentage = @min(100.0, (@as(f64, @floatFromInt(safe_position_us)) / @as(f64, @floatFromInt(safe_length_us))) * 100.0);
+            }
+
             const length_secs = @divFloor(safe_length_us, 1_000_000);
             const length_hours = @divFloor(length_secs, 3600);
             const length_min = @mod(@divFloor(length_secs, 60), 60);
@@ -161,6 +170,24 @@ pub fn main(init: process.Init) !void {
             try replacer.addKey("length", "--:--");
             try replacer.addKeyAny("length_us", @as(i64, 0));
         }
+
+        const bar_len = @min(progress_bar_buf.len, data.progress_bar_length);
+        if (bar_len > 0) {
+            const filled_chars: usize = @min(bar_len, @as(usize, @intFromFloat(@round((position_percentage / 100.0) * @as(f64, @floatFromInt(bar_len))))));
+            @memset(progress_bar_buf[0..filled_chars], '=');
+            if (filled_chars < bar_len) {
+                progress_bar_buf[filled_chars] = '>';
+                if (filled_chars + 1 < bar_len) {
+                    @memset(progress_bar_buf[filled_chars + 1 .. bar_len], '-');
+                }
+            }
+            progress_bar_str = progress_bar_buf[0..bar_len];
+        }
+
+        const pct_int: i64 = @intFromFloat(@round(position_percentage));
+        try replacer.addKey("progress_bar", progress_bar_str);
+        try replacer.addKeyAny("position_percentage", pct_int);
+        try replacer.addKeyAny("progress_percentage", pct_int);
 
         // Capabilities
         try replacer.addKeyAny("can_control", player_info.can_control);
@@ -186,6 +213,7 @@ pub fn main(init: process.Init) !void {
         try json.set("text", text_line);
         try json.set("tooltip", tooltip_line);
         try json.set("class", status_str);
+        try json.set("percentage", pct_int);
 
         try json.write(stdout);
         try stdout.flush();
