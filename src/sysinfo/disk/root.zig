@@ -278,9 +278,8 @@ test "fetchMountedFilesystems" {
         return err;
     };
     defer freeMountedFilesystems(allocator, filesystems);
-
-    try testing.expect(filesystems.len > 0);
-
+    // In containerized environments (CI, Docker), all mounts may be virtual
+    // filesystems (overlay, tmpfs) which are ignored, resulting in 0 filesystems.
     for (filesystems) |fs| {
         try testing.expect(fs.device.len > 0);
         try testing.expect(fs.mount_point.len > 0);
