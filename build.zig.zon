@@ -2,7 +2,7 @@
     .name = .zig_waybar_contrib,
     .version = "1.0.0",
     .fingerprint = 0xf0b38d05ded55151,
-    .minimum_zig_version = "0.17.0",
+    .minimum_zig_version = "0.18.0",
     .dependencies = .{
         .plume = .{
             .url = "https://codeberg.org/erenvly/plume/archive/2.0.0.zip",
