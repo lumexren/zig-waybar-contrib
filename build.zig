@@ -24,7 +24,7 @@ const Threaded = Io.Threaded;
 const Build = std.Build;
 const LtoMode = std.zig.LtoMode;
 
-const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 0 };
+const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 1 };
 
 const ModuleConfig = struct {
     name: []const u8,
