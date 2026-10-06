@@ -3,13 +3,27 @@
 // This file is part of zig-waybar-contrib.
 //
 // Copyright (c) 2026 erenvly
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://gnu.org/licenses>.
 
 const TrackingAllocator = @import("TrackingAllocator.zig");
 const Result = @import("Result.zig");
 
 const std = @import("std");
-const debug = std.debug;
 const mem = std.mem;
+const math = std.math;
+const ArrayList = std.ArrayList;
 const Allocator = mem.Allocator;
 const os = std.os;
 const linux = os.linux;
@@ -18,6 +32,8 @@ pub const BenchmarkOptions = struct {
     warmup_iterations: u64 = 10,
     min_iterations: u64 = 50,
     target_duration_ns: u64 = 100_000_000, // 100ms
+    max_samples: usize = 100,
+    batch_size: ?u64 = null,
 };
 
 pub fn getMonotonicNs() u64 {
@@ -26,80 +42,159 @@ pub fn getMonotonicNs() u64 {
     return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
 }
 
-pub fn run(base_allocator: Allocator, name: []const u8, options: BenchmarkOptions, comptime func: anytype, context: anytype) !Result {
+pub fn run(
+    base_allocator: Allocator,
+    name: []const u8,
+    options: BenchmarkOptions,
+    comptime func: anytype,
+    context: anytype,
+) !Result {
     var tracker: TrackingAllocator = .init(base_allocator);
     const alloc = tracker.allocator();
 
-    // Warm-up phase
-    for (0..options.warmup_iterations) |_| {
+    // 1. Warmup phase & duration estimation
+    const warmup_iters = @max(options.warmup_iterations, 3);
+    const warmup_start = getMonotonicNs();
+    for (0..warmup_iters) |_| {
         try func(alloc, context);
     }
+    const warmup_elapsed = getMonotonicNs() - warmup_start;
     tracker.reset();
 
-    // Measurement phase
-    var iters: u64 = 0;
-    const start_time = getMonotonicNs();
-    var elapsed: u64 = 0;
+    const est_single_ns: f64 = if (warmup_iters > 0 and warmup_elapsed > 0)
+        @as(f64, @floatFromInt(warmup_elapsed)) / @as(f64, @floatFromInt(warmup_iters))
+    else
+        1000.0;
+
+    // 2. Determine batch size
+    // For fast micro-benchmarks (<10µs), time batches of iterations
+    // so clock_gettime syscall overhead (~25ns) doesn't distort results.
+    const batch_size: u64 = if (options.batch_size) |b|
+        @max(b, 1)
+    else blk: {
+        if (est_single_ns < 10_000.0) {
+            // Target per sample interval ~ 1ms or target_duration / max_samples
+            const target_sample_ns = @as(f64, @floatFromInt(options.target_duration_ns)) / @as(f64, @floatFromInt(options.max_samples));
+            const desired = target_sample_ns / est_single_ns;
+            const b = @as(u64, @intFromFloat(@max(10.0, desired)));
+            break :blk @max(b, 1);
+        } else {
+            break :blk 1;
+        }
+    };
+
+    // 3. Sampling phase
+    var samples: ArrayList(f64) = .empty;
+    defer samples.deinit(base_allocator);
+
+    var total_iters: u64 = 0;
+    var total_ns: u64 = 0;
+    const bench_start = getMonotonicNs();
 
     while (true) {
-        try func(alloc, context);
-        iters += 1;
-
-        if (iters >= options.min_iterations) {
-            const now = getMonotonicNs();
-            elapsed = now - start_time;
-            if (elapsed >= options.target_duration_ns) break;
+        const sample_start = getMonotonicNs();
+        for (0..batch_size) |_| {
+            try func(alloc, context);
         }
+        const sample_end = getMonotonicNs();
+        const dt = sample_end - sample_start;
+
+        const sample_single_ns = @as(f64, @floatFromInt(dt)) / @as(f64, @floatFromInt(batch_size));
+        try samples.append(base_allocator, sample_single_ns);
+
+        total_iters += batch_size;
+        total_ns += dt;
+
+        const current_elapsed = sample_end - bench_start;
+
+        if (total_iters >= options.min_iterations and samples.items.len >= 5) {
+            if (current_elapsed >= options.target_duration_ns) break;
+            if (samples.items.len >= options.max_samples) break;
+        }
+
+        // Failsafe limit
+        if (current_elapsed >= options.target_duration_ns * 4) break;
     }
 
-    const mean_ns = if (iters > 0) @as(f64, @floatFromInt(elapsed)) / @as(f64, @floatFromInt(iters)) else 0;
-    const ops_per_sec = if (elapsed > 0) (@as(f64, @floatFromInt(iters)) * 1_000_000_000.0) / @as(f64, @floatFromInt(elapsed)) else 0;
-    const allocs_per_op = if (iters > 0) @as(f64, @floatFromInt(tracker.alloc_count)) / @as(f64, @floatFromInt(iters)) else 0;
+    if (samples.items.len == 0) {
+        return error.NoSamplesCollected;
+    }
+
+    // 4. Statistical analysis
+    mem.sort(f64, samples.items, {}, std.sort.asc(f64));
+
+    const sample_count = samples.items.len;
+    const min_ns = samples.items[0];
+    const max_ns = samples.items[sample_count - 1];
+    const median_ns = samples.items[sample_count / 2];
+
+    const p95_idx = @min(sample_count - 1, (sample_count * 95) / 100);
+    const p95_ns = samples.items[p95_idx];
+
+    const p99_idx = @min(sample_count - 1, (sample_count * 99) / 100);
+    const p99_ns = samples.items[p99_idx];
+
+    var sum_ns: f64 = 0.0;
+    for (samples.items) |s| {
+        sum_ns += s;
+    }
+    const mean_ns = sum_ns / @as(f64, @floatFromInt(sample_count));
+
+    var variance_sum: f64 = 0.0;
+    for (samples.items) |s| {
+        const diff = s - mean_ns;
+        variance_sum += diff * diff;
+    }
+    const variance = variance_sum / @as(f64, @floatFromInt(sample_count));
+    const stddev_ns = @sqrt(variance);
+
+    const ops_per_sec = if (total_ns > 0)
+        (@as(f64, @floatFromInt(total_iters)) * 1_000_000_000.0) / @as(f64, @floatFromInt(total_ns))
+    else
+        0.0;
 
     return .{
         .name = name,
-        .iterations = iters,
-        .total_ns = elapsed,
+        .iterations = total_iters,
+        .sample_count = sample_count,
+        .total_ns = total_ns,
+        .min_ns = min_ns,
+        .median_ns = median_ns,
         .mean_ns = mean_ns,
+        .p95_ns = p95_ns,
+        .p99_ns = p99_ns,
+        .max_ns = max_ns,
+        .stddev_ns = stddev_ns,
         .ops_per_sec = ops_per_sec,
-        .allocs_per_op = allocs_per_op,
+        .allocs_per_op = tracker.allocsPerOp(total_iters),
+        .frees_per_op = tracker.freesPerOp(total_iters),
+        .reallocs_per_op = tracker.reallocsPerOp(total_iters),
+        .bytes_per_op = tracker.bytesPerOp(total_iters),
         .peak_bytes = tracker.peak_allocated,
         .leaked_bytes = tracker.leakedBytes(),
     };
 }
 
-pub fn printHeader() void {
-    debug.print("\n{s:<40} {s:>10} {s:>12} {s:>14} {s:>11} {s:>10} {s:>8}\n", .{
-        "Benchmark",
-        "Iters",
-        "Time/Op",
-        "Ops/Sec",
-        "Allocs/Op",
-        "Peak Mem",
-        "Leaks",
-    });
-    debug.print("----------------------------------------------------------------------------------------------------------------\n", .{});
-}
+test "runner basic execution" {
+    const testing = std.testing;
+    const Dummy = struct {
+        fn noop(allocator: Allocator, _: void) !void {
+            const buf = try allocator.alloc(u8, 64);
+            defer allocator.free(buf);
+            mem.doNotOptimizeAway(buf);
+        }
+    };
 
-pub fn printResult(result: Result) void {
-    var time_buf: [32]u8 = undefined;
-    var mem_buf: [32]u8 = undefined;
-    var leak_buf: [32]u8 = undefined;
+    const res = try run(testing.allocator, "dummy_noop", .{
+        .warmup_iterations = 2,
+        .min_iterations = 10,
+        .target_duration_ns = 1_000_000,
+        .max_samples = 5,
+    }, Dummy.noop, {});
 
-    const time_str = Result.formatDuration(result.mean_ns, &time_buf);
-    const mem_str = Result.formatBytes(result.peak_bytes, &mem_buf);
-    const leak_str = if (result.leaked_bytes == 0)
-        "ok"
-    else
-        Result.formatBytes(result.leaked_bytes, &leak_buf);
-
-    debug.print("{s:<40} {d:>10} {s:>12} {d:>14.0} {d:>11.1} {s:>10} {s:>8}\n", .{
-        result.name,
-        result.iterations,
-        time_str,
-        result.ops_per_sec,
-        result.allocs_per_op,
-        mem_str,
-        leak_str,
-    });
+    try testing.expectEqualStrings("dummy_noop", res.name);
+    try testing.expect(res.iterations >= 10);
+    try testing.expect(res.min_ns > 0.0);
+    try testing.expect(!res.hasLeak());
+    try testing.expectEqual(@as(usize, 0), res.leaked_bytes);
 }
