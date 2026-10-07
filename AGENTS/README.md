@@ -86,3 +86,7 @@ zig fmt .
      // Copyright (c) 2026 erenvly
      ...
      ```
+
+6. **Imports & Initializer Syntax:**
+   - Standard library symbols must be aliased at the top of the file (e.g., `const ArrayList = std.ArrayList;`). Avoid calling `std.<namespace>` inline.
+   - Use result location type inference for initializers: `var x: Type = .init(...);` and `var fans: ArrayList(FanInfo) = .empty;`. For initializers chained with `catch` inline, retain the type prefix `Type.init(...)`.

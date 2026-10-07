@@ -139,3 +139,52 @@ Run `zig fmt .` before finalizing changes. Ensure consistent 4-space indentation
 | Functions, Methods | `camelCase` | `getDefaultRoute`, `addKeyAny`, `waitSeconds` |
 | Variables, Fields, Params | `snake_case` | `update_interval`, `raw_bytes`, `core_usage` |
 | Constants | `UPPER_SNAKE_CASE` or `camelCase` (types) | `MOUNTS_PATH`, `DEV_PATH`, `PULSE_SERVICE` |
+
+---
+
+## 6. Standard Library Import Aliasing
+
+To maintain consistent and clean codebase idioms, **never** call `std.<namespace>.<func>` or reference `std.<Type>` inline within function or module logic.
+
+Always extract and alias required standard library namespaces, types, and utilities at the top of the file:
+
+```zig
+const std = @import("std");
+const ArrayList = std.ArrayList;
+const mem = std.mem;
+const Allocator = mem.Allocator;
+const posix = std.posix;
+const os = std.os;
+const linux = os.linux;
+const debug = std.debug;
+const testing = std.testing;
+```
+
+---
+
+## 7. Result Location Type Inference (`var X: Type = .init(...)`)
+
+Declare variables using explicit type annotations paired with inferred member initializers:
+
+```zig
+// ✅ Standard idiom:
+var replacer: Replacer = .init(gpa);
+var json: Json = .init(gpa);
+var memory: Memory = .init(io);
+var fans: ArrayList(Fan.FanInfo) = .empty;
+
+// ❌ Avoid omitting explicit types or using redundant Type prefixes:
+var replacer = Replacer.init(gpa);
+var fans: std.ArrayList(Fan.FanInfo) = .empty;
+```
+
+### Edge Case: Binary `catch` Expressions
+When an initializer returns an error union (`!T`) and is handled on the same statement with `catch`, Zig's type inference does not penetrate the binary `catch` operator (it treats `.init` as an `@EnumLiteral`). In these cases, keep the explicit receiver:
+
+```zig
+// ✅ Correct when chaining catch inline:
+var conn: Connection = Connection.init(io, gpa, .System, &env) catch |err| { ... };
+
+// ❌ Fails to compile (error: type '@EnumLiteral()' not a function):
+var conn: Connection = .init(io, gpa, .System, &env) catch |err| { ... };
+```
