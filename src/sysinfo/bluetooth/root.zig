@@ -255,7 +255,7 @@ test "live bluetooth dbus" {
     };
     defer conn.close();
 
-    var bt = Bluetooth.init(io, testing.allocator, &conn);
+    var bt: Bluetooth = .init(io, testing.allocator, &conn);
     defer bt.deinit();
 
     const adapters = bt.getAdapters() catch |err| {

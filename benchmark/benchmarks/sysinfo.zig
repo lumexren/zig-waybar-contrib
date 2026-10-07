@@ -47,7 +47,7 @@ const SysinfoBenchContext = struct {
 
 fn benchMemoryUpdate(allocator: Allocator, ctx: SysinfoBenchContext) !void {
     _ = allocator;
-    var memm = Memory.init(ctx.io);
+    var memm: Memory = .init(ctx.io);
     defer memm.deinit();
     try memm.update();
 }
@@ -58,7 +58,7 @@ fn benchCpuUpdateSteady(allocator: Allocator, cpu: *CPU) !void {
 }
 
 fn benchCpuColdInit(allocator: Allocator, ctx: SysinfoBenchContext) !void {
-    var cpu = CPU.init(ctx.io, allocator);
+    var cpu: CPU = .init(ctx.io, allocator);
     defer cpu.deinit();
     try cpu.update();
 }
@@ -135,7 +135,7 @@ pub fn runBenchmarks(allocator: Allocator, io: Io, reporter: *Reporter, writer: 
 
     if (shouldRun("sysinfo_cpu_update", filter)) {
         // Reused CPU instance: benchmarks real-world poll latency without cold-start baseline sleep
-        var steady_cpu = CPU.init(io, allocator);
+        var steady_cpu: CPU = .init(io, allocator);
         defer steady_cpu.deinit();
         const r = try runner.run(allocator, "sysinfo_cpu_update", options, benchCpuUpdateSteady, &steady_cpu);
         try reporter.report(writer, r);

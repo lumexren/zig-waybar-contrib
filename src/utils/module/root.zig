@@ -71,10 +71,10 @@ pub fn Module(comptime ConfigType: type) type {
             var watcher = try Watcher.init();
             errdefer watcher.deinit();
 
-            var json = Json.init(gpa);
+            var json: Json = .init(gpa);
             errdefer json.deinit();
 
-            var replacer = Replacer.init(gpa);
+            var replacer: Replacer = .init(gpa);
             errdefer replacer.deinit();
 
             return .{

@@ -107,7 +107,7 @@ fn getDeviceInfo(this: *Battery, path: []const u8) !BatteryInfo {
     var path_buf: [257]u8 = undefined;
     const path_z = mem.printSentinel(&path_buf, "{s}", .{path}, 0) catch return BatteryError.InvalidResponse;
 
-    var dev_proxy = Proxy.init(this.connection, UPOWER_SERVICE, path_z, DEVICE_IFACE);
+    var dev_proxy: Proxy = .init(this.connection, UPOWER_SERVICE, path_z, DEVICE_IFACE);
 
     var info = BatteryInfo{
         .path = try this.allocator.dupe(u8, path),

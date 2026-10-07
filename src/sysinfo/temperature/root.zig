@@ -308,7 +308,7 @@ test "Temperature hwmon scanner" {
     var dev_dir = try Dir.openDirAbsolute(io, path, .{ .iterate = true });
     defer dev_dir.close(io);
 
-    var temp = Temperature.init(io, testing.allocator, null);
+    var temp: Temperature = .init(io, testing.allocator, null);
     defer temp.deinit();
 
     try temp.scanDevice(dev_dir);
