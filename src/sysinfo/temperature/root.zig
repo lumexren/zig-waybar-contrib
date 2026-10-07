@@ -22,6 +22,7 @@ const Temperature = @This();
 pub const TemperatureError = @import("TemperatureError.zig").TemperatureError;
 pub const TemperatureInfo = @import("TemperatureInfo.zig").TemperatureInfo;
 pub const Sensor = @import("TemperatureInfo.zig").Sensor;
+const sysfs = @import("../common/sysfs.zig");
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
@@ -184,7 +185,7 @@ fn scanDevice(this: *Temperature, dev_dir: Dir) !void {
         if (entry.kind != .file and entry.kind != .sym_link) continue;
         if (!mem.startsWith(u8, entry.name, "temp") or !mem.endsWith(u8, entry.name, "_input")) continue;
 
-        const milli_celsius = readMilliVal(this.io, dev_dir, entry.name) catch continue;
+        const milli_celsius = sysfs.readMilli(this.io, dev_dir, entry.name) catch continue;
         const celsius = @as(f64, @floatFromInt(milli_celsius)) / 1000.0;
         // Skip negative or unrealistic hardware values
         if (celsius < -50.0 or celsius > 200.0) continue;
@@ -196,7 +197,7 @@ fn scanDevice(this: *Temperature, dev_dir: Dir) !void {
         // Optional crit reading
         var crit_buf: [32]u8 = undefined;
         const crit_filename = mem.print(&crit_buf, "{s}_crit", .{prefix}) catch "";
-        const crit_celsius: ?f64 = if (readMilliVal(this.io, dev_dir, crit_filename)) |mc|
+        const crit_celsius: ?f64 = if (sysfs.readMilli(this.io, dev_dir, crit_filename)) |mc|
             @as(f64, @floatFromInt(mc)) / 1000.0
         else |_|
             null;
@@ -204,7 +205,7 @@ fn scanDevice(this: *Temperature, dev_dir: Dir) !void {
         // Optional max reading
         var max_buf: [32]u8 = undefined;
         const max_filename = mem.print(&max_buf, "{s}_max", .{prefix}) catch "";
-        const max_celsius: ?f64 = if (readMilliVal(this.io, dev_dir, max_filename)) |mc|
+        const max_celsius: ?f64 = if (sysfs.readMilli(this.io, dev_dir, max_filename)) |mc|
             @as(f64, @floatFromInt(mc)) / 1000.0
         else |_|
             null;
@@ -249,7 +250,7 @@ fn scanThermal(this: *Temperature, thermal_dir: Dir) !void {
         var zone_dir = thermal_dir.openDir(this.io, entry.name, .{}) catch continue;
         defer zone_dir.close(this.io);
 
-        const milli_celsius = readMilliVal(this.io, zone_dir, "temp") catch continue;
+        const milli_celsius = sysfs.readMilli(this.io, zone_dir, "temp") catch continue;
         const celsius = @as(f64, @floatFromInt(milli_celsius)) / 1000.0;
         if (celsius < -50.0 or celsius > 200.0) continue;
 
@@ -285,28 +286,16 @@ fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
     return false;
 }
 
-fn readMilliVal(io: Io, dir: Dir, filename: []const u8) !i64 {
-    var file = try dir.openFile(io, filename, .{});
-    defer file.close(io);
-
-    var buf: [32]u8 = undefined;
-    const rc = std.os.linux.read(file.handle, &buf, buf.len);
-    if (std.os.linux.errno(rc) != .SUCCESS) return TemperatureError.ReadFailed;
-    if (rc == 0) return TemperatureError.ReadFailed;
-    const trimmed = mem.trim(u8, buf[0..rc], &ascii.whitespace);
-    return fmt.parseInt(i64, trimmed, 10);
-}
-
 // Tests
 
 const testing = std.testing;
 
 test "Temperature hwmon scanner" {
-    const Threaded = std.Io.Threaded;
+    const Threaded = Io.Threaded;
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    var tmp = std.testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
     try tmp.dir.writeFile(io, .{ .sub_path = "name", .data = "coretemp\n" });

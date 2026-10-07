@@ -21,15 +21,10 @@ const Temperature = @import("sysinfo").Temperature;
 
 const std = @import("std");
 const utils = @import("utils");
-const ArrayList = std.ArrayList;
-const Io = std.Io;
-const File = Io.File;
-const process = std.process;
-
-const Config = utils.Config;
-const Json = utils.Json;
+const Module = utils.Module;
 const Replacer = utils.Replacer;
-const Watcher = utils.Watcher;
+const ArrayList = std.ArrayList;
+const process = std.process;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 2,
@@ -43,63 +38,36 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const gpa = init.gpa;
-    const io = init.io;
+    var mod = try Module(ModuleConfig).init(init, "temperature");
+    defer mod.deinit();
 
-    var stdout_buffer: [4096]u8 = undefined;
-    var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    var config: Config = .init(io, init.environ_map, gpa);
-    const data: ModuleConfig = config.load("temperature", ModuleConfig);
-    defer config.free(data);
-
-    var watcher = try Watcher.init();
-    defer watcher.deinit();
-
-    var json: Json = .init(gpa);
-    defer json.deinit();
-
-    var replacer: Replacer = .init(gpa);
-    defer replacer.deinit();
-
-    var temp: Temperature = .init(io, gpa, data.sensor);
+    var temp: Temperature = .init(init.io, init.gpa, mod.config.sensor);
     defer temp.deinit();
 
-    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
-        defer {
-            json.clear();
-            replacer.clear();
-        }
+    var sensor_replacer: Replacer = .init(init.gpa);
+    defer sensor_replacer.deinit();
+
+    var sensors_text: ArrayList(u8) = .empty;
+    defer sensors_text.deinit(init.gpa);
+
+    while (try mod.tick()) {
+        sensors_text.clearRetainingCapacity();
 
         temp.update() catch |err| {
-            try json.set("text", @as([]const u8, " N/A"));
-            try json.set("tooltip", @as([]const u8, "Temperature sensor not found"));
-            try json.setClass("error");
-            try json.write(stdout);
-            try stdout.flush();
-
+            try mod.renderError(" N/A", "Temperature sensor not found");
             if (err == Temperature.TemperatureError.SensorNotFound or err == Temperature.TemperatureError.HwmonNotFound) {
-                if (data.update_interval == 0) break;
+                if (mod.config.update_interval == 0) break;
                 continue;
             }
             return err;
         };
 
-        try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", data.icon);
-        try replacer.addKey("sensor", temp.info.sensor_name);
-        try replacer.addKeyAny("temp", temp.info.celsius);
-        try replacer.addKeyAny("temperature", temp.info.celsius);
-        try replacer.addKeyAny("temperature_c", temp.info.celsius);
-        try replacer.addKeyAny("temperature_f", temp.info.fahrenheit);
-        try replacer.addKeyAny("max_temperature", temp.info.max_celsius);
-
-        var sensors_text: ArrayList(u8) = .empty;
-        defer sensors_text.deinit(gpa);
-
-        var sensor_replacer: Replacer = .init(gpa);
-        defer sensor_replacer.deinit();
+        try mod.put("sensor", temp.info.sensor_name);
+        try mod.put("temp", temp.info.celsius);
+        try mod.put("temperature", temp.info.celsius);
+        try mod.put("temperature_c", temp.info.celsius);
+        try mod.put("temperature_f", temp.info.fahrenheit);
+        try mod.put("max_temperature", temp.info.max_celsius);
 
         for (temp.sensors.items) |s| {
             sensor_replacer.clear();
@@ -108,51 +76,17 @@ pub fn main(init: process.Init) !void {
             try sensor_replacer.addKeyAny("sensor_temperature", s.celsius);
             try sensor_replacer.addKeyAny("sensor_temperature_f", s.fahrenheit);
 
-            const sensor_line = try sensor_replacer.render(data.sensor_format);
+            const sensor_line = try sensor_replacer.render(mod.config.sensor_format);
             defer sensor_replacer.free(sensor_line);
 
-            if (sensors_text.items.len > 0) try sensors_text.append(gpa, '\n');
-            try sensors_text.appendSlice(gpa, sensor_line);
+            if (sensors_text.items.len > 0) try sensors_text.append(init.gpa, '\n');
+            try sensors_text.appendSlice(init.gpa, sensor_line);
         }
 
-        try replacer.addKey("sensors", sensors_text.items);
+        try mod.putString("sensors", sensors_text.items);
 
-        const text_rendered = try replacer.render(data.text);
-        defer replacer.free(text_rendered);
-
-        const tooltip_rendered = try replacer.render(data.tooltip);
-        defer replacer.free(tooltip_rendered);
-
-        const temp_int: i64 = @intFromFloat(@round(temp.info.celsius));
-        try json.set("text", text_rendered);
-        try json.set("tooltip", tooltip_rendered);
-        try json.set("percentage", temp_int);
-
-        if (data.critical_threshold) |crit| {
-            if (temp.info.celsius >= crit) {
-                try json.setClass("critical");
-            } else if (data.warning_threshold) |warn| {
-                if (temp.info.celsius >= warn) {
-                    try json.setClass("warning");
-                } else {
-                    try json.setClass("normal");
-                }
-            } else {
-                try json.setClass("normal");
-            }
-        } else if (data.warning_threshold) |warn| {
-            if (temp.info.celsius >= warn) {
-                try json.setClass("warning");
-            } else {
-                try json.setClass("normal");
-            }
-        } else {
-            try json.setClass("normal");
-        }
-
-        try json.write(stdout);
-        try stdout.flush();
-
-        if (data.update_interval == 0) break;
+        try mod.render(.{
+            .percentage = temp.info.celsius,
+        });
     }
 }

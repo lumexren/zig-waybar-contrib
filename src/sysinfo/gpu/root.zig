@@ -29,6 +29,7 @@ const ascii = std.ascii;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
+const testing = std.testing;
 
 pub const BackendType = enum {
     auto,
@@ -175,25 +176,25 @@ pub const GPU = struct {
 pub const SMI = GPU;
 
 test "GPU BackendType fromString" {
-    try std.testing.expectEqual(BackendType.nvml, BackendType.fromString("nvml"));
-    try std.testing.expectEqual(BackendType.nvml, BackendType.fromString("nvidia"));
-    try std.testing.expectEqual(BackendType.amdsmi, BackendType.fromString("amdsmi"));
-    try std.testing.expectEqual(BackendType.amdsmi, BackendType.fromString("amd"));
-    try std.testing.expectEqual(BackendType.drm, BackendType.fromString("drm"));
-    try std.testing.expectEqual(BackendType.auto, BackendType.fromString("auto"));
-    try std.testing.expectEqual(BackendType.auto, BackendType.fromString("unknown"));
+    try testing.expectEqual(BackendType.nvml, BackendType.fromString("nvml"));
+    try testing.expectEqual(BackendType.nvml, BackendType.fromString("nvidia"));
+    try testing.expectEqual(BackendType.amdsmi, BackendType.fromString("amdsmi"));
+    try testing.expectEqual(BackendType.amdsmi, BackendType.fromString("amd"));
+    try testing.expectEqual(BackendType.drm, BackendType.fromString("drm"));
+    try testing.expectEqual(BackendType.auto, BackendType.fromString("auto"));
+    try testing.expectEqual(BackendType.auto, BackendType.fromString("unknown"));
 }
 
 test "GPUInfo helpers" {
     var info: GPUInfo = .{};
-    try std.testing.expect(info.getName() == null);
+    try testing.expect(info.getName() == null);
     info.setName("GeForce RTX 3060");
-    try std.testing.expectEqualStrings("GeForce RTX 3060", info.getName().?);
+    try testing.expectEqualStrings("GeForce RTX 3060", info.getName().?);
 
     var mem_info: GPUMemoryInfo = .{
         .total = 1000,
         .used = 250,
         .free = 750,
     };
-    try std.testing.expectEqual(@as(u64, 25), mem_info.percentage());
+    try testing.expectEqual(@as(u64, 25), mem_info.percentage());
 }

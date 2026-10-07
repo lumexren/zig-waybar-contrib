@@ -22,6 +22,9 @@ const Result = @import("Result.zig");
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const fmt = std.fmt;
+const heap = std.heap;
+const page_allocator = heap.page_allocator;
 
 pub const OutputFormat = enum {
     table,
@@ -140,8 +143,8 @@ pub const Reporter = struct {
                     const leak_s = if (result.leaked_bytes == 0)
                         "\x1b[32mok\x1b[0m"
                     else
-                        try std.fmt.allocPrint(std.heap.page_allocator, "\x1b[31;1m{s}\x1b[0m", .{Result.formatBytes(result.leaked_bytes, &leak_buf)});
-                    defer if (result.leaked_bytes != 0) std.heap.page_allocator.free(leak_s);
+                        try fmt.allocPrint(page_allocator, "\x1b[31;1m{s}\x1b[0m", .{Result.formatBytes(result.leaked_bytes, &leak_buf)});
+                    defer if (result.leaked_bytes != 0) page_allocator.free(leak_s);
 
                     try writer.print("{s:<36} {d:>9} {s:>10} {s:>10} {s:>10} {s:>10} \x1b[36m{d:>13.0}\x1b[0m {d:>10.1} {s:>10} {s:>9} {s:>16}\n", .{
                         result.name,
