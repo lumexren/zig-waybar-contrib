@@ -48,6 +48,7 @@
 | **Battery** | Battery status and time remaining |
 | **MPRIS** | Media player information with visual progress bar |
 | **Updates** | Package updates (pacman/yay/paru/apt/dnf/zypper/xbps/flatpak) |
+| **Temperature** | Hardware temperatures for CPU, GPU, NVMe, and motherboard |
 
 See [MODULES](MODULES.md) for detailed documentation on each module.
 

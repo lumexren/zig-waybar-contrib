@@ -18,6 +18,7 @@
 // along with this program. If not, see <https://gnu.org/licenses>.
 
 const CPU = @import("sysinfo").CPU;
+const Temperature = @import("sysinfo").Temperature;
 
 const std = @import("std");
 const utils = @import("utils");
@@ -67,11 +68,15 @@ pub fn main(init: process.Init) !void {
     var cpu: CPU = .init(io, gpa);
     defer cpu.deinit();
 
+    var temp: Temperature = .init(io, gpa, null);
+    defer temp.deinit();
+
     while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
         defer json.clear();
         defer replacer.clear();
 
         try cpu.update();
+        temp.update() catch {};
 
         var max_frequency: CPU.Frequency = .{};
         var min_frequency: CPU.Frequency = .{ .value = .{ .raw = math.floatMax(f64) } };
@@ -102,6 +107,20 @@ pub fn main(init: process.Init) !void {
         try replacer.addKeyAny("load_1", cpu.load_avg.one);
         try replacer.addKeyAny("load_5", cpu.load_avg.five);
         try replacer.addKeyAny("load_15", cpu.load_avg.fifteen);
+
+        if (temp.sensors.items.len > 0) {
+            try replacer.addKeyAny("temperature", temp.info.celsius);
+            try replacer.addKeyAny("temp", temp.info.celsius);
+            try replacer.addKeyAny("temperature_c", temp.info.celsius);
+            try replacer.addKeyAny("temperature_f", temp.info.fahrenheit);
+            try replacer.addKeyAny("temp_f", temp.info.fahrenheit);
+        } else {
+            try replacer.addKey("temperature", "N/A");
+            try replacer.addKey("temp", "N/A");
+            try replacer.addKey("temperature_c", "N/A");
+            try replacer.addKey("temperature_f", "N/A");
+            try replacer.addKey("temp_f", "N/A");
+        }
 
         var tooltip_text: ArrayList(u8) = .empty;
         defer tooltip_text.deinit(gpa);

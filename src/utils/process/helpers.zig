@@ -170,7 +170,7 @@ pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name:
 ///
 /// `buf` must be at least `comm_buf_len` bytes. The returned slice is a
 /// sub-slice of `buf` — its lifetime is tied to `buf`.
-fn readCommInto(io: Io, pid_str: []const u8, buf: *[Process.comm_buf_len]u8) ![]const u8 {
+pub fn readCommInto(io: Io, pid_str: []const u8, buf: *[Process.comm_buf_len]u8) ![]const u8 {
     var path_buf: [32]u8 = undefined;
     const path = try mem.print(&path_buf, "/proc/{s}/comm", .{pid_str});
 
@@ -181,4 +181,94 @@ fn readCommInto(io: Io, pid_str: []const u8, buf: *[Process.comm_buf_len]u8) ![]
     const n = try file.readStreaming(io, slices[0..]);
 
     return mem.trimEnd(u8, buf[0..n], &ascii.whitespace);
+}
+
+pub const ProcessMemory = struct {
+    pid: linux.pid_t,
+    name: [Process.comm_buf_len]u8,
+    name_len: u8,
+    rss_bytes: u64,
+
+    pub fn getName(this: *const ProcessMemory) []const u8 {
+        return this.name[0..this.name_len];
+    }
+};
+
+/// Scan /proc and return the top `count` processes sorted descending by resident memory (RSS).
+/// Caller owns the returned slice and must free it with `allocator.free(...)`.
+pub fn getTopMemoryProcesses(io: Io, allocator: Allocator, count: usize) ![]ProcessMemory {
+    if (count == 0) return try allocator.alloc(ProcessMemory, 0);
+
+    var dir = try Dir.openDirAbsolute(io, "/proc", .{ .iterate = true, .follow_symlinks = false });
+    defer dir.close(io);
+
+    var it = dir.iterate();
+    var top = try allocator.alloc(ProcessMemory, count);
+    errdefer allocator.free(top);
+    @memset(top, .{ .pid = 0, .name = @splat(0), .name_len = 0, .rss_bytes = 0 });
+
+    var statm_buf: [128]u8 = undefined;
+
+    while (try it.next(io)) |entry| {
+        if (entry.kind != .directory or !ascii.isDigit(entry.name[0])) continue;
+
+        const pid = fmt.parseInt(linux.pid_t, entry.name, 10) catch continue;
+
+        var path_buf: [32]u8 = undefined;
+        const statm_path = mem.print(&path_buf, "{s}/statm", .{entry.name}) catch continue;
+
+        var file = dir.openFile(io, statm_path, .{}) catch continue;
+        defer file.close(io);
+
+        const rc = std.os.linux.read(file.handle, &statm_buf, statm_buf.len);
+        if (std.os.linux.errno(rc) != .SUCCESS or rc == 0) continue;
+
+        const content = statm_buf[0..rc];
+        var tokens = mem.tokenizeAny(u8, content, " \t\r\n");
+        _ = tokens.next(); // skip size
+        const resident_str = tokens.next() orelse continue;
+        const pages = fmt.parseInt(u64, resident_str, 10) catch continue;
+        const rss_bytes = pages * 4096;
+
+        if (rss_bytes <= top[count - 1].rss_bytes) continue;
+
+        // Insert into sorted top array
+        var insert_pos: usize = count - 1;
+        while (insert_pos > 0 and rss_bytes > top[insert_pos - 1].rss_bytes) : (insert_pos -= 1) {}
+
+        var shift = count - 1;
+        while (shift > insert_pos) : (shift -= 1) {
+            top[shift] = top[shift - 1];
+        }
+
+        top[insert_pos] = .{
+            .pid = pid,
+            .name = @splat(0),
+            .name_len = 0,
+            .rss_bytes = rss_bytes,
+        };
+    }
+
+    // Now populate process names for the top processes
+    var actual_count: usize = 0;
+    for (top) |*item| {
+        if (item.pid == 0) break;
+        var pid_str_buf: [20]u8 = undefined;
+        const pid_str = mem.print(&pid_str_buf, "{d}", .{item.pid}) catch continue;
+        var comm_buf: [Process.comm_buf_len]u8 = undefined;
+        if (readCommInto(io, pid_str, &comm_buf)) |name| {
+            @memcpy(item.name[0..name.len], name);
+            item.name_len = @intCast(name.len);
+        } else |_| {
+            const fallback = "?";
+            @memcpy(item.name[0..fallback.len], fallback);
+            item.name_len = fallback.len;
+        }
+        actual_count += 1;
+    }
+
+    if (actual_count < count) {
+        return allocator.realloc(top, actual_count);
+    }
+    return top;
 }

@@ -29,3 +29,5 @@ pub const findExecutable = Helpers.findExecutable;
 pub const readAll = Helpers.readAll;
 pub const runCommand = Helpers.runCommand;
 pub const runCommandCapture = Helpers.runCommandCapture;
+pub const ProcessMemory = Helpers.ProcessMemory;
+pub const getTopMemoryProcesses = Helpers.getTopMemoryProcesses;

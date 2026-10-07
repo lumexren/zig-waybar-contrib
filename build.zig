@@ -46,6 +46,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "backlight", .path = "src/modules/backlight.zig" },
     .{ .name = "bluetooth", .path = "src/modules/bluetooth.zig" },
     .{ .name = "pipewire", .path = "src/modules/pipewire.zig" },
+    .{ .name = "temperature", .path = "src/modules/temperature.zig" },
 };
 
 pub fn build(b: *Build) void {
