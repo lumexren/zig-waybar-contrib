@@ -34,9 +34,15 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
 const StringHashMap = std.StringHashMap;
+const HashMap = std.HashMap;
+const hash_map = std.hash_map;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
+const Wyhash = std.hash.Wyhash;
+const ArenaAllocator = std.heap.ArenaAllocator;
+const process = std.process;
+const debug = std.debug;
 
 const BLUEZ_SERVICE: [:0]const u8 = "org.bluez";
 const BLUEZ_PATH: [:0]const u8 = "/";
@@ -66,7 +72,7 @@ pub fn deinit(this: *Bluetooth) void {
 const GPathContext = struct {
     pub fn hash(self: @This(), s: GPath) u64 {
         _ = self;
-        return std.hash.Wyhash.hash(0, s.s);
+        return Wyhash.hash(0, s.s);
     }
     pub fn eql(self: @This(), a: GPath, b: GPath) bool {
         _ = self;
@@ -74,7 +80,7 @@ const GPathContext = struct {
     }
 };
 
-const ManagedObjects = std.HashMap(GPath, StringHashMap(StringHashMap(GVariant)), GPathContext, std.hash_map.default_max_load_percentage);
+const ManagedObjects = HashMap(GPath, StringHashMap(StringHashMap(GVariant)), GPathContext, hash_map.default_max_load_percentage);
 
 /// Get all Bluetooth adapters via bluez ObjectManager
 pub fn getAdapters(this: *Bluetooth) ![]AdapterInfo {
@@ -87,7 +93,7 @@ pub fn getAdapters(this: *Bluetooth) ![]AdapterInfo {
         adapters.deinit(this.allocator);
     }
 
-    var arena: std.heap.ArenaAllocator = .init(this.allocator);
+    var arena: ArenaAllocator = .init(this.allocator);
     defer arena.deinit();
 
     var dec: plume.Decoder = .fromMessage(arena.allocator(), res.message);
@@ -137,7 +143,7 @@ pub fn getDevices(this: *Bluetooth) ![]DeviceInfo {
         devices.deinit(this.allocator);
     }
 
-    var arena: std.heap.ArenaAllocator = .init(this.allocator);
+    var arena: ArenaAllocator = .init(this.allocator);
     defer arena.deinit();
 
     var dec: plume.Decoder = .fromMessage(arena.allocator(), res.message);
@@ -238,13 +244,13 @@ test "DeviceInfo.deinit" {
 }
 
 test "live bluetooth dbus" {
-    var threaded: std.Io.Threaded = .init_single_threaded;
+    var threaded: Io.Threaded = .init_single_threaded;
     const io = threaded.io();
-    var environ_map: std.process.Environ.Map = .init(testing.allocator);
+    var environ_map: process.Environ.Map = .init(testing.allocator);
     defer environ_map.deinit();
 
     var conn = Connection.init(io, testing.allocator, .System, &environ_map) catch |err| {
-        std.debug.print("\nConnection error: {any}\n", .{err});
+        debug.print("\nConnection error: {any}\n", .{err});
         return;
     };
     defer conn.close();
@@ -253,7 +259,7 @@ test "live bluetooth dbus" {
     defer bt.deinit();
 
     const adapters = bt.getAdapters() catch |err| {
-        std.debug.print("\ngetAdapters error: {any}\n", .{err});
+        debug.print("\ngetAdapters error: {any}\n", .{err});
         return err;
     };
     defer {
@@ -261,13 +267,13 @@ test "live bluetooth dbus" {
         testing.allocator.free(adapters);
     }
 
-    std.debug.print("\nFound {d} adapters:\n", .{adapters.len});
+    debug.print("\nFound {d} adapters:\n", .{adapters.len});
     for (adapters) |a| {
-        std.debug.print("Adapter path: {s}, name: {s}, address: {s}, powered: {}\n", .{ a.path, a.name orelse "null", a.address orelse "null", a.powered });
+        debug.print("Adapter path: {s}, name: {s}, address: {s}, powered: {}\n", .{ a.path, a.name orelse "null", a.address orelse "null", a.powered });
     }
 
     const devices = bt.getDevices() catch |err| {
-        std.debug.print("\ngetDevices error: {any}\n", .{err});
+        debug.print("\ngetDevices error: {any}\n", .{err});
         return err;
     };
     defer {
@@ -275,8 +281,8 @@ test "live bluetooth dbus" {
         testing.allocator.free(devices);
     }
 
-    std.debug.print("\nFound {d} devices:\n", .{devices.len});
+    debug.print("\nFound {d} devices:\n", .{devices.len});
     for (devices) |d| {
-        std.debug.print("Device path: {s}, name: {s}, connected: {}, battery: {any}\n", .{ d.path, d.name orelse "null", d.connected, d.battery });
+        debug.print("Device path: {s}, name: {s}, connected: {}, battery: {any}\n", .{ d.path, d.name orelse "null", d.connected, d.battery });
     }
 }

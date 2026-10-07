@@ -28,7 +28,11 @@ const Io = std.Io;
 const File = Io.File;
 const process = std.process;
 const mem = std.mem;
+const Allocator = mem.Allocator;
 const ascii = std.ascii;
+const posix = std.posix;
+const os = std.os;
+const linux = os.linux;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -88,27 +92,27 @@ pub fn main(init: process.Init) !void {
         if (c.stdout) |pipe_file| {
             var line_buf: [1024]u8 = undefined;
             while (true) {
-                var fds = [_]std.posix.pollfd{
-                    .{ .fd = pipe_file.handle, .events = std.posix.POLL.IN, .revents = 0 },
-                    .{ .fd = watcher.sfd, .events = std.posix.POLL.IN, .revents = 0 },
+                var fds = [_]posix.pollfd{
+                    .{ .fd = pipe_file.handle, .events = posix.POLL.IN, .revents = 0 },
+                    .{ .fd = watcher.sfd, .events = posix.POLL.IN, .revents = 0 },
                 };
 
-                const ret = std.posix.poll(&fds, -1) catch break;
+                const ret = posix.poll(&fds, -1) catch break;
                 if (ret <= 0) break;
 
                 var should_render = false;
 
-                if ((fds[1].revents & std.posix.POLL.IN) != 0) {
-                    var siginfo: std.os.linux.signalfd_siginfo = undefined;
-                    _ = std.os.linux.read(watcher.sfd, @ptrCast(&siginfo), @sizeOf(std.os.linux.signalfd_siginfo));
+                if ((fds[1].revents & posix.POLL.IN) != 0) {
+                    var siginfo: linux.signalfd_siginfo = undefined;
+                    _ = linux.read(watcher.sfd, @ptrCast(&siginfo), @sizeOf(linux.signalfd_siginfo));
                     should_render = true;
                 }
 
-                if ((fds[0].revents & std.posix.POLL.IN) != 0) {
+                if ((fds[0].revents & posix.POLL.IN) != 0) {
                     const len = pipe_file.readStreaming(io, &.{line_buf[0..]}) catch break;
                     if (len == 0) break;
                     should_render = true;
-                } else if ((fds[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0) {
+                } else if ((fds[0].revents & (posix.POLL.HUP | posix.POLL.ERR)) != 0) {
                     break;
                 }
 
@@ -125,7 +129,7 @@ pub fn main(init: process.Init) !void {
     }
 }
 
-fn renderOutput(stdout: *Io.Writer, gpa: std.mem.Allocator, data: *const ModuleConfig, json: *Json, replacer: *Replacer, pipewire: *Pipewire) !void {
+fn renderOutput(stdout: *Io.Writer, gpa: Allocator, data: *const ModuleConfig, json: *Json, replacer: *Replacer, pipewire: *Pipewire) !void {
     defer json.clear();
     defer replacer.clear();
 

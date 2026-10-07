@@ -105,3 +105,23 @@ When low-level OS or hardware metrics require C library linkage:
 - **`src/bindings/nvml.zig`**: C headers and type definitions for NVIDIA Management Library (`libnvidia-ml.so`).
 - **`src/bindings/amdsmi.zig`**: C headers for AMD SMI (`libamd_smi.so`).
 - **`src/bindings/statvfs.zig`**: C wrapper calling POSIX `statvfs` to retrieve filesystem block size, total blocks, and available blocks for `disk` monitoring.
+
+---
+
+## 8. `utils.Module` (`src/utils/module/root.zig`)
+
+The unified runtime harness for creating custom Waybar modules with minimal boilerplate.
+- **`Module(ConfigType).init(init, "mod_name")`**: Loads ZON configuration, initializes `Watcher` (signalfd), `Json`, `Replacer`, and 4KB buffered stdout writer.
+- **`mod.tick() !bool`**: Manages the main event loop, non-busy sleeps via `Watcher`, clears builder buffers, and re-registers common placeholders. Returns `false` for one-shot runs (`update_interval == 0`).
+- **`mod.put(key, val)`**: Convenience wrapper for `replacer.addKeyAny`.
+- **`mod.render(options)`**: Automatically evaluates `critical_threshold` and `warning_threshold`, renders user templates (`text` and `tooltip`), and emits flushed JSON.
+- **`mod.renderError(text, tooltip)`**: Emits standard error status line on hardware/device unavailability.
+
+---
+
+## 9. `sysinfo.common` (`src/sysinfo/common/`)
+
+Shared OS and sysfs interaction primitives for hardware metric collectors:
+- **`sysfs.readInt(io, dir, filename, T)`**: Generic integer parser from sysfs.
+- **`sysfs.readMilli(io, dir, filename)`**: Millidegree / milli-value reader using raw Linux read syscall to handle `ENODATA` and non-standard sysfs EOF cleanly without runtime panics.
+- **`sysfs.readTrimmed(io, dir, filename, buf)`**: Trimmed string reader.

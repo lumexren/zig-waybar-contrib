@@ -152,7 +152,7 @@ pub fn findExecutable(io: Io, environ_map: *Map, allocator: Allocator, exe_name:
     const path_value = environ_map.get("PATH") orelse return null;
 
     var it = mem.splitScalar(u8, path_value, ':');
-    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    var path_buf: [fs.max_path_bytes]u8 = undefined;
 
     while (it.next()) |dir| {
         if (dir.len == 0) continue;
@@ -220,8 +220,8 @@ pub fn getTopMemoryProcesses(io: Io, allocator: Allocator, count: usize) ![]Proc
         var file = dir.openFile(io, statm_path, .{}) catch continue;
         defer file.close(io);
 
-        const rc = std.os.linux.read(file.handle, &statm_buf, statm_buf.len);
-        if (std.os.linux.errno(rc) != .SUCCESS or rc == 0) continue;
+        const rc = linux.read(file.handle, &statm_buf, statm_buf.len);
+        if (linux.errno(rc) != .SUCCESS or rc == 0) continue;
 
         const content = statm_buf[0..rc];
         var tokens = mem.tokenizeAny(u8, content, " \t\r\n");

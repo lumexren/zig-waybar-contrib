@@ -31,6 +31,7 @@ pub const Backlight = @import("backlight/root.zig");
 pub const bluetooth = @import("bluetooth/root.zig");
 pub const Pipewire = @import("pipewire/root.zig");
 pub const Temperature = @import("temperature/root.zig");
+pub const common = @import("common/root.zig");
 
 test {
     _ = @import("std").testing.refAllDecls(@This());

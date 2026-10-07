@@ -25,6 +25,7 @@ const mem = std.mem;
 const Io = std.Io;
 const File = Io.File;
 const process = std.process;
+const ArrayList = std.ArrayList;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -90,7 +91,7 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("icon", data.icon);
         try replacer.addKeyAny("total_usage", memory.physical.used + memory.swap.used);
 
-        var top_procs_text: std.ArrayList(u8) = .empty;
+        var top_procs_text: ArrayList(u8) = .empty;
         defer top_procs_text.deinit(gpa);
 
         if (data.top_processes_count > 0) {

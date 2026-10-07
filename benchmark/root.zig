@@ -22,6 +22,7 @@ const mem = std.mem;
 const fmt = std.fmt;
 const Io = std.Io;
 const File = Io.File;
+const process = std.process;
 
 const runner = @import("runner.zig");
 const reporter_mod = @import("reporter.zig");
@@ -85,7 +86,7 @@ fn printBenchmarkList(writer: anytype) !void {
     }
 }
 
-pub fn main(init: std.process.Init) !void {
+pub fn main(init: process.Init) !void {
     const gpa = init.gpa;
     const io = init.io;
 

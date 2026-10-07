@@ -106,14 +106,8 @@ const Temperature = @import("sysinfo").Temperature;
 
 const std = @import("std");
 const utils = @import("utils");
-const Io = std.Io;
-const File = Io.File;
+const Module = utils.Module;
 const process = std.process;
-
-const Config = utils.Config;
-const Json = utils.Json;
-const Replacer = utils.Replacer;
-const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
     update_interval: i64 = 2,
@@ -125,71 +119,29 @@ pub const ModuleConfig = struct {
 };
 
 pub fn main(init: process.Init) !void {
-    const gpa = init.gpa;
-    const io = init.io;
+    // 1. Initialize Module harness (handles stdout buffering, ZON loading,
+    //    Watcher signalfd setup, Json, and Replacer lifecycle)
+    var mod = try Module(ModuleConfig).init(init, "temperature");
+    defer mod.deinit();
 
-    // 1. Buffered Stdout
-    var stdout_buffer: [4096]u8 = undefined;
-    var stdout_writer = File.writer(.stdout(), io, &stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    // 2. Load ZON configuration
-    var config: Config = .init(io, init.environ_map, gpa);
-    const data: ModuleConfig = config.load("temperature", ModuleConfig);
-    defer config.free(data);
-
-    // 3. Watcher for instant signal wakeup
-    var watcher = try Watcher.init();
-    defer watcher.deinit();
-
-    // 4. Builders
-    var json: Json = .init(gpa);
-    defer json.deinit();
-
-    var replacer: Replacer = .init(gpa);
-    defer replacer.deinit();
-
-    var temp: Temperature = .init(io, gpa);
+    var temp: Temperature = .init(init.io, init.gpa, null);
     defer temp.deinit();
 
-    // 5. Polling Loop
-    while (true) : (_ = watcher.waitSeconds(data.update_interval)) {
-        defer json.clear();
-        defer replacer.clear();
-
+    // 2. Loop with mod.tick() (handles intervals, instant SIGUSR1 wakeups,
+    //    resetting builders, and registering common placeholders)
+    while (try mod.tick()) {
         try temp.update();
 
-        try replacer.addCommonPlaceholders();
-        try replacer.addKey("icon", data.icon);
-        try replacer.addKey("sensor", temp.info.sensor_name);
-        try replacer.addKeyAny("temp", temp.info.celsius);
-        try replacer.addKeyAny("temp_f", temp.info.fahrenheit);
+        // 3. Ergonomically bind template keys
+        try mod.put("sensor", temp.info.sensor_name);
+        try mod.put("temp", temp.info.celsius);
+        try mod.put("temp_f", temp.info.fahrenheit);
 
-        const text_rendered = try replacer.render(data.text);
-        defer replacer.free(text_rendered);
-
-        const tooltip_rendered = try replacer.render(data.tooltip);
-        defer replacer.free(tooltip_rendered);
-
-        try json.set("text", text_rendered);
-        try json.set("tooltip", tooltip_rendered);
-        try json.set("percentage", @as(i64, @intFromFloat(@round(temp.info.celsius))));
-
-        // Threshold evaluation
-        if (data.critical_threshold) |crit| {
-            if (temp.info.celsius >= crit) {
-                try json.setClass("critical");
-            } else if (data.warning_threshold) |warn| {
-                if (temp.info.celsius >= warn) try json.setClass("warning") else try json.setClass("normal");
-            } else {
-                try json.setClass("normal");
-            }
-        }
-
-        try json.write(stdout);
-        try stdout.flush();
-
-        if (data.update_interval == 0) break;
+        // 4. Render templates, evaluate thresholds (critical/warning/normal),
+        //    emit JSON to stdout, and flush
+        try mod.render(.{
+            .percentage = temp.info.celsius,
+        });
     }
 }
 ```
