@@ -28,6 +28,7 @@ const Io = std.Io;
 const File = Io.File;
 const process = std.process;
 const mem = std.mem;
+const ascii = std.ascii;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -35,10 +36,13 @@ const Replacer = utils.Replacer;
 const Watcher = utils.Watcher;
 
 pub const ModuleConfig = struct {
+    mode: []const u8 = "sink",
     icon_high: []const u8 = "󰕾",
     icon_medium: []const u8 = "󰖀",
     icon_low: []const u8 = "󰕿",
     icon_muted: []const u8 = "󰝟",
+    icon_source: []const u8 = "󰍬",
+    icon_source_muted: []const u8 = "󰍭",
     text: []const u8 = "{icon}  {volume:'%'}",
     tooltip: []const u8 = "Device: {node_name}{nl}Volume: {volume:'%'}{nl}State: {state}",
 };
@@ -125,16 +129,35 @@ fn renderOutput(stdout: *Io.Writer, gpa: std.mem.Allocator, data: *const ModuleC
     defer json.clear();
     defer replacer.clear();
 
-    var info = pipewire.getAudioInfo() catch |err| {
-        try json.set("text", @as([]const u8, "Audio Error"));
-        try json.set("tooltip", @as([]const u8, "PipeWire audio unavailable"));
-        try json.write(stdout);
-        try stdout.flush();
-        return err;
-    };
+    const is_source_mode = ascii.eqlIgnoreCase(data.mode, "source") or ascii.eqlIgnoreCase(data.mode, "microphone") or ascii.eqlIgnoreCase(data.mode, "input");
+
+    var info = if (is_source_mode)
+        pipewire.getSourceAudioInfo() catch |err| {
+            try json.set("text", @as([]const u8, "Mic Error"));
+            try json.set("tooltip", @as([]const u8, "PipeWire source unavailable"));
+            try json.write(stdout);
+            try stdout.flush();
+            return err;
+        }
+    else
+        pipewire.getAudioInfo() catch |err| {
+            try json.set("text", @as([]const u8, "Audio Error"));
+            try json.set("tooltip", @as([]const u8, "PipeWire audio unavailable"));
+            try json.write(stdout);
+            try stdout.flush();
+            return err;
+        };
     defer info.deinit(gpa);
 
-    const chosen_icon = if (info.muted)
+    var maybe_source_info: ?Pipewire.PipewireInfo = null;
+    if (!is_source_mode) {
+        maybe_source_info = pipewire.getSourceAudioInfo() catch null;
+    }
+    defer if (maybe_source_info) |*si| si.deinit(gpa);
+
+    const chosen_icon = if (is_source_mode)
+        (if (info.muted) data.icon_source_muted else data.icon_source)
+    else if (info.muted)
         data.icon_muted
     else if (info.volume > 60)
         data.icon_high
@@ -152,6 +175,23 @@ fn renderOutput(stdout: *Io.Writer, gpa: std.mem.Allocator, data: *const ModuleC
     try replacer.addKey("node_name", info.node_name);
     try replacer.addKey("state", state_str);
     try replacer.addKeyAny("is_muted", info.muted);
+
+    if (maybe_source_info) |si| {
+        const source_icon = if (si.muted) data.icon_source_muted else data.icon_source;
+        try replacer.addKey("source_icon", source_icon);
+        try replacer.addKeyAny("source_volume", si.volume);
+        try replacer.addKeyAny("source_raw_volume", si.raw_volume);
+        try replacer.addKey("source_node_name", si.node_name);
+        try replacer.addKey("source_state", if (si.muted) "Muted" else "Active");
+        try replacer.addKeyAny("source_muted", si.muted);
+    } else {
+        try replacer.addKey("source_icon", data.icon_source_muted);
+        try replacer.addKeyAny("source_volume", @as(u8, 0));
+        try replacer.addKeyAny("source_raw_volume", @as(f64, 0.0));
+        try replacer.addKey("source_node_name", "N/A");
+        try replacer.addKey("source_state", "N/A");
+        try replacer.addKeyAny("source_muted", true);
+    }
 
     const text_line = try replacer.render(data.text);
     defer replacer.free(text_line);

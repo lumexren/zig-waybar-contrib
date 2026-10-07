@@ -75,8 +75,13 @@ The `text` and `tooltip` options support the following placeholders:
 | `{model}`         | Battery model name                   |
 | `{vendor}`        | Battery vendor name                  |
 | `{voltage}`       | Current voltage                      |
-| `{energy}`        | Current energy                       |
-| `{energy_rate}`   | Current energy rate                  |
+| `{energy}`        | Current energy (Wh)                  |
+| `{energy_full}`   | Last full capacity (Wh)              |
+| `{energy_full_design}` | Factory design capacity (Wh)    |
+| `{energy_rate}`   | Current energy rate (W)              |
+| `{power_w}`       | Current power draw in Watts          |
+| `{power_watts}`   | Current power draw in Watts          |
+| `{health}`        | Battery health percentage (0-100%)   |
 
 ---
 
@@ -175,6 +180,8 @@ The `text` and `tooltip` options support the following placeholders:
 | `{load_1}`             | 1-minute load average                  |
 | `{load_5}`             | 5-minute load average                  |
 | `{load_15}`            | 15-minute load average                 |
+| `{temperature}`, `{temp}`, `{temperature_c}` | CPU package temperature (°C) |
+| `{temperature_f}`, `{temp_f}` | CPU package temperature (°F)           |
 
 **Tooltip:**
 
@@ -439,6 +446,14 @@ The `text` and `tooltip` options support the following placeholders:
 | `{swap_zswapped}`               | Zswapped memory                                      |
 | `{swap_commit_limit}`           | Commit limit                                         |
 | `{swap_committed_as}`           | Committed AS                                         |
+| `{top_processes}`               | Multi-line list of top memory consuming processes    |
+
+**Top Processes Customization (`top_process_format`):**
+| Placeholder    | Description                               |
+| :------------- | :---------------------------------------- |
+| `{proc_name}`  | Process comm name                         |
+| `{proc_pid}`   | Process ID (PID)                          |
+| `{proc_mem}`   | Process resident memory in bytes (`:.N`)  |
 
 ---
 
@@ -664,14 +679,74 @@ Monitors master audio volume, mute status, and device name in real-time. Operati
 
 The `text` and `tooltip` options support the following placeholders:
 
-| Placeholder    | Description                                      |
-| :------------- | :----------------------------------------------- |
-| `{icon}`       | Module icon based on volume level and mute state |
-| `{volume}`     | Volume percentage (0–100)                        |
-| `{raw_volume}` | Volume as float (0.00–1.00)                      |
-| `{node_name}`  | Active audio sink/device description             |
-| `{state}`      | Audio state ("Active" or "Muted")                |
-| `{is_muted}`   | Boolean indicating if audio is muted             |
+| Placeholder           | Description                                      |
+| :-------------------- | :----------------------------------------------- |
+| `{icon}`              | Module icon based on volume level and mute state |
+| `{volume}`            | Volume percentage (0–100)                        |
+| `{raw_volume}`        | Volume as float (0.00–1.00)                      |
+| `{node_name}`         | Active audio sink/device description             |
+| `{state}`             | Audio state ("Active" or "Muted")                |
+| `{is_muted}`          | Boolean indicating if audio is muted             |
+| `{source_icon}`       | Microphone / input icon                          |
+| `{source_volume}`     | Microphone volume percentage (0–100)             |
+| `{source_raw_volume}` | Microphone volume as float (0.00–1.00)            |
+| `{source_node_name}`  | Active input device description                  |
+| `{source_state}`      | Microphone state ("Active" or "Muted")           |
+| `{source_muted}`      | Boolean indicating if microphone is muted        |
+
+> [!TIP]
+> Set `.mode = "source"` in `~/.config/zig-waybar-contrib/pipewire.zon` to turn the binary into a dedicated Waybar microphone module!
+
+---
+
+### **Temperature**
+
+Monitors hardware temperatures (CPU package, individual cores, GPU, NVMe drives, and motherboard sensors) via Linux `/sys/class/hwmon` and `/sys/class/thermal`.
+
+- **Platforms:** Any Linux
+
+**Configuration (`~/.config/zig-waybar-contrib/temperature.zon`):**
+```zig
+.{
+    // Check interval in seconds
+    .update_interval = 2,
+    // Sensor filter (optional, substring search, e.g. "package id", "coretemp", "k10temp", "nvme")
+    // .sensor = "package id",
+    // Warning threshold (°C)
+    .warning_threshold = 75.0,
+    // Critical threshold (°C)
+    .critical_threshold = 90.0,
+    // Module icon
+    .icon = "",
+    // Custom text format (default shown)
+    .text = "{icon}  {temperature:1:'°C'}",
+    // Custom tooltip format (default shown)
+    .tooltip = "Sensor: {sensor:nl}Temperature: {temperature:1:'°C'} ({temperature_f:1:'°F'}){nl:sensors}",
+    // Individual sensor format in tooltip
+    .sensor_format = "{sensor_name}: {sensor_temperature:1:'°C'}",
+}
+```
+
+**Customization:**
+
+The `text` and `tooltip` options support the following placeholders:
+
+| Placeholder           | Description                               |
+| :-------------------- | :---------------------------------------- |
+| `{icon}`              | Module icon                               |
+| `{sensor}`            | Name of the primary monitored sensor      |
+| `{temperature}`, `{temp}` | Temperature in Celsius                |
+| `{temperature_c}`    | Temperature in Celsius                    |
+| `{temperature_f}`, `{temp_f}` | Temperature in Fahrenheit        |
+| `{max_temperature}`   | Maximum temperature across all sensors    |
+| `{sensors}`           | Multi-line formatted list of all sensors  |
+
+**Sensor Item Customization (`sensor_format`):**
+| Placeholder            | Description                         |
+| :--------------------- | :---------------------------------- |
+| `{sensor_name}`        | Device chip + sensor label          |
+| `{sensor_temperature}` | Sensor temperature in Celsius       |
+| `{sensor_temperature_f}` | Sensor temperature in Fahrenheit  |
 
 ---
 

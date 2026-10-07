@@ -36,8 +36,10 @@ pub const ModuleConfig = struct {
     warning_threshold: ?f64 = 75.0,
     critical_threshold: ?f64 = 90.0,
     icon: []const u8 = "",
+    top_processes_count: usize = 5,
+    top_process_format: []const u8 = "{proc_name}: {proc_mem:.1}",
     text: []const u8 = "{icon}  {percentage:'%'} {dot} {total_usage:.2}",
-    tooltip: []const u8 = "Physical Memory{nl}Total {dot} {physical_total:.2:nl}Used {dot} {physical_used:.2:nl}Free {dot} {physical_free:.2:nl}Available {dot} {physical_available:.2:nl}Shared {dot} {physical_shared:.2:nl}Buffers {dot} {physical_buffers:.2:nl}Cached {dot} {physical_cached:.2:nl:nl}Swap Memory{nl}Total {dot} {swap_total:.2:nl}Used {dot} {swap_used:.2:nl}Free {dot} {swap_free:.2:nl}Cached {dot} {swap_cached:.2}",
+    tooltip: []const u8 = "Physical Memory{nl}Total {dot} {physical_total:.2:nl}Used {dot} {physical_used:.2:nl}Free {dot} {physical_free:.2:nl}Available {dot} {physical_available:.2:nl}Shared {dot} {physical_shared:.2:nl}Buffers {dot} {physical_buffers:.2:nl}Cached {dot} {physical_cached:.2:nl:nl}Swap Memory{nl}Total {dot} {swap_total:.2:nl}Used {dot} {swap_used:.2:nl}Free {dot} {swap_free:.2:nl}Cached {dot} {swap_cached:.2}{nl:nl:top_processes}",
 };
 
 pub fn main(init: process.Init) !void {
@@ -87,6 +89,35 @@ pub fn main(init: process.Init) !void {
         try replacer.addCommonPlaceholders();
         try replacer.addKey("icon", data.icon);
         try replacer.addKeyAny("total_usage", memory.physical.used + memory.swap.used);
+
+        var top_procs_text: std.ArrayList(u8) = .empty;
+        defer top_procs_text.deinit(gpa);
+
+        if (data.top_processes_count > 0) {
+            const top_procs = utils.Process.getTopMemoryProcesses(io, gpa, data.top_processes_count) catch null;
+            defer if (top_procs) |p| gpa.free(p);
+
+            if (top_procs) |procs| {
+                var proc_replacer: Replacer = .init(gpa);
+                defer proc_replacer.deinit();
+
+                for (procs) |*p| {
+                    proc_replacer.clear();
+                    try proc_replacer.addCommonPlaceholders();
+                    try proc_replacer.addKey("proc_name", p.getName());
+                    try proc_replacer.addKeyAny("proc_pid", p.pid);
+                    try proc_replacer.addKeyAny("proc_mem", p.rss_bytes);
+
+                    const line = try proc_replacer.render(data.top_process_format);
+                    defer proc_replacer.free(line);
+
+                    if (top_procs_text.items.len > 0) try top_procs_text.append(gpa, '\n');
+                    try top_procs_text.appendSlice(gpa, line);
+                }
+            }
+        }
+
+        try replacer.addKey("top_processes", top_procs_text.items);
 
         const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);

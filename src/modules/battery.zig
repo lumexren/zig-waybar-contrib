@@ -153,7 +153,16 @@ pub fn main(init: process.Init) !void {
         try replacer.addKey("vendor", battery.vendor orelse "Unknown");
         try replacer.addKeyAny("voltage", battery.voltage);
         try replacer.addKeyAny("energy", battery.energy);
+        try replacer.addKeyAny("energy_full", battery.energy_full);
+        try replacer.addKeyAny("energy_full_design", battery.energy_full_design);
         try replacer.addKeyAny("energy_rate", battery.energy_rate);
+        try replacer.addKeyAny("power_w", battery.energy_rate);
+        try replacer.addKeyAny("power_watts", battery.energy_rate);
+        if (battery.health) |h| {
+            try replacer.addKeyAny("health", h);
+        } else {
+            try replacer.addKey("health", "N/A");
+        }
 
         const text_line = try replacer.render(data.text);
         defer replacer.free(text_line);
