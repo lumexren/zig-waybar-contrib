@@ -373,7 +373,7 @@ fn appendFloat(writer: *Writer, f: f64, spec: ?[]const u8) !void {
 
 test "Replacer basic and unresolved placeholder passthrough" {
     const testing = std.testing;
-    var replacer = Replacer.init(testing.allocator);
+    var replacer: Replacer = .init(testing.allocator);
     defer replacer.deinit();
 
     try replacer.addKey("name", "Waybar");
@@ -387,7 +387,7 @@ test "Replacer basic and unresolved placeholder passthrough" {
 
 test "Replacer strict mode fails on unresolved placeholder" {
     const testing = std.testing;
-    var replacer = Replacer.init(testing.allocator);
+    var replacer: Replacer = .init(testing.allocator);
     defer replacer.deinit();
     replacer.setStrict(true);
 

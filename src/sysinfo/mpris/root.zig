@@ -46,7 +46,7 @@ pub const PLAYER_IFACE: [:0]const u8 = "org.mpris.MediaPlayer2.Player";
 pub const ROOT_IFACE: [:0]const u8 = "org.mpris.MediaPlayer2";
 
 pub fn listPlayers(allocator: Allocator, connection: *Connection) ![][]const u8 {
-    var dbus_proxy = Proxy.init(
+    var dbus_proxy: Proxy = .init(
         connection,
         "org.freedesktop.DBus",
         "/org/freedesktop/DBus",
@@ -95,7 +95,7 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
     const root_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, ROOT_IFACE);
     const player_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, PLAYER_IFACE);
 
-    var arena = ArenaAllocator.init(allocator);
+    var arena: ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
@@ -346,7 +346,7 @@ fn parseMetadata(allocator: Allocator, val: GVariant) Metadata {
 fn getMetadataProperty(allocator: Allocator, player_proxy: Proxy) Metadata {
     const metadata: Metadata = .{};
 
-    var arena = ArenaAllocator.init(allocator);
+    var arena: ArenaAllocator = .init(allocator);
     defer arena.deinit();
 
     var res = player_proxy.rawCall("org.freedesktop.DBus.Properties", "Get", .{
