@@ -68,5 +68,10 @@
     "return-type": "json",
     "signal": 1,
     "on-click": "pkill -SIGRTMIN+1 waybar-module-updates"
+  },
+  "custom/temperature": {
+    "exec": "/usr/bin/waybar-module-temperature",
+    "restart-interval": 10,
+    "return-type": "json"
   }
 }

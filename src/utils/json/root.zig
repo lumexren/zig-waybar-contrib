@@ -307,7 +307,7 @@ pub fn writeEscaped(writer: *Io.Writer, str: []const u8) !void {
 
 test "Json class and string array serialization" {
     const testing = std.testing;
-    var json = Json.init(testing.allocator);
+    var json: Json = .init(testing.allocator);
     defer json.deinit();
 
     try json.set("text", "Hello");

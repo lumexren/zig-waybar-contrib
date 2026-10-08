@@ -90,7 +90,7 @@ fn alloc(ctx: *anyopaque, len: usize, ptr_align: Alignment, ret_addr: usize) ?[*
     this.total_allocated += len;
     this.current_allocated += len;
     this.alloc_count += 1;
-    if (this.current_allocated > this.peak_allocated)  this.peak_allocated = this.current_allocated;
+    if (this.current_allocated > this.peak_allocated) this.peak_allocated = this.current_allocated;
     return result;
 }
 
@@ -131,7 +131,7 @@ fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, re
             this.current_allocated -= diff;
         }
     }
-    
+
     return result;
 }
 

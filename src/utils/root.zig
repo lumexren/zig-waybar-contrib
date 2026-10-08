@@ -25,6 +25,8 @@ pub const Json = @import("json/root.zig");
 pub const Replacer = @import("replacer/root.zig");
 pub const Process = @import("process/root.zig");
 pub const Watcher = @import("watcher/root.zig");
+pub const Module = @import("module/root.zig").Module;
+pub const RenderOptions = @import("module/root.zig").RenderOptions;
 
 test {
     _ = testing.refAllDecls(@This());

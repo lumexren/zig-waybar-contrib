@@ -25,6 +25,7 @@ const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
 const Allocator = mem.Allocator;
+const sort = std.sort;
 const os = std.os;
 const linux = os.linux;
 
@@ -102,7 +103,7 @@ pub fn run(base_allocator: Allocator, name: []const u8, options: BenchmarkOption
 
     if (samples.items.len == 0) return error.NoSamplesCollected;
 
-    mem.sort(f64, samples.items, {}, std.sort.asc(f64));
+    mem.sort(f64, samples.items, {}, sort.asc(f64));
 
     const sample_count = samples.items.len;
     const min_ns = samples.items[0];

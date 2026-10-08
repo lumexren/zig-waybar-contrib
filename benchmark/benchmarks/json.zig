@@ -38,7 +38,7 @@ pub const BENCHMARKS = [_][]const u8{
 };
 
 fn benchJsonBasic(allocator: Allocator, _: void) !void {
-    var json = Json.init(allocator);
+    var json: Json = .init(allocator);
     defer json.deinit();
 
     try json.set("text", "42% CPU");
@@ -49,7 +49,7 @@ fn benchJsonBasic(allocator: Allocator, _: void) !void {
 }
 
 fn benchJsonFormatted(allocator: Allocator, _: void) !void {
-    var json = Json.init(allocator);
+    var json: Json = .init(allocator);
     defer json.deinit();
 
     try json.setFmt("text", "{s}  {d}%", .{ "", 42 });
@@ -61,7 +61,7 @@ fn benchJsonFormatted(allocator: Allocator, _: void) !void {
 }
 
 fn benchJsonSerialize(allocator: Allocator, _: void) !void {
-    var json = Json.init(allocator);
+    var json: Json = .init(allocator);
     defer json.deinit();
 
     try json.set("text", "  42% • 3.20 GHz");
@@ -93,7 +93,7 @@ fn benchJsonReuseClear(allocator: Allocator, ctx: ReuseContext) !void {
 }
 
 fn benchJsonComplexTooltip(allocator: Allocator, _: void) !void {
-    var json = Json.init(allocator);
+    var json: Json = .init(allocator);
     defer json.deinit();
 
     try json.set("text", "  CPU 55% | 3.4 GHz | 62°C");
@@ -145,7 +145,7 @@ pub fn runBenchmarks(allocator: Allocator, reporter: *Reporter, writer: anytype,
     }
 
     if (shouldRun("json_reuse_with_clear", filter)) {
-        var reused_json = Json.init(allocator);
+        var reused_json: Json = .init(allocator);
         defer reused_json.deinit();
         const r = try runner.run(allocator, "json_reuse_with_clear", options, benchJsonReuseClear, ReuseContext{ .json = &reused_json });
         try reporter.report(writer, r);

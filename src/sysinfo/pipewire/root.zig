@@ -164,6 +164,32 @@ pub fn getAudioInfo(this: Pipewire) !PipewireInfo {
     };
 }
 
+/// Fetch source/microphone volume + mute using wpctl/pactl.
+pub fn getSourceAudioInfo(this: Pipewire) !PipewireInfo {
+    const vol_output = this.execCommand(&.{ "wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@" }) catch |err| switch (err) {
+        else => this.execCommand(&.{ "pactl", "get-source-volume", "@DEFAULT_SOURCE@" }) catch return PipewireError.CommandFailed,
+    };
+    defer this.allocator.free(vol_output);
+
+    const vol_state = try parseVolumeOutput(vol_output);
+
+    const inspect_output = this.execCommand(&.{ "wpctl", "inspect", "@DEFAULT_AUDIO_SOURCE@" }) catch null;
+    defer if (inspect_output) |out| this.allocator.free(out);
+
+    const node_desc = if (inspect_output) |out|
+        try parseNodeDescription(out, this.allocator)
+    else
+        try this.allocator.dupe(u8, "Default Audio Input");
+
+    return .{
+        .volume = vol_state.volume,
+        .raw_volume = vol_state.raw_volume,
+        .muted = vol_state.muted,
+        .node_name = node_desc,
+        .is_sink = false,
+    };
+}
+
 /// Subscribe to PropertiesChanged on the session bus for real-time audio events.
 /// Tries PulseAudio DBus interface first (most reliable), falls back to `pactl subscribe` process.
 pub fn subscribeViaProcess(this: Pipewire) !process.Child {

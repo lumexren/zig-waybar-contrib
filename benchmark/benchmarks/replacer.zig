@@ -36,7 +36,7 @@ pub const BENCHMARKS = [_][]const u8{
 };
 
 fn benchReplacerPopulation(allocator: Allocator, _: void) !void {
-    var replacer = Replacer.init(allocator);
+    var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
     try replacer.addCommonPlaceholders();
@@ -48,7 +48,7 @@ fn benchReplacerPopulation(allocator: Allocator, _: void) !void {
 }
 
 fn benchReplacerRenderText(allocator: Allocator, _: void) !void {
-    var replacer = Replacer.init(allocator);
+    var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
     try replacer.addCommonPlaceholders();
@@ -62,7 +62,7 @@ fn benchReplacerRenderText(allocator: Allocator, _: void) !void {
 }
 
 fn benchReplacerRenderUnits(allocator: Allocator, _: void) !void {
-    var replacer = Replacer.init(allocator);
+    var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
     try replacer.addKeyAny("bytes_used", @as(i64, 1073741824 * 5 + 500000000));
@@ -91,7 +91,7 @@ fn benchReplacerReuse(allocator: Allocator, ctx: ReusedReplacerContext) !void {
 }
 
 fn benchReplacerComplexTemplate(allocator: Allocator, _: void) !void {
-    var replacer = Replacer.init(allocator);
+    var replacer: Replacer = .init(allocator);
     defer replacer.deinit();
 
     try replacer.addCommonPlaceholders();
@@ -130,7 +130,7 @@ pub fn runBenchmarks(allocator: Allocator, reporter: *Reporter, writer: anytype,
     }
 
     if (shouldRun("replacer_reuse_with_clear", filter)) {
-        var reused = Replacer.init(allocator);
+        var reused: Replacer = .init(allocator);
         defer reused.deinit();
         const r = try runner.run(allocator, "replacer_reuse_with_clear", options, benchReplacerReuse, ReusedReplacerContext{ .replacer = &reused });
         try reporter.report(writer, r);

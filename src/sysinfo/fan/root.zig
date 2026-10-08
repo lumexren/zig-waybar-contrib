@@ -29,6 +29,8 @@ const ascii = std.ascii;
 const fmt = std.fmt;
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const testing = std.testing;
+const debug = std.debug;
 
 pub const HWMON_PATH = "/sys/class/hwmon";
 
@@ -133,12 +135,12 @@ fn readFanName(io: Io, allocator: Allocator, device_dir: Dir, input_name: []cons
 }
 
 test "scanDeviceFans reproduction" {
-    const allocator = std.testing.allocator;
-    const Threaded = std.Io.Threaded;
+    const allocator = testing.allocator;
+    const Threaded = Io.Threaded;
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    var tmp = std.testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
     try tmp.dir.writeFile(io, .{ .sub_path = "fan1_input", .data = "2000\n" });
@@ -158,18 +160,18 @@ test "scanDeviceFans reproduction" {
 
     try fan.scanDevice(device_dir);
 
-    try std.testing.expectEqual(@as(usize, 1), fan.fans.items.len);
-    try std.testing.expectEqualStrings("System Fan", fan.fans.items[0].name);
-    try std.testing.expectEqual(@as(i64, 2000), fan.fans.items[0].speed);
+    try testing.expectEqual(@as(usize, 1), fan.fans.items.len);
+    try testing.expectEqualStrings("System Fan", fan.fans.items[0].name);
+    try testing.expectEqual(@as(i64, 2000), fan.fans.items[0].speed);
 }
 
 test "scanDeviceFans fallback" {
-    const allocator = std.testing.allocator;
-    const Threaded = std.Io.Threaded;
+    const allocator = testing.allocator;
+    const Threaded = Io.Threaded;
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    var tmp = std.testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
     try tmp.dir.writeFile(io, .{ .sub_path = "fan2_input", .data = "1500\n" });
@@ -189,17 +191,17 @@ test "scanDeviceFans fallback" {
 
     try fan.scanDevice(device_dir);
 
-    try std.testing.expectEqualStrings("k10temp fan2", fan.fans.items[0].name);
-    try std.testing.expectEqual(@as(i64, 1500), fan.fans.items[0].speed);
+    try testing.expectEqualStrings("k10temp fan2", fan.fans.items[0].name);
+    try testing.expectEqual(@as(i64, 1500), fan.fans.items[0].speed);
 }
 
 test "scanHwmonFans" {
-    const allocator = std.testing.allocator;
-    const Threaded = std.Io.Threaded;
+    const allocator = testing.allocator;
+    const Threaded = Io.Threaded;
     var threaded: Threaded = .init_single_threaded;
     const io = threaded.io();
 
-    var tmp = std.testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
     try tmp.dir.createDir(io, "hwmon0", .default_dir);
@@ -226,23 +228,23 @@ test "scanHwmonFans" {
 
     try fan.scanHwmon(hwmon_dir);
 
-    try std.testing.expectEqual(@as(usize, 2), fan.fans.items.len);
+    try testing.expectEqual(@as(usize, 2), fan.fans.items.len);
 
     var found_cpu = false;
     var found_box = false;
 
     for (fan.fans.items) |f| {
         if (mem.eql(u8, f.name, "CPU Fan")) {
-            try std.testing.expectEqual(@as(i64, 1000), f.speed);
+            try testing.expectEqual(@as(i64, 1000), f.speed);
             found_cpu = true;
         } else if (mem.eql(u8, f.name, "box fan1")) {
-            try std.testing.expectEqual(@as(i64, 2000), f.speed);
+            try testing.expectEqual(@as(i64, 2000), f.speed);
             found_box = true;
         } else {
-            std.debug.print("Found unexpected fan: {s}\n", .{f.name});
+            debug.print("Found unexpected fan: {s}\n", .{f.name});
         }
     }
 
-    try std.testing.expect(found_cpu);
-    try std.testing.expect(found_box);
+    try testing.expect(found_cpu);
+    try testing.expect(found_box);
 }

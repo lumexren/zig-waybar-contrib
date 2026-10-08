@@ -23,8 +23,10 @@ const Dir = Io.Dir;
 const Threaded = Io.Threaded;
 const Build = std.Build;
 const LtoMode = std.zig.LtoMode;
+const mem = std.mem;
+const SemanticVersion = std.SemanticVersion;
 
-const Version: std.SemanticVersion = .{ .major = 1, .minor = 0, .patch = 1 };
+const Version: SemanticVersion = .{ .major = 1, .minor = 0, .patch = 1 };
 
 const ModuleConfig = struct {
     name: []const u8,
@@ -46,6 +48,7 @@ const modules = [_]ModuleConfig{
     .{ .name = "backlight", .path = "src/modules/backlight.zig" },
     .{ .name = "bluetooth", .path = "src/modules/bluetooth.zig" },
     .{ .name = "pipewire", .path = "src/modules/pipewire.zig" },
+    .{ .name = "temperature", .path = "src/modules/temperature.zig" },
 };
 
 pub fn build(b: *Build) void {
@@ -179,7 +182,7 @@ pub fn build(b: *Build) void {
         run_step.dependOn(&run_cmd.step);
 
         if (module_filter) |filter| {
-            if (std.mem.eql(u8, filter, cfg.name) or std.mem.eql(u8, filter, "all")) b.installArtifact(exe);
+            if (mem.eql(u8, filter, cfg.name) or mem.eql(u8, filter, "all")) b.installArtifact(exe);
         } else {
             b.installArtifact(exe);
         }

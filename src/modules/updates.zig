@@ -26,6 +26,7 @@ const File = Io.File;
 const process = std.process;
 const mem = std.mem;
 const ArrayList = std.ArrayList;
+const debug = std.debug;
 
 const Config = utils.Config;
 const Json = utils.Json;
@@ -53,7 +54,7 @@ fn getManager(name: []const u8) Updates.PackageManager {
     if (mem.eql(u8, name, "xbps")) return .xbps;
     if (mem.eql(u8, name, "flatpak")) return .flatpak;
 
-    std.debug.panic("updates: {s} manager is not supported.", .{name});
+    debug.panic("updates: {s} manager is not supported.", .{name});
 }
 
 pub fn main(init: process.Init) !void {

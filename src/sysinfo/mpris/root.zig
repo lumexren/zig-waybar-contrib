@@ -36,6 +36,9 @@ const meta = std.meta;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const Io = std.Io;
+const math = std.math;
+const ArenaAllocator = std.heap.ArenaAllocator;
+const StringHashMap = std.StringHashMap;
 
 pub const MPRIS_PREFIX = "org.mpris.MediaPlayer2.";
 pub const MPRIS_PATH: [:0]const u8 = "/org/mpris/MediaPlayer2";
@@ -43,7 +46,7 @@ pub const PLAYER_IFACE: [:0]const u8 = "org.mpris.MediaPlayer2.Player";
 pub const ROOT_IFACE: [:0]const u8 = "org.mpris.MediaPlayer2";
 
 pub fn listPlayers(allocator: Allocator, connection: *Connection) ![][]const u8 {
-    var dbus_proxy = Proxy.init(
+    var dbus_proxy: Proxy = .init(
         connection,
         "org.freedesktop.DBus",
         "/org/freedesktop/DBus",
@@ -92,7 +95,7 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
     const root_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, ROOT_IFACE);
     const player_proxy = Proxy.init(connection, bus_name_z, MPRIS_PATH, PLAYER_IFACE);
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena: ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
@@ -156,7 +159,7 @@ pub fn getPlayerInfo(allocator: Allocator, connection: *Connection, bus_name: []
                 } else if (mem.eql(u8, key, "Position")) {
                     switch (inner) {
                         .int64 => |p| info.position_us = p,
-                        .uint64 => |p| info.position_us = @intCast(@min(p, @as(u64, std.math.maxInt(i64)))),
+                        .uint64 => |p| info.position_us = @intCast(@min(p, @as(u64, math.maxInt(i64)))),
                         else => {},
                     }
                 } else if (mem.eql(u8, key, "Metadata")) {
@@ -329,7 +332,7 @@ fn parseMetadata(allocator: Allocator, val: GVariant) Metadata {
         } else if (mem.eql(u8, key, "mpris:length")) {
             switch (inner) {
                 .int64 => |l| metadata.length_us = l,
-                .uint64 => |l| metadata.length_us = @intCast(@min(l, @as(u64, std.math.maxInt(i64)))),
+                .uint64 => |l| metadata.length_us = @intCast(@min(l, @as(u64, math.maxInt(i64)))),
                 .int32 => |l| metadata.length_us = l,
                 .uint32 => |l| metadata.length_us = l,
                 else => {},
@@ -343,7 +346,7 @@ fn parseMetadata(allocator: Allocator, val: GVariant) Metadata {
 fn getMetadataProperty(allocator: Allocator, player_proxy: Proxy) Metadata {
     const metadata: Metadata = .{};
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena: ArenaAllocator = .init(allocator);
     defer arena.deinit();
 
     var res = player_proxy.rawCall("org.freedesktop.DBus.Properties", "Get", .{
@@ -408,7 +411,7 @@ test "PlayerInfo.deinit" {
 test "parseMetadata with uint64 length and multiple artists" {
     const allocator = testing.allocator;
 
-    var dict = std.StringHashMap(GVariant).init(allocator);
+    var dict = StringHashMap(GVariant).init(allocator);
     defer dict.deinit();
 
     try dict.put("xesam:title", .{ .string = .{ .s = "The Catalyst" } });
