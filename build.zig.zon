@@ -5,7 +5,7 @@
     .minimum_zig_version = "0.18.0-dev.4+5a23bf4b2",
     .dependencies = .{
         .plume = .{
-            .url = "https://codeberg.org/erenvly/plume/archive/2.0.0.zip",
+            .url = "https://codeberg.org/lumexren/plume/archive/2.0.0.zip",
             .hash = "plume-2.0.0-K6ts5KHpAwB60dq7N930vpI6W4zmxpDdymhRMzepZlK0",
         },
     },

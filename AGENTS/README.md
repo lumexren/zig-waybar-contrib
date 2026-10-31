@@ -22,7 +22,7 @@ Welcome to the **`zig-waybar-contrib`** codebase knowledge base for AI agents. T
 - **Project:** `zig-waybar-contrib`
 - **Language:** **Zig** (Targeting **`0.18.0-dev`** on branch `0.18.x-staging`)
 - **License:** GNU General Public License v3.0 (GPL-3.0-only)
-- **Author:** erenvly
+- **Author:** lumexren
 - **Goal:** High-performance, lightweight, memory-safe custom Waybar modules running as independent standalone binaries communicating with Waybar via streaming JSON on `stdout`.
 - **Key Philosophy:**
   - **Zero Idle CPU Overhead:** Real-time wakeups via Linux `signalfd` (`SIGUSR1` / `SIGUSR2`) or D-Bus events; non-busy sleeping.
@@ -83,7 +83,7 @@ zig fmt .
      //
      // This file is part of zig-waybar-contrib.
      //
-     // Copyright (c) 2026 erenvly
+     // Copyright (c) 2026 lumexren
      ...
      ```
 
