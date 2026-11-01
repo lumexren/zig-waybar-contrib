@@ -1,11 +1,11 @@
 .{
     .name = .zig_waybar_contrib,
-    .version = "1.0.1-staging.22",
+    .version = "1.0.1-staging.17",
     .fingerprint = 0xf0b38d05ded55151,
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .plume = .{
-            .url = "https://codeberg.org/erenvly/plume/archive/2.0.0.zip",
+            .url = "https://github.com/lumexren/plume/archive/2.0.0.tar.gz",
             .hash = "plume-2.0.0-K6ts5KHpAwB60dq7N930vpI6W4zmxpDdymhRMzepZlK0",
         },
     },

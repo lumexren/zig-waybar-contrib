@@ -4,7 +4,7 @@
 #
 # This file is part of zig-waybar-contrib.
 #
-# Copyright (c) 2026 erenvly
+# Copyright (c) 2026 lumexren
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ echo "$AUR_SSH_KEY" > /root/.ssh/id_ed25519
 chmod 600 /root/.ssh/id_ed25519
 ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
 
-git config --global user.name "erenvly"
+git config --global user.name "lumexren"
 git config --global user.email "$EMAIL"
 git config --global --add safe.directory '*'
 
@@ -37,8 +37,8 @@ PKGVER="${VERSION#pre-}"
 PKGVER="${PKGVER//-/_}"
 
 BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
-CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
-LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
+CONFIG_URL="${REPO_URL}/raw/${VERSION}/config.waybar.jsonc"
+LICENSE_URL="${REPO_URL}/raw/${VERSION}/LICENSE"
 
 git clone "ssh://aur@aur.archlinux.org/${AUR_REPO}.git" aur-repo || mkdir -p aur-repo
 
