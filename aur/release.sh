@@ -37,8 +37,8 @@ PKGVER="${VERSION#pre-}"
 PKGVER="${PKGVER//-/_}"
 
 BINARY_URL="${REPO_URL}/releases/download/${VERSION}/${RELEASE_FILENAME}"
-CONFIG_URL="${REPO_URL}/raw/tag/${VERSION}/config.waybar.jsonc"
-LICENSE_URL="${REPO_URL}/raw/tag/${VERSION}/LICENSE"
+CONFIG_URL="${REPO_URL}/raw/${VERSION}/config.waybar.jsonc"
+LICENSE_URL="${REPO_URL}/raw/${VERSION}/LICENSE"
 
 git clone "ssh://aur@aur.archlinux.org/${AUR_REPO}.git" aur-repo || mkdir -p aur-repo
 
