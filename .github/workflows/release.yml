@@ -140,4 +140,4 @@ jobs:
           GITHUB_WORKSPACE: ${{ github.workspace }}
         with:
           entrypoint: bash
-          args: ${{ github.workspace }}/aur/release.sh
+          args: aur/release.sh
