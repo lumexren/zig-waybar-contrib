@@ -1,4 +1,4 @@
-# Maintainer: lumexren <https://github.com/lumexren>
+# Maintainer: lumexren <lumexren@gmail.com>
 
 _pkgbase="zig-waybar-contrib"
 pkgname="${_pkgbase}-beta-bin"
