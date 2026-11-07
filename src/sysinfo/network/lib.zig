@@ -260,7 +260,7 @@ pub inline fn calculateChecksum(data: []const u8) u16 {
     var i: usize = 0;
 
     while (i + 1 < data.len) : (i += 2) {
-        sum +%= @as(u32, data[i]) << 8 | data[i + 1];
+        sum +%= (@as(u32, data[i]) << 8) | data[i + 1];
     }
 
     if (i < data.len) sum +%= @as(u32, data[i]) << 8;
