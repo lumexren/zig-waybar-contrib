@@ -31,8 +31,6 @@ jobs:
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2
-        with:
-          version-file: .zigversion
 
       - name: Build debug
         run: |
