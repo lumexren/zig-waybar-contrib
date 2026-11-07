@@ -1,6 +1,6 @@
 .{
     .name = .zig_waybar_contrib,
-    .version = "1.0.1-staging.17",
+    .version = "1.0.1-staging.27",
     .fingerprint = 0xf0b38d05ded55151,
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
